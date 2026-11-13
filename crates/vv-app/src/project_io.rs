@@ -28,6 +28,7 @@ pub(crate) enum ProjectSwitch {
     New,
     Open,
     OpenPath(PathBuf),
+    Home,
     Quit,
 }
 
@@ -48,6 +49,8 @@ pub(crate) enum DialogKind {
     RelinkMedia(Vec<MediaId>),
     RelinkLibraryAsset(String),
     RecordingFolder,
+    ImportProject,
+    ProjectsFolder,
 }
 
 pub(crate) enum DialogOutcome {
@@ -342,6 +345,14 @@ impl VenturiApp {
             (DialogKind::OpenProject, DialogOutcome::File(Some(path))) => {
                 self.load_project_from(path);
             }
+            (DialogKind::ImportProject, DialogOutcome::File(Some(path))) => {
+                self.import_and_open_project(&path);
+            }
+            (DialogKind::ProjectsFolder, DialogOutcome::File(Some(dir))) => {
+                self.settings.projects_dir = Some(dir);
+                self.persist_settings();
+                self.home.invalidate();
+            }
             (DialogKind::RelinkMedia(targets), DialogOutcome::File(Some(base_dir))) => {
                 self.relink_media(&base_dir, &targets);
             }
@@ -518,19 +529,26 @@ impl VenturiApp {
     }
 
     pub(crate) fn sync_window_title(&mut self, ctx: &egui::Context) {
-        let title = format!(
-            "{}{} — Venturi",
-            self.project_label(),
-            if self.has_unsaved_changes() { "*" } else { "" },
-        );
+        let title = match self.screen {
+            Screen::Home => "Venturi".to_owned(),
+            Screen::Editor => format!(
+                "{}{} — Venturi",
+                self.project_label(),
+                if self.has_unsaved_changes() { "*" } else { "" },
+            ),
+        };
         if title != self.window_title {
             self.window_title = title.clone();
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
         }
     }
 
-    /// Opens or imports a project, asking first whether to save the changes.
+    /// Leaves the project for `switch`. One with a file saves itself first;
+    /// an untitled one, or one that could not be saved, asks.
     pub(crate) fn request_project_switch(&mut self, switch: ProjectSwitch) {
+        if self.session.path().is_some() {
+            self.flush_autosave();
+        }
         if self.has_unsaved_changes() {
             self.pending_project_switch = Some(switch);
         } else {
@@ -541,7 +559,7 @@ impl VenturiApp {
 
     /// Leaving a project with no unsaved edits: its file still gets where the
     /// playhead is, to resume from there.
-    fn save_view(&mut self) {
+    pub(crate) fn save_view(&mut self) {
         self.store_view();
         if let Err(e) = self.session.save_view() {
             eprintln!("[project_io] saving the playhead failed: {e}");
@@ -550,11 +568,21 @@ impl VenturiApp {
 
     pub(crate) fn run_project_switch(&mut self, switch: ProjectSwitch) {
         match switch {
-            ProjectSwitch::New => self.new_project(),
+            ProjectSwitch::New => self.create_new_project(),
             ProjectSwitch::Open => self.open_project_dialog(),
             ProjectSwitch::OpenPath(path) => self.load_project_from(path),
-            ProjectSwitch::Quit => self.quit_confirmed = true,
+            ProjectSwitch::Home => self.close_project_to_home(),
+            ProjectSwitch::Quit => {
+                self.quit_confirmed = true;
+                self.mark_clean_exit();
+            }
         }
+    }
+
+    /// Nothing is open any more: a later start is not a crash recovery.
+    pub(crate) fn mark_clean_exit(&mut self) {
+        self.settings.open_project = None;
+        self.persist_settings();
     }
 
     /// Closing the window is suspended until the user answers
@@ -567,12 +595,16 @@ impl VenturiApp {
         if !ctx.input(|i| i.viewport().close_requested()) {
             return;
         }
+        if self.session.path().is_some() {
+            self.flush_autosave();
+        }
         if self.has_unsaved_changes() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.pending_project_switch = Some(ProjectSwitch::Quit);
             ctx.request_repaint();
         } else {
             self.save_view();
+            self.mark_clean_exit();
         }
     }
 
@@ -742,8 +774,9 @@ impl VenturiApp {
     pub(crate) fn load_project_from(&mut self, path: PathBuf) {
         match self.session.open(&path) {
             Ok(()) => {
-                self.remember_recent_project(path);
+                self.remember_recent_project(path.clone());
                 self.reset_for_replaced_project();
+                self.enter_editor(path);
             }
             Err(e) => self.project_error = Some(t!("project.open_failed", error = e).into_owned()),
         }
@@ -762,6 +795,8 @@ impl VenturiApp {
     /// one goes, the first timeline opens.
     pub(crate) fn reset_for_replaced_project(&mut self) {
         self.seen_epoch = self.session.epoch();
+        self.reset_autosave();
+        self.project_name_edit = None;
         let project = &self.session.project;
         self.timeline_id = project
             .view

@@ -3088,6 +3088,13 @@ pub enum ProcessingPrecision {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Project {
+    /// The version the file was written with (0: before versioning); always
+    /// saved as `persistence::CURRENT_FORMAT_VERSION`.
+    #[serde(
+        default,
+        serialize_with = "crate::persistence::serialize_current_format_version"
+    )]
+    format_version: u32,
     pub media_pool: IdMap<MediaId, MediaItem>,
     pub timelines: IdMap<TimelineId, Timeline>,
     #[serde(default)]
@@ -3119,6 +3126,14 @@ pub struct ProjectView {
 }
 
 impl Project {
+    pub fn format_version(&self) -> u32 {
+        self.format_version
+    }
+
+    pub(crate) fn set_format_version(&mut self, version: u32) {
+        self.format_version = version;
+    }
+
     /// Whether `id` plays an enabled VST3, in itself or in the compounds it
     /// holds. Conservative: it also counts muted tracks and disabled clips.
     pub fn timeline_uses_enabled_plugins(&self, id: TimelineId) -> bool {

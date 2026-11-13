@@ -1708,15 +1708,7 @@ impl VenturiApp {
         // playhead: applied after the drawing, like the effect changes.
         let mut pending_playhead: Option<FrameIdx> = None;
 
-        if self.settings.panels.inspector_open {
-            egui::Panel::right("properties")
-                .resizable(true)
-                .default_size(self.settings.panels.inspector_width)
-                .show(ui, |ui| {
-                    // Without it, the panel would shrink to its content and its resize
-                    // would spring back.
-                    ui.set_min_width(ui.available_width());
-
+        ui.scope(|ui| {
                     // Fixed bar: a floating one would cover the resets on the right.
                     ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
                     egui::ScrollArea::vertical()
@@ -2663,10 +2655,6 @@ impl VenturiApp {
                         }
                         });
                 });
-            if let Some(state) = egui::PanelState::load(ui.ctx(), egui::Id::new("properties")) {
-                self.settings.panels.inspector_width = state.size().x;
-            }
-        }
         (pending_effects, pending_playhead)
     }
 }

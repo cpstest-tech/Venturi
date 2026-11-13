@@ -247,3 +247,7 @@ about.version:
 about.author:
   en: "Author: %{author}"
   it: "Autore: %{author}"
+
+menu.layout:
+  en: "Layout"
+  it: "Layout"

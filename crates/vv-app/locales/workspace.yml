@@ -1,0 +1,73 @@
+_version: 2
+
+workspace.library:
+  en: "Library"
+  it: "Multifunzione"
+
+workspace.player:
+  en: "Player"
+  it: "Player"
+
+workspace.properties:
+  en: "Properties"
+  it: "Proprietà"
+
+workspace.timeline:
+  en: "Timeline"
+  it: "Timeline"
+
+workspace.detach:
+  en: "Move to a separate window"
+  it: "Sposta in una finestra separata"
+
+workspace.redock:
+  en: "Dock back"
+  it: "Riaggancia"
+
+workspace.redock_block:
+  en: "Dock %{block} back"
+  it: "Riaggancia %{block}"
+
+workspace.reset:
+  en: "Restore default layout"
+  it: "Ripristina layout di default"
+
+workspace.closed_blocks:
+  en: "Closed blocks"
+  it: "Blocchi chiusi"
+
+workspace.none_closed:
+  en: "No closed blocks"
+  it: "Nessun blocco chiuso"
+
+workspace.reopen:
+  en: "Reopen %{block}"
+  it: "Riapri %{block}"
+
+workspace.nothing_docked:
+  en: "Every block is closed or in its own window: use the Layout menu to bring them back."
+  it: "Tutti i blocchi sono chiusi o in finestre separate: usa il menu Layout per riportarli qui."
+
+top_bar.home:
+  en: "Back to the projects"
+  it: "Torna ai progetti"
+
+top_bar.export:
+  en: "Export"
+  it: "Esporta"
+
+top_bar.rename_hint:
+  en: "Click to rename the project"
+  it: "Clicca per rinominare il progetto"
+
+top_bar.saved:
+  en: "Saved"
+  it: "Salvato"
+
+top_bar.saving:
+  en: "Saving…"
+  it: "Salvataggio…"
+
+top_bar.save_failed:
+  en: "Save failed"
+  it: "Salvataggio non riuscito"

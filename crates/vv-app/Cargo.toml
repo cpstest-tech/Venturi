@@ -10,6 +10,7 @@ workspace = true
 arboard = { version = "3.6.1", default-features = false, features = ["image-data"] }
 eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "default_fonts", "links", "persistence", "wayland", "x11"] }
 egui = "0.36.2"
+egui_tiles = "0.17.1"
 env_logger = "0.11.11"
 libc = "0.2"
 png = "0.18"
@@ -18,6 +19,7 @@ rust-i18n = "4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sys-locale = "0.3"
+thiserror = "2.0.20"
 vv-audio = { path = "../vv-audio" }
 vv-core = { path = "../vv-core" }
 vv-media = { path = "../vv-media" }

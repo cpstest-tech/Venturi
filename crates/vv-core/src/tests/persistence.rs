@@ -299,3 +299,55 @@ fn a_title_saved_with_plain_text_loads_without_text_keyframes() {
     let text = ron::to_string(&title).unwrap();
     assert_eq!(ron::from_str::<TitleParams>(&text).unwrap(), title);
 }
+
+#[test]
+fn a_saved_project_carries_the_current_format_version() {
+    let dir = TempDir::new("vv-core-persistence-version-test");
+    let path = dir.join("project.vvproj");
+    save_project(&Project::default(), &path).unwrap();
+    let contents = std::fs::read_to_string(&path).unwrap();
+    assert!(contents.contains(&format!("format_version: {CURRENT_FORMAT_VERSION}")));
+    assert_eq!(
+        load_project(&path).unwrap().format_version(),
+        CURRENT_FORMAT_VERSION
+    );
+}
+
+#[test]
+fn a_project_saved_before_versioning_loads_and_is_migrated() {
+    let mut project = Project::default();
+    project.precision = ProcessingPrecision::Standard;
+    let text = ron::to_string(&project).unwrap();
+    let old = text.replace(&format!("format_version:{CURRENT_FORMAT_VERSION},"), "");
+    assert_ne!(old, text);
+    let loaded = project_from_str(&old).unwrap();
+    assert_eq!(loaded.format_version(), CURRENT_FORMAT_VERSION);
+    assert_eq!(loaded.precision, ProcessingPrecision::Standard);
+}
+
+#[test]
+fn a_project_from_a_newer_version_is_refused() {
+    let text = ron::to_string(&Project::default()).unwrap();
+    let newer = CURRENT_FORMAT_VERSION + 1;
+    let newer_text = text.replace(
+        &format!("format_version:{CURRENT_FORMAT_VERSION}"),
+        &format!("format_version:{newer}"),
+    );
+    assert!(matches!(
+        project_from_str(&newer_text),
+        Err(PersistenceError::NewerFormat { found, .. }) if found == newer
+    ));
+}
+
+#[test]
+fn saving_replaces_the_file_and_leaves_no_temporary_behind() {
+    let dir = TempDir::new("vv-core-persistence-atomic-test");
+    let path = dir.join("project.vvproj");
+    std::fs::write(&path, "old contents").unwrap();
+    std::fs::write(temp_path(&path), "stale half write").unwrap();
+
+    save_project(&Project::default(), &path).unwrap();
+
+    assert!(load_project(&path).is_ok());
+    assert!(!temp_path(&path).exists());
+}

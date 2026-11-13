@@ -169,7 +169,6 @@ fn save_then_load_keeps_custom_panel_layout_and_defaults_it_when_absent() {
     settings.panels = PanelLayout {
         media_pool_open: false,
         effects_open: true,
-        inspector_open: false,
         keyframe_editor_open: true,
         mixer_open: true,
         color_window_open: true,
@@ -177,10 +176,7 @@ fn save_then_load_keeps_custom_panel_layout_and_defaults_it_when_absent() {
             vv_render::ScopeKind::Histogram,
             vv_render::ScopeKind::Parade,
         ],
-        left_column_width: 321.0,
         media_pool_fraction: 0.3,
-        inspector_width: 456.0,
-        timeline_height: 199.0,
         media_pool_layout: crate::media_pool::PoolLayout::Grid,
         library_layout: crate::media_pool::PoolLayout::List,
     };
@@ -537,4 +533,23 @@ fn the_scanned_state_is_written_as_before() {
         written(Some(Vec::new())),
         (serde_json::json!([]), serde_json::json!(true))
     );
+}
+
+#[test]
+fn projects_folder_layout_and_open_project_survive_save_and_load() {
+    let dir = TempDir::new("vv-settings-projects");
+    let path = dir.join("settings.json");
+    let mut settings = Settings::default();
+    settings.projects_dir = Some(dir.join("Progetti"));
+    settings.workspace = Some(serde_json::json!({ "detached": [] }));
+    settings.open_project = Some(dir.join("Progetti/Progetto_01/Progetto_01.vvproj"));
+    settings.save(&path).unwrap();
+
+    assert_eq!(Settings::load(&path), settings);
+
+    std::fs::write(&path, "{}").unwrap();
+    let loaded = Settings::load(&path);
+    assert_eq!(loaded.projects_dir, None);
+    assert_eq!(loaded.open_project, None);
+    assert_eq!(loaded.projects_dir(), default_projects_dir());
 }

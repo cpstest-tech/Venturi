@@ -570,18 +570,14 @@ const MAX_RECENT_PROJECTS: usize = 10;
 pub struct PanelLayout {
     pub media_pool_open: bool,
     pub effects_open: bool,
-    pub inspector_open: bool,
     pub keyframe_editor_open: bool,
     pub mixer_open: bool,
     pub color_window_open: bool,
     /// What the Color window's two scope slots show.
     pub color_scopes: [vv_render::ScopeKind; 2],
-    pub left_column_width: f32,
     /// Share of the left column's height given to the media pool when the
     /// Effects panel is open too.
     pub media_pool_fraction: f32,
-    pub inspector_width: f32,
-    pub timeline_height: f32,
     pub media_pool_layout: crate::media_pool::PoolLayout,
     pub library_layout: crate::media_pool::PoolLayout,
 }
@@ -591,7 +587,6 @@ impl Default for PanelLayout {
         Self {
             media_pool_open: true,
             effects_open: false,
-            inspector_open: true,
             keyframe_editor_open: false,
             mixer_open: false,
             color_window_open: false,
@@ -599,10 +594,7 @@ impl Default for PanelLayout {
                 vv_render::ScopeKind::Waveform,
                 vv_render::ScopeKind::Vectorscope,
             ],
-            left_column_width: 260.0,
             media_pool_fraction: 0.5,
-            inspector_width: 300.0,
-            timeline_height: 240.0,
             media_pool_layout: Default::default(),
             library_layout: Default::default(),
         }
@@ -662,6 +654,13 @@ pub struct Settings {
     pub recording_dir: Option<PathBuf>,
     /// Serve MCP on a local socket for `vv-app mcp --attach`.
     pub mcp_enabled: bool,
+    /// Where the Home lists the projects; `None` is `default_projects_dir`.
+    pub projects_dir: Option<PathBuf>,
+    /// The blocks' arrangement, as `crate::workspace::Workspace` writes it.
+    pub workspace: Option<serde_json::Value>,
+    /// The project being edited, cleared on a clean exit: still set at
+    /// startup, the last run crashed with it open.
+    pub open_project: Option<PathBuf>,
 }
 
 /// Largest size the editor composes at, as a fraction of the timeline's
@@ -734,6 +733,9 @@ impl Default for Settings {
             recording_format: None,
             recording_dir: None,
             mcp_enabled: false,
+            projects_dir: None,
+            workspace: None,
+            open_project: None,
         }
     }
 }
@@ -747,6 +749,10 @@ impl Settings {
     pub fn hw_decode_budget_bytes(&self) -> usize {
         self.hw_decode_budget_bytes
             .unwrap_or_else(crate::hw_decode::default_budget_bytes)
+    }
+
+    pub fn projects_dir(&self) -> Option<PathBuf> {
+        self.projects_dir.clone().or_else(default_projects_dir)
     }
 
     pub fn add_recent_project(&mut self, path: PathBuf) {
@@ -816,6 +822,12 @@ struct SettingsFile {
     recording_dir: Option<PathBuf>,
     #[serde(default)]
     mcp_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    projects_dir: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    workspace: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    open_project: Option<PathBuf>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -825,8 +837,6 @@ struct PanelLayoutFile {
     #[serde(default)]
     effects_open: Option<bool>,
     #[serde(default)]
-    inspector_open: Option<bool>,
-    #[serde(default)]
     keyframe_editor_open: Option<bool>,
     #[serde(default)]
     mixer_open: Option<bool>,
@@ -835,13 +845,7 @@ struct PanelLayoutFile {
     #[serde(default)]
     color_scopes: Option<[vv_render::ScopeKind; 2]>,
     #[serde(default)]
-    left_column_width: Option<f32>,
-    #[serde(default)]
     media_pool_fraction: Option<f32>,
-    #[serde(default)]
-    inspector_width: Option<f32>,
-    #[serde(default)]
-    timeline_height: Option<f32>,
     #[serde(default)]
     media_pool_layout: Option<crate::media_pool::PoolLayout>,
     #[serde(default)]
@@ -1008,6 +1012,9 @@ impl Settings {
         settings.vst3_plugins = (scanned || !plugins.is_empty()).then_some(plugins);
         settings.vst3_blocklist = readable_entries(file.vst3_blocklist);
         settings.mcp_enabled = file.mcp_enabled.unwrap_or(false);
+        settings.projects_dir = file.projects_dir;
+        settings.workspace = file.workspace;
+        settings.open_project = file.open_project;
         let defaults = PanelLayout::default();
         settings.panels = PanelLayout {
             media_pool_open: file
@@ -1015,10 +1022,6 @@ impl Settings {
                 .media_pool_open
                 .unwrap_or(defaults.media_pool_open),
             effects_open: file.panels.effects_open.unwrap_or(defaults.effects_open),
-            inspector_open: file
-                .panels
-                .inspector_open
-                .unwrap_or(defaults.inspector_open),
             keyframe_editor_open: file
                 .panels
                 .keyframe_editor_open
@@ -1029,22 +1032,10 @@ impl Settings {
                 .color_window_open
                 .unwrap_or(defaults.color_window_open),
             color_scopes: file.panels.color_scopes.unwrap_or(defaults.color_scopes),
-            left_column_width: file
-                .panels
-                .left_column_width
-                .unwrap_or(defaults.left_column_width),
             media_pool_fraction: file
                 .panels
                 .media_pool_fraction
                 .unwrap_or(defaults.media_pool_fraction),
-            inspector_width: file
-                .panels
-                .inspector_width
-                .unwrap_or(defaults.inspector_width),
-            timeline_height: file
-                .panels
-                .timeline_height
-                .unwrap_or(defaults.timeline_height),
             media_pool_layout: file.panels.media_pool_layout.unwrap_or_default(),
             library_layout: file.panels.library_layout.unwrap_or_default(),
         };
@@ -1110,15 +1101,11 @@ impl Settings {
             panels: PanelLayoutFile {
                 media_pool_open: Some(self.panels.media_pool_open),
                 effects_open: Some(self.panels.effects_open),
-                inspector_open: Some(self.panels.inspector_open),
                 keyframe_editor_open: Some(self.panels.keyframe_editor_open),
                 mixer_open: Some(self.panels.mixer_open),
                 color_window_open: Some(self.panels.color_window_open),
                 color_scopes: Some(self.panels.color_scopes),
-                left_column_width: Some(self.panels.left_column_width),
                 media_pool_fraction: Some(self.panels.media_pool_fraction),
-                inspector_width: Some(self.panels.inspector_width),
-                timeline_height: Some(self.panels.timeline_height),
                 media_pool_layout: Some(self.panels.media_pool_layout),
                 library_layout: Some(self.panels.library_layout),
             },
@@ -1131,13 +1118,24 @@ impl Settings {
             recording_format: self.recording_format.map(|f| f.id().to_owned()),
             recording_dir: self.recording_dir.clone(),
             mcp_enabled: Some(self.mcp_enabled),
+            projects_dir: self.projects_dir.clone(),
+            workspace: self.workspace.clone(),
+            open_project: self.open_project.clone(),
         };
         let text = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
-        std::fs::write(path, text).map_err(|e| e.to_string())
+        vv_core::write_atomic(path, text.as_bytes()).map_err(|e| e.to_string())
     }
+}
+
+/// `~/Videos/Projects`.
+pub fn default_projects_dir() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .filter(|h| !h.is_empty())?;
+    Some(PathBuf::from(home).join("Videos").join("Projects"))
 }
 
 fn readable_entries<T: serde::de::DeserializeOwned>(values: Vec<serde_json::Value>) -> Vec<T> {

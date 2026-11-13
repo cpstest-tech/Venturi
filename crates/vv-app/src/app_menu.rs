@@ -1,4 +1,4 @@
-//! Menu bar and keyboard shortcuts.
+//! Top bar (Home, menus, project name, Export) and keyboard shortcuts.
 
 use super::*;
 
@@ -249,417 +249,557 @@ impl VenturiApp {
         response
     }
 
-    /// Displays the top menu bar in `ui` and dispatches selected menu actions.
-    pub(crate) fn show_menu_bar(&mut self, ui: &mut egui::Ui) {
+    /// Displays the top bar in `ui` and dispatches the chosen actions.
+    pub(crate) fn show_top_bar(&mut self, ui: &mut egui::Ui) {
         let keymap = self.settings.keymap.clone();
         let mut set_fullscreen = None;
+        let mut go_home = false;
         egui::Panel::top("menu_bar").show(ui, |ui| {
-            egui::MenuBar::new().ui(ui, |ui| {
-                let mut bar_menus = Vec::new();
-                let export_disabled = self.timeline_id.is_none()
-                    || self.export.is_some()
-                    || self.export_dialog.is_some();
-
-                bar_menus.push(
-                    ui.menu_button(t!("menu.file"), |ui| {
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.new_project"), Action::NewProject))
-                            .clicked()
-                        {
-                            self.request_project_switch(ProjectSwitch::New);
-                            ui.close();
-                        }
-                        if ui
-                            .button(
-                                keymap.menu_label(&t!("menu.open_project"), Action::OpenProject),
-                            )
-                            .clicked()
-                        {
-                            self.request_project_switch(ProjectSwitch::Open);
-                            ui.close();
-                        }
-                        self.recent_projects_menu(ui);
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.save"), Action::SaveProject))
-                            .clicked()
-                        {
-                            self.save_project();
-                            ui.close();
-                        }
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.save_as"), Action::SaveProjectAs))
-                            .clicked()
-                        {
-                            self.save_project_as();
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui
-                            .button(
-                                keymap.menu_label(&t!("menu.import_media"), Action::ImportMedia),
-                            )
-                            .clicked()
-                        {
-                            self.import_media_dialog();
-                            ui.close();
-                        }
-                        if ui
-                            .button(t!("menu.import_otio"))
-                            .on_hover_text(t!("menu.import_otio_hint"))
-                            .clicked()
-                        {
-                            self.import_otio_dialog();
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui
-                            .add_enabled(
-                                !export_disabled,
-                                egui::Button::new(
-                                    keymap.menu_label(&t!("menu.export"), Action::Export),
-                                ),
-                            )
-                            .on_hover_text(t!("menu.export_hint"))
-                            .clicked()
-                        {
-                            self.start_export();
-                            ui.close();
-                        }
-                        if ui
-                            .add_enabled(
-                                self.timeline_id.is_some(),
-                                egui::Button::new(t!("menu.export_otio")),
-                            )
-                            .on_hover_text(t!("menu.export_otio_hint"))
-                            .clicked()
-                        {
-                            self.export_otio_dialog();
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.settings"), Action::OpenSettings))
-                            .clicked()
-                        {
-                            self.open_settings(settings_dialog::Section::General);
-                            ui.close();
-                        }
-                        ui.separator();
-                        self.show_exit_menu_item(ui);
-                    })
-                    .response,
-                );
-
-                bar_menus.push(
-                    ui.menu_button(t!("menu.edit"), |ui| {
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.undo"), Action::Undo))
-                            .clicked()
-                        {
-                            self.undo();
-                            ui.close();
-                        }
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.redo"), Action::Redo))
-                            .clicked()
-                        {
-                            self.redo();
-                            ui.close();
-                        }
-                        self.undo_history_menu(ui);
-                        ui.separator();
-                        if ui
-                            .add_enabled(
-                                !self.timeline_state.selected.is_empty(),
-                                egui::Button::new(
-                                    keymap.menu_label(&t!("menu.copy"), Action::Copy),
-                                ),
-                            )
-                            .clicked()
-                        {
-                            // Also writes the placeholder to the system clipboard, see
-                            // `handle_clipboard_events`.
-                            self.handle_clipboard_events(ui, &[egui::Event::Copy]);
-                            ui.close();
-                        }
-                        if ui
-                            .add_enabled(
-                                !self.timeline_state.selected.is_empty(),
-                                egui::Button::new(keymap.menu_label(&t!("menu.cut"), Action::Cut)),
-                            )
-                            .clicked()
-                        {
-                            self.handle_clipboard_events(ui, &[egui::Event::Cut]);
-                            ui.close();
-                        }
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.paste"), Action::Paste))
-                            .on_hover_text(t!("menu.paste_hint"))
-                            .clicked()
-                        {
-                            // Another instance may have copied: only the
-                            // system clipboard knows.
-                            self.menu_paste_pending = true;
-                            ui.ctx()
-                                .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
-                            ui.ctx().request_repaint();
-                            ui.close();
-                        }
-                        if ui
-                            .add_enabled(
-                                !self.timeline_state.clipboard.is_empty()
-                                    && !self.timeline_state.selected.is_empty(),
-                                egui::Button::new(keymap.menu_label(
-                                    &t!("menu.paste_attributes"),
-                                    Action::PasteAttributes,
-                                )),
-                            )
-                            .on_hover_text(t!("menu.paste_attributes_hint"))
-                            .clicked()
-                        {
-                            self.open_paste_attributes_dialog();
-                            ui.close();
-                        }
-                        if ui
-                            .add_enabled(
-                                !self.timeline_state.selected.is_empty(),
-                                egui::Button::new(t!("timeline.save_preset")),
-                            )
-                            .clicked()
-                        {
-                            let clips: Vec<_> =
-                                self.timeline_state.selected.iter().copied().collect();
-                            self.open_save_preset_dialog(&clips);
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.delete"), Action::Delete))
-                            .clicked()
-                        {
-                            self.delete_selected();
-                            ui.close();
-                        }
-                        if ui
-                            .button(
-                                keymap.menu_label(&t!("menu.ripple_delete"), Action::RippleDelete),
-                            )
-                            .on_hover_text(t!("menu.ripple_delete_hint"))
-                            .clicked()
-                        {
-                            self.ripple_delete_selected();
-                            ui.close();
-                        }
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.split"), Action::Split))
-                            .on_hover_text(t!("menu.split_hint"))
-                            .clicked()
-                        {
-                            self.split_at_playhead();
-                            ui.close();
-                        }
-                    })
-                    .response,
-                );
-
-                bar_menus.push(
-                    ui.menu_button(t!("menu.project"), |ui| {
-                        if ui.button(t!("menu.project_settings")).clicked() {
-                            self.project_settings_open = true;
-                            ui.close();
-                        }
-                    })
-                    .response,
-                );
-
-                bar_menus.push(
-                    ui.menu_button(t!("menu.timeline"), |ui| {
-                        // Checkboxes: they stay open on click, unlike the
-                        // action buttons elsewhere in the menus.
-                        ui.checkbox(
-                            &mut self.selection_follows_playhead,
-                            t!("menu.selection_follows_playhead"),
-                        )
-                        .on_hover_text(t!("menu.selection_follows_playhead_hint"));
-                        ui.checkbox(&mut self.scrub_audio, t!("menu.scrub_audio"))
-                            .on_hover_text(t!("menu.scrub_audio_hint"));
-                        ui.separator();
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.zoom_in"), Action::ZoomIn))
-                            .clicked()
-                        {
-                            self.timeline_state.zoom_in();
-                            ui.close();
-                        }
-                        if ui
-                            .button(keymap.menu_label(&t!("menu.zoom_out"), Action::ZoomOut))
-                            .clicked()
-                        {
-                            self.timeline_state.zoom_out();
-                            ui.close();
-                        }
-                        ui.label(t!("menu.zoom_hint"));
-                        ui.separator();
-                        if ui
-                            .button(keymap.menu_label(
-                                &t!("timeline.retime_controls"),
-                                Action::RetimeControls,
-                            ))
-                            .clicked()
-                        {
-                            self.toggle_retime_controls();
-                            ui.close();
-                        }
-                        if ui
-                            .add_enabled(
-                                !self.timeline_state.selected.is_empty(),
-                                egui::Button::new(t!("timeline.remove_silences")),
-                            )
-                            .clicked()
-                        {
-                            self.timeline_state.silence_dialog_requested =
-                                Some(self.timeline_state.selected.iter().copied().collect());
-                            ui.close();
-                        }
-                        if ui
-                            .add_enabled(
-                                self.timeline_id.is_some(),
-                                egui::Button::new(
-                                    keymap
-                                        .menu_label(&t!("timeline.add_marker"), Action::AddMarker),
-                                ),
-                            )
-                            .clicked()
-                        {
-                            self.add_marker_at_playhead();
-                            ui.close();
-                        }
-                        let (can_mark, marks) = self
-                            .mark_target()
-                            .map(|target| (target.total > 0, Some(*target.marks)))
-                            .unwrap_or((false, None));
-                        for (action, is_in) in [(Action::MarkIn, true), (Action::MarkOut, false)] {
-                            if ui
-                                .add_enabled(
-                                    can_mark,
-                                    egui::Button::new(keymap.menu_label(&action.label(), action)),
-                                )
-                                .clicked()
-                            {
-                                self.mark_at_playhead(is_in);
-                                ui.close();
-                            }
-                        }
-                        let has_in = marks.is_some_and(|m| m.mark_in.is_some());
-                        let has_out = marks.is_some_and(|m| m.mark_out.is_some());
-                        for (action, enabled, clear) in [
-                            (
-                                Action::ClearIn,
-                                has_in,
-                                Self::clear_in_point as fn(&mut Self),
-                            ),
-                            (Action::ClearOut, has_out, Self::clear_out_point),
-                            (
-                                Action::ClearInOut,
-                                has_in || has_out,
-                                Self::clear_in_and_out,
-                            ),
-                        ] {
-                            if ui
-                                .add_enabled(
-                                    enabled,
-                                    egui::Button::new(keymap.menu_label(&action.label(), action)),
-                                )
-                                .clicked()
-                            {
-                                clear(self);
-                                ui.close();
-                            }
-                        }
-                    })
-                    .response,
-                );
-
-                bar_menus.push(
-                    ui.menu_button(t!("menu.playback"), |ui| {
-                        if ui
-                            .checkbox(&mut self.settings.proxy_enabled, t!("menu.use_proxy"))
-                            .on_hover_text(t!("menu.use_proxy_hint"))
-                            .changed()
-                        {
-                            self.apply_proxy_settings();
-                            self.persist_settings();
-                        }
-                        ui.menu_button(t!("menu.preview_resolution"), |ui| {
-                            for resolution in crate::settings::PreviewResolution::ALL {
-                                let label =
-                                    t!(format!("menu.preview_resolution_{}", resolution.id()));
-                                if ui
-                                    .radio(self.settings.preview_resolution == resolution, label)
-                                    .clicked()
-                                {
-                                    self.settings.preview_resolution = resolution;
-                                    self.apply_preview_resolution();
-                                    self.persist_settings();
-                                    ui.close();
-                                }
-                            }
-                        })
-                        .response
-                        .on_hover_text(t!("menu.preview_resolution_hint"));
-                        if ui.button(t!("menu.playback_settings")).clicked() {
-                            self.open_settings(settings_dialog::Section::Playback);
-                            ui.close();
-                        }
-                    })
-                    .response,
-                );
-
-                bar_menus.push(
-                    ui.menu_button(t!("menu.view"), |ui| {
-                        ui.checkbox(
-                            &mut self.settings.panels.inspector_open,
-                            t!("menu.inspector"),
-                        );
-                        ui.checkbox(&mut self.audiometer_enabled, t!("menu.audiometer"))
-                            .on_hover_text(t!("menu.audiometer_hint"));
-                        ui.separator();
-                        if ui
-                            .button(keymap.menu_label(
-                                &t!("menu.fullscreen_player"),
-                                Action::FullscreenViewer,
-                            ))
-                            .clicked()
-                        {
-                            set_fullscreen = Some(true);
-                            ui.close();
-                        }
-                    })
-                    .response,
-                );
-
-                bar_menus.push(
-                    ui.menu_button(t!("menu.help"), |ui| {
-                        if ui.button(t!("menu.discord")).clicked() {
-                            ui.ctx().open_url(egui::OpenUrl::new_tab(DISCORD_INVITE));
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui.button(t!("menu.about")).clicked() {
-                            self.about_open = true;
-                            ui.close();
-                        }
-                    })
-                    .response,
-                );
-                switch_bar_menu_on_hover(ui.ctx(), &bar_menus);
-            });
+            let row = ui
+                .horizontal(|ui| {
+                    go_home = ui.button("🏠").on_hover_text(t!("top_bar.home")).clicked();
+                    self.show_menus(ui, &keymap, &mut set_fullscreen);
+                })
+                .response
+                .rect;
+            let row = egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), row.y_range());
+            self.show_top_bar_center(ui, row);
+            let mut right = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(row)
+                    .layout(egui::Layout::right_to_left(egui::Align::Center)),
+            );
+            let export = egui::Button::new(egui::RichText::new(t!("top_bar.export")).strong())
+                .fill(right.visuals().selection.bg_fill);
+            if right.add(export).clicked() {
+                self.export_modal_open = true;
+            }
         });
 
+        if go_home {
+            self.request_project_switch(ProjectSwitch::Home);
+        }
         if let Some(true) = set_fullscreen.take() {
             self.viewer_fullscreen = true;
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+        }
+    }
+
+    /// The project name, clickable to rename it, and whether it is saved;
+    /// centred on the bar.
+    fn show_top_bar_center(&mut self, ui: &mut egui::Ui, row: egui::Rect) {
+        let width = self.top_bar_center_width.max(1.0);
+        let rect = egui::Rect::from_center_size(row.center(), egui::vec2(width, row.height()));
+        let mut center = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(rect)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        );
+        // Measured to centre it next frame: wrapping would shrink it for good.
+        center.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+        self.show_project_title(&mut center);
+        let drawn = center.min_rect().width();
+        if (drawn - self.top_bar_center_width).abs() > 0.5 {
+            self.top_bar_center_width = drawn;
+            ui.ctx().request_repaint();
+        }
+    }
+
+    fn show_project_title(&mut self, ui: &mut egui::Ui) {
+        let Some(path) = self.session.path().map(Path::to_path_buf) else {
+            ui.strong(self.project_label());
+            return;
+        };
+        if let Some(name) = self.project_name_edit.as_mut() {
+            let edit = ui.add(egui::TextEdit::singleline(name).desired_width(220.0));
+            if !edit.has_focus() && !edit.lost_focus() {
+                edit.request_focus();
+            }
+            if edit.lost_focus() {
+                let cancelled = ui.input(|i| i.key_pressed(egui::Key::Escape));
+                let name = self.project_name_edit.take().unwrap_or_default();
+                if !cancelled {
+                    self.rename_open_project(&name);
+                }
+            }
+        } else {
+            let name = projects::project_name(&path);
+            let title = ui
+                .add(egui::Button::new(egui::RichText::new(&name).strong()).frame(false))
+                .on_hover_text(t!("top_bar.rename_hint"));
+            if title.clicked() {
+                self.project_name_edit = Some(name);
+            }
+        }
+        let (text, color, detail) = match self.save_status() {
+            autosave::SaveStatus::Saved => {
+                (t!("top_bar.saved"), ui.visuals().weak_text_color(), None)
+            }
+            autosave::SaveStatus::Saving => {
+                (t!("top_bar.saving"), ui.visuals().weak_text_color(), None)
+            }
+            autosave::SaveStatus::Failed(error) => {
+                (t!("top_bar.save_failed"), theme::ERROR, Some(error))
+            }
+        };
+        let status = ui.label(egui::RichText::new(text).small().color(color));
+        if let Some(detail) = detail {
+            status.on_hover_text(detail);
+        }
+    }
+
+    pub(crate) fn show_export_modal(&mut self, ctx: &egui::Context) {
+        if !self.export_modal_open {
+            return;
+        }
+        let mut close = false;
+        let modal = egui::Modal::new(egui::Id::new("export_modal")).show(ctx, |ui| {
+            ui.set_min_width(360.0);
+            ui.heading(t!("top_bar.export"));
+            ui.add_space(12.0);
+            close = ui.button(t!("common.close")).clicked();
+        });
+        if close || modal.should_close() {
+            self.export_modal_open = false;
+        }
+    }
+
+    fn show_menus(
+        &mut self,
+        ui: &mut egui::Ui,
+        keymap: &settings::Keymap,
+        set_fullscreen: &mut Option<bool>,
+    ) {
+        egui::MenuBar::new().ui(ui, |ui| {
+            let mut bar_menus = Vec::new();
+            let export_disabled =
+                self.timeline_id.is_none() || self.export.is_some() || self.export_dialog.is_some();
+
+            bar_menus.push(
+                ui.menu_button(t!("menu.file"), |ui| {
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.new_project"), Action::NewProject))
+                        .clicked()
+                    {
+                        self.request_project_switch(ProjectSwitch::New);
+                        ui.close();
+                    }
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.open_project"), Action::OpenProject))
+                        .clicked()
+                    {
+                        self.request_project_switch(ProjectSwitch::Open);
+                        ui.close();
+                    }
+                    self.recent_projects_menu(ui);
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.save"), Action::SaveProject))
+                        .clicked()
+                    {
+                        self.save_project();
+                        ui.close();
+                    }
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.save_as"), Action::SaveProjectAs))
+                        .clicked()
+                    {
+                        self.save_project_as();
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.import_media"), Action::ImportMedia))
+                        .clicked()
+                    {
+                        self.import_media_dialog();
+                        ui.close();
+                    }
+                    if ui
+                        .button(t!("menu.import_otio"))
+                        .on_hover_text(t!("menu.import_otio_hint"))
+                        .clicked()
+                    {
+                        self.import_otio_dialog();
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            !export_disabled,
+                            egui::Button::new(
+                                keymap.menu_label(&t!("menu.export"), Action::Export),
+                            ),
+                        )
+                        .on_hover_text(t!("menu.export_hint"))
+                        .clicked()
+                    {
+                        self.start_export();
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.timeline_id.is_some(),
+                            egui::Button::new(t!("menu.export_otio")),
+                        )
+                        .on_hover_text(t!("menu.export_otio_hint"))
+                        .clicked()
+                    {
+                        self.export_otio_dialog();
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.settings"), Action::OpenSettings))
+                        .clicked()
+                    {
+                        self.open_settings(settings_dialog::Section::General);
+                        ui.close();
+                    }
+                    ui.separator();
+                    self.show_exit_menu_item(ui);
+                })
+                .response,
+            );
+
+            bar_menus.push(
+                ui.menu_button(t!("menu.edit"), |ui| {
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.undo"), Action::Undo))
+                        .clicked()
+                    {
+                        self.undo();
+                        ui.close();
+                    }
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.redo"), Action::Redo))
+                        .clicked()
+                    {
+                        self.redo();
+                        ui.close();
+                    }
+                    self.undo_history_menu(ui);
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            !self.timeline_state.selected.is_empty(),
+                            egui::Button::new(keymap.menu_label(&t!("menu.copy"), Action::Copy)),
+                        )
+                        .clicked()
+                    {
+                        // Also writes the placeholder to the system clipboard, see
+                        // `handle_clipboard_events`.
+                        self.handle_clipboard_events(ui, &[egui::Event::Copy]);
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.timeline_state.selected.is_empty(),
+                            egui::Button::new(keymap.menu_label(&t!("menu.cut"), Action::Cut)),
+                        )
+                        .clicked()
+                    {
+                        self.handle_clipboard_events(ui, &[egui::Event::Cut]);
+                        ui.close();
+                    }
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.paste"), Action::Paste))
+                        .on_hover_text(t!("menu.paste_hint"))
+                        .clicked()
+                    {
+                        // Another instance may have copied: only the
+                        // system clipboard knows.
+                        self.menu_paste_pending = true;
+                        ui.ctx()
+                            .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                        ui.ctx().request_repaint();
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.timeline_state.clipboard.is_empty()
+                                && !self.timeline_state.selected.is_empty(),
+                            egui::Button::new(
+                                keymap.menu_label(
+                                    &t!("menu.paste_attributes"),
+                                    Action::PasteAttributes,
+                                ),
+                            ),
+                        )
+                        .on_hover_text(t!("menu.paste_attributes_hint"))
+                        .clicked()
+                    {
+                        self.open_paste_attributes_dialog();
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.timeline_state.selected.is_empty(),
+                            egui::Button::new(t!("timeline.save_preset")),
+                        )
+                        .clicked()
+                    {
+                        let clips: Vec<_> = self.timeline_state.selected.iter().copied().collect();
+                        self.open_save_preset_dialog(&clips);
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.delete"), Action::Delete))
+                        .clicked()
+                    {
+                        self.delete_selected();
+                        ui.close();
+                    }
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.ripple_delete"), Action::RippleDelete))
+                        .on_hover_text(t!("menu.ripple_delete_hint"))
+                        .clicked()
+                    {
+                        self.ripple_delete_selected();
+                        ui.close();
+                    }
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.split"), Action::Split))
+                        .on_hover_text(t!("menu.split_hint"))
+                        .clicked()
+                    {
+                        self.split_at_playhead();
+                        ui.close();
+                    }
+                })
+                .response,
+            );
+
+            bar_menus.push(
+                ui.menu_button(t!("menu.project"), |ui| {
+                    if ui.button(t!("menu.project_settings")).clicked() {
+                        self.project_settings_open = true;
+                        ui.close();
+                    }
+                })
+                .response,
+            );
+
+            bar_menus.push(
+                ui.menu_button(t!("menu.timeline"), |ui| {
+                    // Checkboxes: they stay open on click, unlike the
+                    // action buttons elsewhere in the menus.
+                    ui.checkbox(
+                        &mut self.selection_follows_playhead,
+                        t!("menu.selection_follows_playhead"),
+                    )
+                    .on_hover_text(t!("menu.selection_follows_playhead_hint"));
+                    ui.checkbox(&mut self.scrub_audio, t!("menu.scrub_audio"))
+                        .on_hover_text(t!("menu.scrub_audio_hint"));
+                    ui.separator();
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.zoom_in"), Action::ZoomIn))
+                        .clicked()
+                    {
+                        self.timeline_state.zoom_in();
+                        ui.close();
+                    }
+                    if ui
+                        .button(keymap.menu_label(&t!("menu.zoom_out"), Action::ZoomOut))
+                        .clicked()
+                    {
+                        self.timeline_state.zoom_out();
+                        ui.close();
+                    }
+                    ui.label(t!("menu.zoom_hint"));
+                    ui.separator();
+                    if ui
+                        .button(
+                            keymap.menu_label(
+                                &t!("timeline.retime_controls"),
+                                Action::RetimeControls,
+                            ),
+                        )
+                        .clicked()
+                    {
+                        self.toggle_retime_controls();
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.timeline_state.selected.is_empty(),
+                            egui::Button::new(t!("timeline.remove_silences")),
+                        )
+                        .clicked()
+                    {
+                        self.timeline_state.silence_dialog_requested =
+                            Some(self.timeline_state.selected.iter().copied().collect());
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.timeline_id.is_some(),
+                            egui::Button::new(
+                                keymap.menu_label(&t!("timeline.add_marker"), Action::AddMarker),
+                            ),
+                        )
+                        .clicked()
+                    {
+                        self.add_marker_at_playhead();
+                        ui.close();
+                    }
+                    let (can_mark, marks) = self
+                        .mark_target()
+                        .map(|target| (target.total > 0, Some(*target.marks)))
+                        .unwrap_or((false, None));
+                    for (action, is_in) in [(Action::MarkIn, true), (Action::MarkOut, false)] {
+                        if ui
+                            .add_enabled(
+                                can_mark,
+                                egui::Button::new(keymap.menu_label(&action.label(), action)),
+                            )
+                            .clicked()
+                        {
+                            self.mark_at_playhead(is_in);
+                            ui.close();
+                        }
+                    }
+                    let has_in = marks.is_some_and(|m| m.mark_in.is_some());
+                    let has_out = marks.is_some_and(|m| m.mark_out.is_some());
+                    for (action, enabled, clear) in [
+                        (
+                            Action::ClearIn,
+                            has_in,
+                            Self::clear_in_point as fn(&mut Self),
+                        ),
+                        (Action::ClearOut, has_out, Self::clear_out_point),
+                        (
+                            Action::ClearInOut,
+                            has_in || has_out,
+                            Self::clear_in_and_out,
+                        ),
+                    ] {
+                        if ui
+                            .add_enabled(
+                                enabled,
+                                egui::Button::new(keymap.menu_label(&action.label(), action)),
+                            )
+                            .clicked()
+                        {
+                            clear(self);
+                            ui.close();
+                        }
+                    }
+                })
+                .response,
+            );
+
+            bar_menus.push(
+                ui.menu_button(t!("menu.playback"), |ui| {
+                    if ui
+                        .checkbox(&mut self.settings.proxy_enabled, t!("menu.use_proxy"))
+                        .on_hover_text(t!("menu.use_proxy_hint"))
+                        .changed()
+                    {
+                        self.apply_proxy_settings();
+                        self.persist_settings();
+                    }
+                    ui.menu_button(t!("menu.preview_resolution"), |ui| {
+                        for resolution in crate::settings::PreviewResolution::ALL {
+                            let label = t!(format!("menu.preview_resolution_{}", resolution.id()));
+                            if ui
+                                .radio(self.settings.preview_resolution == resolution, label)
+                                .clicked()
+                            {
+                                self.settings.preview_resolution = resolution;
+                                self.apply_preview_resolution();
+                                self.persist_settings();
+                                ui.close();
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text(t!("menu.preview_resolution_hint"));
+                    if ui.button(t!("menu.playback_settings")).clicked() {
+                        self.open_settings(settings_dialog::Section::Playback);
+                        ui.close();
+                    }
+                })
+                .response,
+            );
+
+            bar_menus.push(
+                ui.menu_button(t!("menu.view"), |ui| {
+                    ui.checkbox(&mut self.audiometer_enabled, t!("menu.audiometer"))
+                        .on_hover_text(t!("menu.audiometer_hint"));
+                    ui.separator();
+                    if ui
+                        .button(
+                            keymap.menu_label(
+                                &t!("menu.fullscreen_player"),
+                                Action::FullscreenViewer,
+                            ),
+                        )
+                        .clicked()
+                    {
+                        *set_fullscreen = Some(true);
+                        ui.close();
+                    }
+                })
+                .response,
+            );
+
+            bar_menus.push(
+                ui.menu_button(t!("menu.layout"), |ui| self.layout_menu(ui))
+                    .response,
+            );
+
+            bar_menus.push(
+                ui.menu_button(t!("menu.help"), |ui| {
+                    if ui.button(t!("menu.discord")).clicked() {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(DISCORD_INVITE));
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button(t!("menu.about")).clicked() {
+                        self.about_open = true;
+                        ui.close();
+                    }
+                })
+                .response,
+            );
+            switch_bar_menu_on_hover(ui.ctx(), &bar_menus);
+        });
+    }
+
+    fn layout_menu(&mut self, ui: &mut egui::Ui) {
+        if ui.button(t!("workspace.reset")).clicked() {
+            self.workspace.reset();
+            ui.close();
+        }
+        ui.separator();
+        ui.label(egui::RichText::new(t!("workspace.closed_blocks")).weak());
+        let closed = self.workspace.closed_blocks();
+        if closed.is_empty() {
+            ui.add_enabled(false, egui::Button::new(t!("workspace.none_closed")));
+        }
+        for block in closed {
+            if ui
+                .button(t!("workspace.reopen", block = block.title()))
+                .clicked()
+            {
+                self.workspace.reopen(block);
+                ui.close();
+            }
+        }
+        let detached = self.workspace.detached_blocks();
+        if !detached.is_empty() {
+            ui.separator();
+            for block in detached {
+                if ui
+                    .button(t!("workspace.redock_block", block = block.title()))
+                    .clicked()
+                {
+                    self.workspace.redock(block);
+                    ui.close();
+                }
+            }
         }
     }
 

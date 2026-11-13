@@ -1,0 +1,145 @@
+_version: 2
+
+home.title:
+  en: "Projects"
+  it: "Progetti"
+
+home.new_project:
+  en: "New project"
+  it: "Nuovo progetto"
+
+home.new_project_prefix:
+  en: "Project"
+  it: "Progetto"
+
+home.import_project:
+  en: "Import project…"
+  it: "Importa progetto…"
+
+home.import_project_hint:
+  en: "Copies a .vvproj saved elsewhere into the projects folder and opens it"
+  it: "Copia un .vvproj salvato altrove nella cartella dei progetti e lo apre"
+
+home.search_hint:
+  en: "Search by name"
+  it: "Cerca per nome"
+
+home.sort:
+  en: "Sort: %{order}"
+  it: "Ordina: %{order}"
+
+home.sort_recent:
+  en: "Most recent"
+  it: "Più recenti"
+
+home.sort_name:
+  en: "Name"
+  it: "Nome"
+
+home.sort_size:
+  en: "Size"
+  it: "Peso"
+
+home.format:
+  en: "Format: %{format}"
+  it: "Formato: %{format}"
+
+home.format_all:
+  en: "All"
+  it: "Tutti"
+
+home.format_other:
+  en: "Other"
+  it: "Altro"
+
+home.format_undefined:
+  en: "Not set yet"
+  it: "Non definito"
+
+home.folder:
+  en: "Folder: %{folder}"
+  it: "Cartella: %{folder}"
+
+home.no_folder:
+  en: "no projects folder (HOME is not set)"
+  it: "nessuna cartella dei progetti (HOME non impostata)"
+
+home.change_folder:
+  en: "Change…"
+  it: "Cambia…"
+
+home.empty:
+  en: "No projects"
+  it: "Nessun progetto"
+
+home.no_match:
+  en: "No project matches the search"
+  it: "Nessun progetto corrisponde alla ricerca"
+
+home.no_preview:
+  en: "No preview"
+  it: "Nessuna anteprima"
+
+home.unreadable:
+  en: "Cannot be read"
+  it: "Non leggibile"
+
+home.card_menu:
+  en: "Project actions"
+  it: "Azioni del progetto"
+
+home.open:
+  en: "Open"
+  it: "Apri"
+
+home.rename:
+  en: "Rename"
+  it: "Rinomina"
+
+home.duplicate:
+  en: "Duplicate"
+  it: "Duplica"
+
+home.delete:
+  en: "Delete"
+  it: "Elimina"
+
+home.reveal:
+  en: "Show in folder"
+  it: "Mostra nella cartella"
+
+home.copy_suffix:
+  en: "copy"
+  it: "copia"
+
+home.rename_title:
+  en: "Rename project"
+  it: "Rinomina progetto"
+
+home.delete_title:
+  en: "Delete «%{name}»?"
+  it: "Eliminare «%{name}»?"
+
+home.delete_detail:
+  en: "The project folder is removed from disk. The original media files are not touched."
+  it: "La cartella del progetto viene eliminata dal disco. I file multimediali originali non vengono toccati."
+
+home.invalid_name:
+  en: "Invalid name: it cannot be empty, start with a dot or contain / \\ : * ? \" < > |"
+  it: "Nome non valido: non può essere vuoto, iniziare con un punto o contenere / \\ : * ? \" < > |"
+
+home.name_taken:
+  en: "A project with this name already exists"
+  it: "Esiste già un progetto con questo nome"
+
+home.not_a_project_folder:
+  en: "This file is not in a project folder"
+  it: "Questo file non è in una cartella di progetto"
+
+home.fs_error:
+  en: "Operation failed: %{error}"
+  it: "Operazione non riuscita: %{error}"
+
+home.date:
+  en: "%{year}-%{month}-%{day} %{hour}:%{minute}"
+  it: "%{day}/%{month}/%{year} %{hour}:%{minute}"

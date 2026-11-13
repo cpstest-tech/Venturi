@@ -410,6 +410,7 @@ impl VenturiApp {
             return;
         };
         self.settings.panels.media_pool_open = true;
+        self.workspace.reopen(Block::Library);
         self.library_ui.tab = library_ui::PoolTab::Project;
         let folders = &self.session.project.folders;
         self.media_pool_state

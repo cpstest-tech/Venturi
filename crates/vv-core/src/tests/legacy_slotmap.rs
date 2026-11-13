@@ -68,7 +68,8 @@ fn a_clip_of_a_media_deleted_before_saving_stays_offline() {
 fn a_migrated_project_is_saved_in_the_current_format() {
     let project: Project = ron::from_str(PROJECT).unwrap();
     let text = ron::ser::to_string_pretty(&project, ron::ser::PrettyConfig::default()).unwrap();
-    assert!(!text.contains("version"));
+    // The slots' `version`, not the file's own `format_version`.
+    assert!(!text.replace("format_version", "").contains("version"));
 
     let reloaded: Project = ron::from_str(&text).unwrap();
     assert_eq!(main_clip_sources(&reloaded), main_clip_sources(&project));

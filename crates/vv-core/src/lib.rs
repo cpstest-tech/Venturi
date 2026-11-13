@@ -32,7 +32,10 @@ pub use otio::{
     MeasureTitle, OtioError, OtioImport, OtioWarning, TitleMetrics, export_otio, import_otio,
     media_url_count, project_from_otio,
 };
-pub use persistence::{PersistenceError, load_project, save_project};
+pub use persistence::{
+    CURRENT_FORMAT_VERSION, PersistenceError, load_project, project_to_string, save_project,
+    write_atomic,
+};
 pub use pool::{
     AddEntities, DeleteFolder, MoveFolder, RenameFolder, RenameTimeline, SetMediaFolder,
 };

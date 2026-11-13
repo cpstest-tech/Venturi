@@ -243,3 +243,15 @@ project.precision_standard_hint:
 project.precision_unsupported:
   en: "This GPU cannot compose in 16-bit float: the preview uses 8 bits."
   it: "Questa GPU non può comporre in float a 16 bit: l'anteprima usa 8 bit."
+
+project.autosave_lost:
+  en: "The save was interrupted"
+  it: "Il salvataggio si è interrotto"
+
+project.recovered_title:
+  en: "Project recovered"
+  it: "Progetto recuperato"
+
+project.recovered:
+  en: "Venturi did not close properly: «%{name}» has been reopened from its last save."
+  it: "Venturi non si è chiuso correttamente: «%{name}» è stato riaperto dall'ultimo salvataggio."

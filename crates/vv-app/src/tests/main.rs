@@ -4599,24 +4599,97 @@ fn switching_project_with_unsaved_changes_waits_and_keeps_the_project_on_failure
     );
 }
 
-/// "New project" asks about unsaved changes, then starts from an empty,
-/// untitled project.
+/// "New project" saves the project being edited without asking, then
+/// creates and opens a numbered one in the projects folder.
 #[test]
-fn new_project_discards_after_confirmation() {
+fn new_project_saves_the_current_one_and_opens_a_numbered_project() {
+    let root = vv_media::test_support::TempDir::new("vv-app-new-project-root");
+    let old_dir = vv_media::test_support::TempDir::new("vv-app-new-project-old");
+    let old_path = old_dir.join("old.vvproj");
     let mut app = VenturiApp::default();
+    app.settings.projects_dir = Some(root.to_path_buf());
+    app.save_project_to(&old_path);
     make_timeline_with_clip(&mut app, 0, 0, 10);
-    app.session
-        .set_path(Some(std::env::temp_dir().join("vv-app-new-project.vvproj")));
+
+    app.request_project_switch(ProjectSwitch::New);
+
+    assert_eq!(app.pending_project_switch, None);
+    assert!(
+        !vv_core::load_project(&old_path)
+            .unwrap()
+            .timelines
+            .is_empty()
+    );
+    let new_path = app.session.path().unwrap().to_path_buf();
+    assert!(projects::is_in_projects_folder(&new_path, &root));
+    assert!(app.session.project.timelines.is_empty());
+    assert_eq!(app.timeline_id, None);
+    assert!(!app.has_unsaved_changes());
+    assert_eq!(app.screen, Screen::Editor);
+    assert_eq!(app.settings.open_project, Some(new_path));
+}
+
+/// An untitled project has nowhere to save itself: it still asks.
+#[test]
+fn new_project_from_an_untitled_one_asks_first() {
+    let root = vv_media::test_support::TempDir::new("vv-app-new-project-untitled");
+    let mut app = VenturiApp::default();
+    app.settings.projects_dir = Some(root.to_path_buf());
+    make_timeline_with_clip(&mut app, 0, 0, 10);
 
     app.request_project_switch(ProjectSwitch::New);
     assert_eq!(app.pending_project_switch, Some(ProjectSwitch::New));
     app.resolve_unsaved_changes(UnsavedChoice::Discard);
 
     assert!(app.session.project.timelines.is_empty());
-    assert!(app.session.project.media_pool.is_empty());
-    assert_eq!(app.timeline_id, None);
+    assert!(app.session.path().is_some_and(|p| p.starts_with(&*root)));
+}
+
+/// Home saves, closes the project and forgets it as the one left open.
+#[test]
+fn going_home_saves_and_closes_the_project() {
+    let dir = vv_media::test_support::TempDir::new("vv-app-go-home");
+    let path = dir.join("p.vvproj");
+    let mut app = VenturiApp::default();
+    app.save_project_to(&path);
+    app.settings.open_project = Some(path.clone());
+    make_timeline_with_clip(&mut app, 0, 0, 10);
+
+    app.request_project_switch(ProjectSwitch::Home);
+
+    assert_eq!(app.screen, Screen::Home);
     assert_eq!(app.session.path(), None);
-    assert!(!app.has_unsaved_changes());
+    assert_eq!(app.settings.open_project, None);
+    assert!(!vv_core::load_project(&path).unwrap().timelines.is_empty());
+}
+
+/// A project still marked open at startup is reopened from its last save.
+#[test]
+fn a_project_left_open_by_a_crash_is_reopened_at_startup() {
+    let dir = vv_media::test_support::TempDir::new("vv-app-recover");
+    let path = dir.join("p.vvproj");
+    let mut saved = VenturiApp::default();
+    saved.create_timeline(
+        "Before the crash".into(),
+        vv_core::Rational::new(25, 1),
+        (64, 48),
+    );
+    saved.save_project_to(&path);
+    std::fs::write(vv_core::persistence::temp_path(&path), "half written").unwrap();
+
+    let mut app = VenturiApp::default();
+    app.settings.open_project = Some(path.clone());
+    app.start_on_home_or_recover();
+
+    assert_eq!(app.screen, Screen::Editor);
+    assert_eq!(app.session.path(), Some(path.as_path()));
+    assert!(app.recovered_project.is_some());
+    assert!(!vv_core::persistence::temp_path(&path).exists());
+
+    let mut clean = VenturiApp::default();
+    clean.start_on_home_or_recover();
+    assert_eq!(clean.screen, Screen::Home);
+    assert!(clean.recovered_project.is_none());
 }
 
 /// The waveform cache may be missing (deleted, another machine):

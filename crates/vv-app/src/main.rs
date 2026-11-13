@@ -7,12 +7,14 @@ extern crate rust_i18n;
 rust_i18n::i18n!("locales", fallback = "en");
 
 mod app_menu;
+mod autosave;
 mod color_window;
 mod compressor_panel;
 mod eq_panel;
 mod export_dialog;
 mod forced_relink_dialog;
 mod grade_panel;
+mod home;
 mod hw_decode;
 mod i18n;
 mod keyframe_editor;
@@ -34,6 +36,7 @@ mod plugin_editors;
 mod pool_view;
 mod presets;
 mod project_io;
+mod projects;
 mod properties_panel;
 mod proxy_worker;
 mod render_ahead;
@@ -54,6 +57,7 @@ mod voiceover;
 mod waveform_worker;
 #[cfg(target_os = "linux")]
 mod wayland_dnd;
+mod workspace;
 
 use eframe::wgpu;
 use media_pool_ui::*;
@@ -71,6 +75,7 @@ use timeline_audio::TimelineAudio;
 use vv_core::edit::TargetTracks;
 use vv_core::{ClipId, FolderId, FrameIdx, MediaId, TimelineId, Track, TrackKind};
 use vv_session::{export, forced_relink, frame_provider, relink_job, worker};
+use workspace::Block;
 
 /// ~6 s of margin at 1080p, ~1.5 s at 4K.
 const DEFAULT_CACHE_BUDGET_BYTES: usize = 1_200_000_000;
@@ -267,7 +272,23 @@ pub(crate) enum Browsed {
     Asset(String),
 }
 
+/// Media dropped on the timeline: what, where and onto which track.
+type MediaDrop = (
+    timeline_ui::TimelineDrag,
+    FrameIdx,
+    timeline_ui::MediaDropTarget,
+);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum Screen {
+    /// The projects grid; no project is open.
+    Home,
+    #[default]
+    Editor,
+}
+
 struct VenturiApp {
+    screen: Screen,
     session: vv_session::Session,
     timeline_id: Option<TimelineId>,
     /// The timelines "above" `timeline_id`, from the root down, when one has
@@ -507,11 +528,22 @@ struct VenturiApp {
     wayland_dnd: Option<wayland_dnd::WaylandDnd>,
     #[cfg(target_os = "macos")]
     iso_key_down: bool,
+    workspace: workspace::Workspace,
+    autosave: autosave::Autosave,
+    home: home::HomeState,
+    /// The project name being edited in the top bar.
+    project_name_edit: Option<String>,
+    /// Width of the top bar's centre group in the last frame, to centre it.
+    top_bar_center_width: f32,
+    export_modal_open: bool,
+    /// Name of the project reopened after a crash, until acknowledged.
+    recovered_project: Option<String>,
 }
 
 impl Default for VenturiApp {
     fn default() -> Self {
         Self {
+            screen: Screen::default(),
             session: vv_session::Session::default(),
             timeline_id: None,
             timeline_stack: Vec::new(),
@@ -625,6 +657,13 @@ impl Default for VenturiApp {
             wayland_dnd: None,
             #[cfg(target_os = "macos")]
             iso_key_down: false,
+            workspace: workspace::Workspace::default(),
+            autosave: autosave::Autosave::default(),
+            home: home::HomeState::default(),
+            project_name_edit: None,
+            top_bar_center_width: 0.0,
+            export_modal_open: false,
+            recovered_project: None,
         }
     }
 }
@@ -2568,6 +2607,7 @@ impl VenturiApp {
     /// from the Settings window and periodically/on close (see
     /// `eframe::App::save`).
     fn persist_settings(&mut self) {
+        self.settings.workspace = self.workspace.to_value();
         if let Some(path) = &self.settings_path
             && let Err(e) = self.settings.save(path)
         {
@@ -3589,7 +3629,6 @@ enum ToolbarIcon {
     Curves,
     Mixer,
     Color,
-    Properties,
 }
 
 /// Panel toggle of the toolbar: hand-drawn icon and label, filled with the
@@ -3717,14 +3756,6 @@ fn paint_toolbar_icon(
             painter.line_segment([c - egui::vec2(6.0, 0.0), c + egui::vec2(6.0, 0.0)], stroke);
             painter.line_segment([c - egui::vec2(0.0, 6.0), c + egui::vec2(0.0, 6.0)], stroke);
             painter.circle_filled(c + egui::vec2(2.6, -2.6), 2.0, color);
-        }
-        // Three slider tracks with their knobs.
-        ToolbarIcon::Properties => {
-            for (dy, knob) in [(-4.0, 2.0), (0.0, -3.0), (4.0, 0.5)] {
-                let y = c.y + dy;
-                painter.line_segment([egui::pos2(c.x - 6.0, y), egui::pos2(c.x + 6.0, y)], stroke);
-                painter.circle_filled(egui::pos2(c.x + knob, y), 1.8, color);
-            }
         }
     }
 }
@@ -4153,6 +4184,10 @@ impl VenturiApp {
     fn frame_ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.handle_close_request(&ui.ctx().clone());
         self.poll_pending_dialog(&ui.ctx().clone());
+        if self.screen == Screen::Home {
+            self.home_ui(ui);
+            return;
+        }
         self.poll_dropped_files(&ui.ctx().clone());
         self.poll_clipboard_image();
         self.poll_plugin_scan();
@@ -4210,8 +4245,9 @@ impl VenturiApp {
         self.sync_window_title(ui.ctx());
 
         self.handle_shortcuts(ui);
+        self.tick_autosave(&ui.ctx().clone());
 
-        self.show_menu_bar(ui);
+        self.show_top_bar(ui);
 
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -4257,14 +4293,7 @@ impl VenturiApp {
                             .text(t!("project.import_progress", done = done, total = total)),
                     );
                 }
-                // Above the panel it opens, like the toggles on the left.
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    toolbar_toggle(
-                        ui,
-                        &mut self.settings.panels.inspector_open,
-                        ToolbarIcon::Properties,
-                        &t!("menu.inspector"),
-                    );
                     if let Some(mcp) = self.mcp.as_ref().filter(|mcp| mcp.clients() > 0) {
                         agent_indicator(ui, mcp.last_tool());
                     }
@@ -4273,6 +4302,8 @@ impl VenturiApp {
         });
 
         self.show_export_dialog(ui);
+        self.show_export_modal(ui.ctx());
+        self.show_recovery_notice(ui.ctx());
         self.show_settings_dialog(ui.ctx());
         self.show_about_dialog(ui.ctx());
         self.show_project_settings(ui.ctx());
@@ -4348,173 +4379,31 @@ impl VenturiApp {
             targets.sort_by_key(|t| (t.track_index, t.timeline_start));
         }
 
+        let rects = egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(ui.visuals().panel_fill))
+            .show(ui, |ui| {
+                if self.workspace.has_docked_blocks() {
+                    self.workspace.layout_ui(ui)
+                } else {
+                    ui.centered_and_justified(|ui| ui.weak(t!("workspace.nothing_docked")));
+                    workspace::BlockRects::new()
+                }
+            })
+            .inner;
+
         let mut preview_action = None;
-        if self.settings.panels.media_pool_open || self.settings.panels.effects_open {
-            egui::Panel::left("left_column")
-                .default_size(self.settings.panels.left_column_width)
-                .show(ui, |ui| {
-                    let mut effects_rect = None;
-                    if self.settings.panels.media_pool_open {
-                        let pool = if self.settings.panels.effects_open {
-                            let (pool_rect, rest) = split_left_column(
-                                ui,
-                                &mut self.settings.panels.media_pool_fraction,
-                            );
-                            effects_rect = Some(rest);
-                            ui.scope_builder(egui::UiBuilder::new().max_rect(pool_rect), |ui| {
-                                self.show_media_pool(ui, &mut preview_action)
-                            })
-                            .response
-                        } else {
-                            ui.scope(|ui| self.show_media_pool(ui, &mut preview_action))
-                                .response
-                        };
-                        // Whoever got the last click decides who gets Del/Backspace.
-                        if let Some(pos) = ui.ctx().input(|i| {
-                            i.pointer
-                                .any_pressed()
-                                .then(|| i.pointer.interact_pos())
-                                .flatten()
-                        }) {
-                            self.media_pool_state.focused = pool.rect.contains(pos);
-                        }
-                        // Highlights the pool while a file is dragged from the file manager.
-                        if ui.ctx().input(|i| !i.raw.hovered_files.is_empty()) {
-                            ui.ctx()
-                                .layer_painter(egui::LayerId::new(
-                                    egui::Order::Foreground,
-                                    egui::Id::new("media_pool_drop_highlight"),
-                                ))
-                                .rect_stroke(
-                                    pool.rect,
-                                    4.0,
-                                    egui::Stroke::new(2.0, ui.visuals().selection.bg_fill),
-                                    egui::StrokeKind::Inside,
-                                );
-                        }
-                    }
-                    if let Some(rect) = effects_rect {
-                        ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                            self.show_effects_list(ui)
-                        });
-                    } else if self.settings.panels.effects_open {
-                        self.show_effects_list(ui);
-                    }
-                });
-            if let Some(state) = egui::PanelState::load(ui.ctx(), egui::Id::new("left_column")) {
-                self.settings.panels.left_column_width = state.size().x;
-            }
-        }
-        if !self.settings.panels.media_pool_open {
+        self.show_block(ui, &rects, Block::Library, |app, ui| {
+            app.show_library_block(ui, &mut preview_action)
+        });
+        if !self.settings.panels.media_pool_open || !self.workspace.is_shown(Block::Library) {
             self.media_pool_state.focused = false;
         }
 
         let selected_before_timeline_ui = self.timeline_state.selected.clone();
         let playhead_before_timeline_ui = self.timeline_state.playhead;
-        // Without a timeline there is no scale to position the drop: the
-        // timeline is created and it is appended at 0.
-        let mut media_drop: Option<(
-            timeline_ui::TimelineDrag,
-            FrameIdx,
-            timeline_ui::MediaDropTarget,
-        )> = None;
-        let mut dropped_on_empty_timeline: Option<timeline_ui::TimelineDrag> = None;
-        egui::Panel::bottom("timeline")
-            .default_size(self.settings.panels.timeline_height)
-            .resizable(true)
-            .show(ui, |ui| {
-                if self.audiometer_enabled {
-                    // Narrow band on the right, carved out *before*
-                    // showing the timeline: it steals only this fixed
-                    // width from it, it does not compress it proportionally.
-                    egui::Panel::right("audiometer")
-                        .default_size(40.0)
-                        .resizable(false)
-                        .show(ui, |ui| {
-                            self.draw_audiometer(ui);
-                        });
-                }
-                let exit_requested = std::mem::take(&mut self.exit_compound_requested);
-                if let Some(timeline_id) = self.timeline_id {
-                    if !self.timeline_stack.is_empty() {
-                        let mut jump_to = exit_requested.then(|| self.timeline_stack.len() - 1);
-                        ui.horizontal(|ui| {
-                            for i in 0..self.timeline_stack.len() {
-                                let name = self.timeline_display_name(self.timeline_stack[i]);
-                                if ui.link(name).clicked() {
-                                    jump_to = Some(i);
-                                }
-                                ui.label(">");
-                            }
-                            ui.label(self.timeline_display_name(timeline_id));
-                        });
-                        if let Some(index) = jump_to {
-                            self.exit_to_timeline_stack_index(index);
-                        }
-                    }
-                    // A breadcrumb click switched timeline: drawing the one
-                    // left would spend the playhead reveal on it.
-                    let timeline_id = self.timeline_id.unwrap_or(timeline_id);
-                    let labels: HashMap<MediaId, String> = self
-                        .session
-                        .project
-                        .media_pool
-                        .iter()
-                        .map(|(id, item)| (id, file_label(&item.path)))
-                        .collect();
-                    let buffered_ranges = self.buffered_timeline_ranges();
-                    let keyframe_ranges = self.keyframe_timeline_ranges();
-                    let proxy_ranges = self.proxy_timeline_ranges();
-                    // The buffer advances on another thread: without a repaint the
-                    // "buffered" strip would not update.
-                    if self
-                        .render_ahead
-                        .as_ref()
-                        .is_some_and(|r| !r.is_caught_up())
-                    {
-                        ui.ctx().request_repaint();
-                    }
-                    // Audio peaks already in memory (loaded from the cache file
-                    // the first time they are needed, see `ensure_waveforms_loaded`):
-                    // the timeline draws them as waveforms on the audio clips.
-                    self.ensure_waveforms_loaded();
-                    let is_playing = self.is_timeline_playing();
-                    let audio_failures = self
-                        .timeline_audio
-                        .as_ref()
-                        .map(|audio| audio.clip_failures(&self.session.project, timeline_id))
-                        .unwrap_or_default();
-                    let (drop, enter_compound) = timeline_ui::show_timeline(
-                        ui,
-                        &mut self.session.project,
-                        &mut self.session.history,
-                        timeline_id,
-                        &|id| labels.get(&id).cloned().unwrap_or_default(),
-                        &audio_failures,
-                        &mut self.timeline_state,
-                        self.snapping_enabled,
-                        self.settings.kinetic_scroll,
-                        &buffered_ranges,
-                        &keyframe_ranges,
-                        &proxy_ranges,
-                        &self.waveform_cache,
-                        is_playing,
-                    );
-                    media_drop = drop;
-                    if let Some((nested_id, clip, at)) = enter_compound {
-                        self.enter_compound_timeline(nested_id, at, Some(clip));
-                    }
-                } else {
-                    let drop_rect = ui.available_rect_before_wrap();
-                    let drop_id = ui.id().with("timeline_drop_zone_empty");
-                    let drop_resp = ui.interact(drop_rect, drop_id, egui::Sense::hover());
-                    dropped_on_empty_timeline = timeline_ui::TimelineDrag::released(&drop_resp);
-                    ui.label(t!("timeline.empty_hint"));
-                }
-            });
-        if let Some(state) = egui::PanelState::load(ui.ctx(), egui::Id::new("timeline")) {
-            self.settings.panels.timeline_height = state.size().y;
-        }
+        let (media_drop, dropped_on_empty_timeline) = self
+            .show_block(ui, &rects, Block::Timeline, Self::show_timeline_block)
+            .unwrap_or_default();
         if let Some(drag) = dropped_on_empty_timeline {
             self.add_drop_to_timeline_at(&drag, 0, timeline_ui::MediaDropTarget::Default);
         }
@@ -4567,8 +4456,11 @@ impl VenturiApp {
         }
         self.sync_root_timeline_media();
 
-        let (mut pending_effects, mut pending_playhead) =
-            self.show_properties_panel(ui, &video_targets, &audio_targets);
+        let (mut pending_effects, mut pending_playhead) = self
+            .show_block(ui, &rects, Block::Properties, |app, ui| {
+                app.show_properties_panel(ui, &video_targets, &audio_targets)
+            })
+            .unwrap_or_default();
 
         if self.settings.panels.keyframe_editor_open {
             let target = video_targets
@@ -4712,257 +4604,12 @@ impl VenturiApp {
             }
         }
 
-        let mut transport_action = transport::TransportResponse::default();
-        let mut viewer_rect = None;
-        // The whole player box, bars included: the handles near the
-        // edge of the frame must stay grabbable outside too.
-        let mut viewer_area = None;
         let mut overlay_effects: Vec<BoxedCommand> = Vec::new();
-        egui::CentralPanel::default().show(ui, |ui| {
-            // Inside the CentralPanel: it occupies only the viewer column.
-            egui::Panel::bottom("view_toggles")
-                .default_size(28.0)
-                .resizable(false)
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        magnet_toggle(ui, &mut self.snapping_enabled)
-                            .on_hover_text(t!("toolbar.snapping"));
-                        transform_overlay_toggle(ui, &mut self.show_transform_overlay)
-                            .on_hover_text(t!("toolbar.transform_overlay"));
-                        ui.separator();
-                        let keymap = &self.settings.keymap;
-                        let tool = &mut self.timeline_state.tool;
-                        timeline_tool_button(ui, tool, timeline_ui::TimelineTool::Select)
-                            .on_hover_text(
-                                keymap.menu_label(&t!("toolbar.select_tool"), Action::SelectTool),
-                            );
-                        timeline_tool_button(ui, tool, timeline_ui::TimelineTool::Slip)
-                            .on_hover_text(
-                                keymap.menu_label(&t!("toolbar.slip_tool"), Action::SlipTool),
-                            );
-                    });
-                });
-            let (total, playhead, marks, playing) = self.transport_state();
-            egui::Panel::bottom("transport")
-                .resizable(false)
-                .show(ui, |ui| {
-                    transport_action =
-                        transport::show_transport(ui, total, playhead, marks, playing);
-                });
-            egui::Panel::top("viewer_zoom_bar")
-                .resizable(false)
-                .show(ui, |ui| self.show_viewer_zoom_bar(ui));
-            let slip_split = self.slip_split_layers();
-            if slip_split.is_some() {
-                // The buffers of the two ends fill on their own threads.
-                ui.ctx().request_repaint();
-            }
-            let media_offline = slip_split.is_none() && self.active_clip_media_offline();
-            // Browsing a "raw" media from the media pool there is no
-            // timeline to compose: a single layer, its frame as it is.
-            let layers = if let Some(split) = slip_split {
-                self.viewer_keyframe = false;
-                split
-            } else if media_offline || self.browsing.is_some() {
-                self.viewer_keyframe = false;
-                None
-            } else {
-                let layers = self.timeline_video_layers(None);
-                let served_keyframe = self
-                    .render_ahead
-                    .as_mut()
-                    .is_some_and(|r| r.take_served_keyframe());
-                // No layers: the frame already shown stays, and its badge.
-                if layers.is_some() {
-                    self.viewer_keyframe = served_keyframe;
-                }
-                layers
-            };
-
-            if media_offline {
-                self.last_viewer_frame_kind = Some(ViewerFrameKind::Offline);
-            } else if self.browsing.is_some() {
-                if self.preview_meta.as_ref().is_some_and(|m| !m.has_video) {
-                    self.last_viewer_frame_kind = None;
-                } else if let Some(frame) = self.browsing_video_frame() {
-                    let output = vv_render::OutputFrame::exact(frame.width, frame.height);
-                    let layer = frame_provider::OwnedLayer {
-                        content: frame_provider::OwnedContent::Video {
-                            source_size: (frame.width, frame.height),
-                            frame,
-                        },
-                        transform: vv_core::Transform::default(),
-                        opacity: 1.0,
-                        filters: Vec::new(),
-                        blend: vv_core::BlendMode::Normal,
-                        masks: Vec::new(),
-                    };
-                    self.show_composited(vec![layer], output);
-                }
-            } else if let Some(layers) = layers {
-                let output = self.viewer_output(&layers);
-                self.show_composited(layers, output);
-            }
-
-            match self.last_viewer_frame_kind {
-                Some(ViewerFrameKind::Video) => {
-                    if let (Some(id), Some(tex_size)) =
-                        (self.video_texture_id, self.video_display_size)
-                    {
-                        let (area, _) =
-                            ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
-                        self.viewer_zoom.handle_input(ui, area, tex_size);
-                        let ppp = ui.ctx().pixels_per_point();
-                        let rect = self.viewer_zoom.frame_rect(area, tex_size, ppp);
-                        ui.painter().with_clip_rect(area).image(
-                            id,
-                            rect,
-                            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                            egui::Color32::WHITE,
-                        );
-                        if self.viewer_keyframe {
-                            paint_keyframes_badge(ui.painter(), rect.intersect(area));
-                        }
-                        self.viewer_geometry = Some((area, tex_size));
-                        let scale = f64::from(self.viewer_zoom.scale(area, tex_size, ppp));
-                        if scale != self.viewer_scale {
-                            self.viewer_scale = scale;
-                            ui.ctx().request_repaint();
-                        }
-                        viewer_area = Some(area);
-                        viewer_rect = Some(rect);
-                    }
-                }
-                Some(ViewerFrameKind::Offline) => {
-                    ui.centered_and_justified(|ui| {
-                        ui.colored_label(
-                            theme::ERROR,
-                            egui::RichText::new(t!("viewer.media_offline")).size(24.0),
-                        );
-                    });
-                }
-                None => {
-                    if let Some(err) = &self.preview_error {
-                        ui.colored_label(
-                            egui::Color32::RED,
-                            t!("viewer.player_error", error = err),
-                        );
-                    } else if self.browsing_audio_only() {
-                        let (rect, _) =
-                            ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
-                        let total = self.browse_total_frames();
-                        let keys = self.browsed_waveform_keys();
-                        // Loaded here too: the timeline loads them before the
-                        // double click that opened this media.
-                        for &key in &keys {
-                            self.load_waveform(key);
-                        }
-                        if keys.iter().any(|k| !self.waveform_cache.contains_key(k)) {
-                            // The worker wakes no one when it is done.
-                            ui.ctx()
-                                .request_repaint_after(std::time::Duration::from_millis(200));
-                        }
-                        let preview = viewer_waveform::AudioPreview {
-                            waveforms: keys.iter().map(|k| self.waveform_cache.get(k)).collect(),
-                            total_frames: total,
-                            fps: self.browse_fps(),
-                            playhead: self.browse_playhead,
-                            marks: self.browse_marks.resolve(total),
-                        };
-                        viewer_waveform::paint(ui, rect, &preview);
-                        // Dragged onto the timeline like a frame, clicked to seek.
-                        viewer_rect = Some(rect);
-                    } else {
-                        ui.centered_and_justified(|ui| {
-                            ui.label(if self.browsing.is_some() || self.active_clip.is_some() {
-                                t!("viewer.decoding")
-                            } else {
-                                t!("viewer.empty_hint")
-                            })
-                        });
-                    }
-                }
-            }
-
-            let Some(rect) = viewer_rect else {
-                return;
-            };
-            let area = viewer_area.unwrap_or(rect);
-            let ui = &mut self.viewer_zoom.tools_ui(ui, area);
-            if viewer_area.is_some() {
-                self.show_viewer_overlay(ui, rect, area, &video_targets, &mut overlay_effects);
-            }
-
-            if let Some(browsed) = self.browsing.clone() {
-                let rect = rect.intersect(area);
-                let (source_in, source_out) = self.browse_marks.resolve(self.browse_total_frames());
-                let drag_id = ui.id().with("viewer_media_drag");
-                let audio_only = self.browsing_audio_only();
-                let sense = if audio_only {
-                    egui::Sense::click_and_drag()
-                } else {
-                    egui::Sense::drag()
-                };
-                let hint = if audio_only {
-                    t!("viewer.waveform_hint")
-                } else {
-                    t!("viewer.drag_in_out")
-                };
-                let resp = ui.interact(rect, drag_id, sense).on_hover_text(hint);
-                if audio_only
-                    && resp.clicked()
-                    && let Some(pos) = resp.interact_pointer_pos()
-                {
-                    let total = self.browse_total_frames();
-                    self.seek_browse(viewer_waveform::frame_at(rect, pos.x, total));
-                }
-                let mut drags = vec![(resp, timeline_ui::DragStreams::All)];
-                if self
-                    .preview_meta
-                    .as_ref()
-                    .is_some_and(|m| m.has_video && m.has_audio)
-                {
-                    drags.extend(show_stream_drag_handles(ui, rect));
-                }
-                for (resp, streams) in drags {
-                    // A library asset joins the project only once it is dragged.
-                    let media_id = match &browsed {
-                        Browsed::Media(id) => Some(*id),
-                        Browsed::Asset(id) if resp.drag_started() => {
-                            self.import_library_asset(id).first().copied()
-                        }
-                        Browsed::Asset(_) => None,
-                    };
-                    match media_id {
-                        Some(media_id) => resp.dnd_set_drag_payload(
-                            timeline_ui::MediaDragSet::one(timeline_ui::MediaDrag {
-                                media_id,
-                                source_in,
-                                source_out,
-                                streams,
-                            }),
-                        ),
-                        None if resp.hovered() => ui.ctx().set_cursor_icon(egui::CursorIcon::Grab),
-                        None => {}
-                    }
-                    if resp.dragged()
-                        && let Some(item) = self.browsed_item(&browsed)
-                    {
-                        let name = file_label(&item.path);
-                        let ghost = match streams {
-                            timeline_ui::DragStreams::All => name,
-                            timeline_ui::DragStreams::VideoOnly => {
-                                t!("viewer.ghost_video_only", name = name).into_owned()
-                            }
-                            timeline_ui::DragStreams::AudioOnly => {
-                                t!("viewer.ghost_audio_only", name = name).into_owned()
-                            }
-                        };
-                        show_drag_ghost(ui, resp.id, &ghost);
-                    }
-                }
-            }
-        });
+        let mut transport_action = self
+            .show_block(ui, &rects, Block::Player, |app, ui| {
+                app.show_player_block(ui, &video_targets, &mut overlay_effects)
+            })
+            .unwrap_or_default();
 
         if self.viewer_fullscreen {
             transport_action = self.show_fullscreen_viewer(ui.ctx());
@@ -4998,6 +4645,453 @@ impl VenturiApp {
         {
             ui.ctx().request_repaint();
         }
+    }
+
+    /// Draws `block` where it lives: in its tile of the main window, in its
+    /// own window, or nowhere if it is closed.
+    fn show_block<R>(
+        &mut self,
+        ui: &mut egui::Ui,
+        rects: &workspace::BlockRects,
+        block: Block,
+        content: impl FnOnce(&mut Self, &mut egui::Ui) -> R,
+    ) -> Option<R> {
+        if let Some(&rect) = rects.get(&block) {
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt(("block", block))
+                    .max_rect(rect.shrink(2.0)),
+            );
+            child.set_clip_rect(rect.intersect(ui.clip_rect()));
+            return Some(content(self, &mut child));
+        }
+        let builder = self.workspace.viewport_builder(block)?;
+        let ctx = ui.ctx().clone();
+        let mut content = Some(content);
+        let mut redock = false;
+        let result = ctx.show_viewport_immediate(block.viewport_id(), builder, |ui, _| {
+            self.workspace.track_window(block, ui);
+            redock |= ui.input(|i| i.viewport().close_requested());
+            // Keys typed here reach only this window's input.
+            if ui.input(|i| i.focused) {
+                self.handle_shortcuts(ui);
+            }
+            egui::Panel::top(egui::Id::new(("block_bar", block))).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.strong(block.title());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        redock |= ui.button(t!("workspace.redock")).clicked();
+                    });
+                });
+            });
+            egui::CentralPanel::default()
+                .show(ui, |ui| content.take().map(|content| content(self, ui)))
+                .inner
+        });
+        if redock {
+            self.workspace.redock(block);
+            ui.ctx().request_repaint();
+        }
+        result
+    }
+
+    fn show_library_block(&mut self, ui: &mut egui::Ui, preview_action: &mut Option<Browsed>) {
+        // A block with both sections off shows the pool rather than nothing.
+        let pool_open = self.settings.panels.media_pool_open || !self.settings.panels.effects_open;
+        let mut effects_rect = None;
+        if pool_open {
+            let pool = if self.settings.panels.effects_open {
+                let (pool_rect, rest) =
+                    split_left_column(ui, &mut self.settings.panels.media_pool_fraction);
+                effects_rect = Some(rest);
+                ui.scope_builder(egui::UiBuilder::new().max_rect(pool_rect), |ui| {
+                    self.show_media_pool(ui, preview_action)
+                })
+                .response
+            } else {
+                ui.scope(|ui| self.show_media_pool(ui, preview_action))
+                    .response
+            };
+            // Whoever got the last click decides who gets Del/Backspace.
+            if let Some(pos) = ui.ctx().input(|i| {
+                i.pointer
+                    .any_pressed()
+                    .then(|| i.pointer.interact_pos())
+                    .flatten()
+            }) {
+                self.media_pool_state.focused = pool.rect.contains(pos);
+            }
+            // Highlights the pool while a file is dragged from the file manager.
+            if ui.ctx().input(|i| !i.raw.hovered_files.is_empty()) {
+                ui.ctx()
+                    .layer_painter(egui::LayerId::new(
+                        egui::Order::Foreground,
+                        egui::Id::new("media_pool_drop_highlight"),
+                    ))
+                    .rect_stroke(
+                        pool.rect,
+                        4.0,
+                        egui::Stroke::new(2.0, ui.visuals().selection.bg_fill),
+                        egui::StrokeKind::Inside,
+                    );
+            }
+        }
+        if let Some(rect) = effects_rect {
+            ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                self.show_effects_list(ui)
+            });
+        } else if self.settings.panels.effects_open {
+            self.show_effects_list(ui);
+        }
+    }
+
+    /// The media dropped on the timeline, and a drop made when there was no
+    /// timeline yet.
+    fn show_timeline_block(
+        &mut self,
+        ui: &mut egui::Ui,
+    ) -> (Option<MediaDrop>, Option<timeline_ui::TimelineDrag>) {
+        let mut media_drop = None;
+        let mut dropped_on_empty_timeline = None;
+        if self.audiometer_enabled {
+            // Narrow band on the right, carved out *before*
+            // showing the timeline: it steals only this fixed
+            // width from it, it does not compress it proportionally.
+            egui::Panel::right("audiometer")
+                .default_size(40.0)
+                .resizable(false)
+                .show(ui, |ui| {
+                    self.draw_audiometer(ui);
+                });
+        }
+        let exit_requested = std::mem::take(&mut self.exit_compound_requested);
+        if let Some(timeline_id) = self.timeline_id {
+            if !self.timeline_stack.is_empty() {
+                let mut jump_to = exit_requested.then(|| self.timeline_stack.len() - 1);
+                ui.horizontal(|ui| {
+                    for i in 0..self.timeline_stack.len() {
+                        let name = self.timeline_display_name(self.timeline_stack[i]);
+                        if ui.link(name).clicked() {
+                            jump_to = Some(i);
+                        }
+                        ui.label(">");
+                    }
+                    ui.label(self.timeline_display_name(timeline_id));
+                });
+                if let Some(index) = jump_to {
+                    self.exit_to_timeline_stack_index(index);
+                }
+            }
+            // A breadcrumb click switched timeline: drawing the one
+            // left would spend the playhead reveal on it.
+            let timeline_id = self.timeline_id.unwrap_or(timeline_id);
+            let labels: HashMap<MediaId, String> = self
+                .session
+                .project
+                .media_pool
+                .iter()
+                .map(|(id, item)| (id, file_label(&item.path)))
+                .collect();
+            let buffered_ranges = self.buffered_timeline_ranges();
+            let keyframe_ranges = self.keyframe_timeline_ranges();
+            let proxy_ranges = self.proxy_timeline_ranges();
+            // The buffer advances on another thread: without a repaint the
+            // "buffered" strip would not update.
+            if self
+                .render_ahead
+                .as_ref()
+                .is_some_and(|r| !r.is_caught_up())
+            {
+                ui.ctx().request_repaint();
+            }
+            // Audio peaks already in memory (loaded from the cache file
+            // the first time they are needed, see `ensure_waveforms_loaded`):
+            // the timeline draws them as waveforms on the audio clips.
+            self.ensure_waveforms_loaded();
+            let is_playing = self.is_timeline_playing();
+            let audio_failures = self
+                .timeline_audio
+                .as_ref()
+                .map(|audio| audio.clip_failures(&self.session.project, timeline_id))
+                .unwrap_or_default();
+            let (drop, enter_compound) = timeline_ui::show_timeline(
+                ui,
+                &mut self.session.project,
+                &mut self.session.history,
+                timeline_id,
+                &|id| labels.get(&id).cloned().unwrap_or_default(),
+                &audio_failures,
+                &mut self.timeline_state,
+                self.snapping_enabled,
+                self.settings.kinetic_scroll,
+                &buffered_ranges,
+                &keyframe_ranges,
+                &proxy_ranges,
+                &self.waveform_cache,
+                is_playing,
+            );
+            media_drop = drop;
+            if let Some((nested_id, clip, at)) = enter_compound {
+                self.enter_compound_timeline(nested_id, at, Some(clip));
+            }
+        } else {
+            let drop_rect = ui.available_rect_before_wrap();
+            let drop_id = ui.id().with("timeline_drop_zone_empty");
+            let drop_resp = ui.interact(drop_rect, drop_id, egui::Sense::hover());
+            dropped_on_empty_timeline = timeline_ui::TimelineDrag::released(&drop_resp);
+            ui.label(t!("timeline.empty_hint"));
+        }
+        (media_drop, dropped_on_empty_timeline)
+    }
+
+    fn show_player_block(
+        &mut self,
+        ui: &mut egui::Ui,
+        video_targets: &[PanelTarget],
+        overlay_effects: &mut Vec<BoxedCommand>,
+    ) -> transport::TransportResponse {
+        let mut transport_action = transport::TransportResponse::default();
+        let mut viewer_rect = None;
+        // The whole player box, bars included: the handles near the
+        // edge of the frame must stay grabbable outside too.
+        let mut viewer_area = None;
+        egui::Panel::bottom("view_toggles")
+            .default_size(28.0)
+            .resizable(false)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    magnet_toggle(ui, &mut self.snapping_enabled)
+                        .on_hover_text(t!("toolbar.snapping"));
+                    transform_overlay_toggle(ui, &mut self.show_transform_overlay)
+                        .on_hover_text(t!("toolbar.transform_overlay"));
+                    ui.separator();
+                    let keymap = &self.settings.keymap;
+                    let tool = &mut self.timeline_state.tool;
+                    timeline_tool_button(ui, tool, timeline_ui::TimelineTool::Select)
+                        .on_hover_text(
+                            keymap.menu_label(&t!("toolbar.select_tool"), Action::SelectTool),
+                        );
+                    timeline_tool_button(ui, tool, timeline_ui::TimelineTool::Slip).on_hover_text(
+                        keymap.menu_label(&t!("toolbar.slip_tool"), Action::SlipTool),
+                    );
+                });
+            });
+        let (total, playhead, marks, playing) = self.transport_state();
+        egui::Panel::bottom("transport")
+            .resizable(false)
+            .show(ui, |ui| {
+                transport_action = transport::show_transport(ui, total, playhead, marks, playing);
+            });
+        egui::Panel::top("viewer_zoom_bar")
+            .resizable(false)
+            .show(ui, |ui| self.show_viewer_zoom_bar(ui));
+        let slip_split = self.slip_split_layers();
+        if slip_split.is_some() {
+            // The buffers of the two ends fill on their own threads.
+            ui.ctx().request_repaint();
+        }
+        let media_offline = slip_split.is_none() && self.active_clip_media_offline();
+        // Browsing a "raw" media from the media pool there is no
+        // timeline to compose: a single layer, its frame as it is.
+        let layers = if let Some(split) = slip_split {
+            self.viewer_keyframe = false;
+            split
+        } else if media_offline || self.browsing.is_some() {
+            self.viewer_keyframe = false;
+            None
+        } else {
+            let layers = self.timeline_video_layers(None);
+            let served_keyframe = self
+                .render_ahead
+                .as_mut()
+                .is_some_and(|r| r.take_served_keyframe());
+            // No layers: the frame already shown stays, and its badge.
+            if layers.is_some() {
+                self.viewer_keyframe = served_keyframe;
+            }
+            layers
+        };
+
+        if media_offline {
+            self.last_viewer_frame_kind = Some(ViewerFrameKind::Offline);
+        } else if self.browsing.is_some() {
+            if self.preview_meta.as_ref().is_some_and(|m| !m.has_video) {
+                self.last_viewer_frame_kind = None;
+            } else if let Some(frame) = self.browsing_video_frame() {
+                let output = vv_render::OutputFrame::exact(frame.width, frame.height);
+                let layer = frame_provider::OwnedLayer {
+                    content: frame_provider::OwnedContent::Video {
+                        source_size: (frame.width, frame.height),
+                        frame,
+                    },
+                    transform: vv_core::Transform::default(),
+                    opacity: 1.0,
+                    filters: Vec::new(),
+                    blend: vv_core::BlendMode::Normal,
+                    masks: Vec::new(),
+                };
+                self.show_composited(vec![layer], output);
+            }
+        } else if let Some(layers) = layers {
+            let output = self.viewer_output(&layers);
+            self.show_composited(layers, output);
+        }
+
+        match self.last_viewer_frame_kind {
+            Some(ViewerFrameKind::Video) => {
+                if let (Some(id), Some(tex_size)) = (self.video_texture_id, self.video_display_size)
+                {
+                    let (area, _) =
+                        ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
+                    self.viewer_zoom.handle_input(ui, area, tex_size);
+                    let ppp = ui.ctx().pixels_per_point();
+                    let rect = self.viewer_zoom.frame_rect(area, tex_size, ppp);
+                    ui.painter().with_clip_rect(area).image(
+                        id,
+                        rect,
+                        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                        egui::Color32::WHITE,
+                    );
+                    if self.viewer_keyframe {
+                        paint_keyframes_badge(ui.painter(), rect.intersect(area));
+                    }
+                    self.viewer_geometry = Some((area, tex_size));
+                    let scale = f64::from(self.viewer_zoom.scale(area, tex_size, ppp));
+                    if scale != self.viewer_scale {
+                        self.viewer_scale = scale;
+                        ui.ctx().request_repaint();
+                    }
+                    viewer_area = Some(area);
+                    viewer_rect = Some(rect);
+                }
+            }
+            Some(ViewerFrameKind::Offline) => {
+                ui.centered_and_justified(|ui| {
+                    ui.colored_label(
+                        theme::ERROR,
+                        egui::RichText::new(t!("viewer.media_offline")).size(24.0),
+                    );
+                });
+            }
+            None => {
+                if let Some(err) = &self.preview_error {
+                    ui.colored_label(egui::Color32::RED, t!("viewer.player_error", error = err));
+                } else if self.browsing_audio_only() {
+                    let (rect, _) =
+                        ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
+                    let total = self.browse_total_frames();
+                    let keys = self.browsed_waveform_keys();
+                    // Loaded here too: the timeline loads them before the
+                    // double click that opened this media.
+                    for &key in &keys {
+                        self.load_waveform(key);
+                    }
+                    if keys.iter().any(|k| !self.waveform_cache.contains_key(k)) {
+                        // The worker wakes no one when it is done.
+                        ui.ctx()
+                            .request_repaint_after(std::time::Duration::from_millis(200));
+                    }
+                    let preview = viewer_waveform::AudioPreview {
+                        waveforms: keys.iter().map(|k| self.waveform_cache.get(k)).collect(),
+                        total_frames: total,
+                        fps: self.browse_fps(),
+                        playhead: self.browse_playhead,
+                        marks: self.browse_marks.resolve(total),
+                    };
+                    viewer_waveform::paint(ui, rect, &preview);
+                    // Dragged onto the timeline like a frame, clicked to seek.
+                    viewer_rect = Some(rect);
+                } else {
+                    ui.centered_and_justified(|ui| {
+                        ui.label(if self.browsing.is_some() || self.active_clip.is_some() {
+                            t!("viewer.decoding")
+                        } else {
+                            t!("viewer.empty_hint")
+                        })
+                    });
+                }
+            }
+        }
+
+        let Some(rect) = viewer_rect else {
+            return transport_action;
+        };
+        let area = viewer_area.unwrap_or(rect);
+        let ui = &mut self.viewer_zoom.tools_ui(ui, area);
+        if viewer_area.is_some() {
+            self.show_viewer_overlay(ui, rect, area, video_targets, overlay_effects);
+        }
+
+        if let Some(browsed) = self.browsing.clone() {
+            let rect = rect.intersect(area);
+            let (source_in, source_out) = self.browse_marks.resolve(self.browse_total_frames());
+            let drag_id = ui.id().with("viewer_media_drag");
+            let audio_only = self.browsing_audio_only();
+            let sense = if audio_only {
+                egui::Sense::click_and_drag()
+            } else {
+                egui::Sense::drag()
+            };
+            let hint = if audio_only {
+                t!("viewer.waveform_hint")
+            } else {
+                t!("viewer.drag_in_out")
+            };
+            let resp = ui.interact(rect, drag_id, sense).on_hover_text(hint);
+            if audio_only
+                && resp.clicked()
+                && let Some(pos) = resp.interact_pointer_pos()
+            {
+                let total = self.browse_total_frames();
+                self.seek_browse(viewer_waveform::frame_at(rect, pos.x, total));
+            }
+            let mut drags = vec![(resp, timeline_ui::DragStreams::All)];
+            if self
+                .preview_meta
+                .as_ref()
+                .is_some_and(|m| m.has_video && m.has_audio)
+            {
+                drags.extend(show_stream_drag_handles(ui, rect));
+            }
+            for (resp, streams) in drags {
+                // A library asset joins the project only once it is dragged.
+                let media_id = match &browsed {
+                    Browsed::Media(id) => Some(*id),
+                    Browsed::Asset(id) if resp.drag_started() => {
+                        self.import_library_asset(id).first().copied()
+                    }
+                    Browsed::Asset(_) => None,
+                };
+                match media_id {
+                    Some(media_id) => resp.dnd_set_drag_payload(timeline_ui::MediaDragSet::one(
+                        timeline_ui::MediaDrag {
+                            media_id,
+                            source_in,
+                            source_out,
+                            streams,
+                        },
+                    )),
+                    None if resp.hovered() => ui.ctx().set_cursor_icon(egui::CursorIcon::Grab),
+                    None => {}
+                }
+                if resp.dragged()
+                    && let Some(item) = self.browsed_item(&browsed)
+                {
+                    let name = file_label(&item.path);
+                    let ghost = match streams {
+                        timeline_ui::DragStreams::All => name,
+                        timeline_ui::DragStreams::VideoOnly => {
+                            t!("viewer.ghost_video_only", name = name).into_owned()
+                        }
+                        timeline_ui::DragStreams::AudioOnly => {
+                            t!("viewer.ghost_audio_only", name = name).into_owned()
+                        }
+                    };
+                    show_drag_ghost(ui, resp.id, &ghost);
+                }
+            }
+        }
+        transport_action
     }
 }
 
@@ -5091,6 +5185,7 @@ fn main() -> eframe::Result<()> {
                 app.library = library::Library::open(root);
             }
             app.settings = settings;
+            app.workspace = workspace::Workspace::from_value(app.settings.workspace.as_ref());
             app.settings.language.apply();
             // Seeded even when empty so nothing scans on the UI thread.
             vv_plugin::set_installed(app.settings.vst3_plugins.clone().unwrap_or_default());
@@ -5115,7 +5210,18 @@ fn main() -> eframe::Result<()> {
             {
                 app.wayland_dnd = wayland_dnd::WaylandDnd::start(cc);
             }
+            let opens_project = startup_paths.iter().any(|p| {
+                p.extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case(projects::PROJECT_EXTENSION))
+            });
+            // Media opened with the app need a project to land in.
+            if !startup_paths.is_empty() && !opens_project {
+                app.create_new_project();
+            }
             app.open_paths(startup_paths);
+            if app.session.path().is_none() {
+                app.start_on_home_or_recover();
+            }
             app.apply_mcp_setting(&cc.egui_ctx);
             Ok(Box::new(app))
         }),
