@@ -322,7 +322,62 @@ impl egui_tiles::Behavior<Block> for LayoutBehavior {
     }
 
     fn gap_width(&self, _style: &egui::Style) -> f32 {
-        4.0
+        crate::theme::PANEL_GAP
+    }
+
+    fn tab_bar_height(&self, _style: &egui::Style) -> f32 {
+        28.0
+    }
+
+    fn tab_bar_color(&self, _visuals: &egui::Visuals) -> egui::Color32 {
+        crate::theme::BG_PANEL
+    }
+
+    fn resize_stroke(&self, style: &egui::Style, state: egui_tiles::ResizeState) -> egui::Stroke {
+        match state {
+            egui_tiles::ResizeState::Idle => {
+                egui::Stroke::new(self.gap_width(style), crate::theme::BG_WINDOW)
+            }
+            _ => egui::Stroke::new(self.gap_width(style), crate::theme::ACCENT),
+        }
+    }
+
+    fn tab_bg_color(
+        &self,
+        _visuals: &egui::Visuals,
+        _tiles: &Tiles<Block>,
+        _tile_id: TileId,
+        _state: &egui_tiles::TabState,
+    ) -> egui::Color32 {
+        egui::Color32::TRANSPARENT
+    }
+
+    fn tab_outline_stroke(
+        &self,
+        _visuals: &egui::Visuals,
+        _tiles: &Tiles<Block>,
+        _tile_id: TileId,
+        _state: &egui_tiles::TabState,
+    ) -> egui::Stroke {
+        egui::Stroke::NONE
+    }
+
+    fn tab_bar_hline_stroke(&self, _visuals: &egui::Visuals) -> egui::Stroke {
+        egui::Stroke::new(1.0, crate::theme::BORDER_SUBTLE)
+    }
+
+    fn tab_text_color(
+        &self,
+        _visuals: &egui::Visuals,
+        _tiles: &Tiles<Block>,
+        _tile_id: TileId,
+        state: &egui_tiles::TabState,
+    ) -> egui::Color32 {
+        if state.active {
+            crate::theme::TEXT_PRIMARY
+        } else {
+            crate::theme::TEXT_SECONDARY
+        }
     }
 
     fn simplification_options(&self) -> egui_tiles::SimplificationOptions {

@@ -424,6 +424,33 @@ fn insert_generator_overwrites_what_is_underneath() {
     );
 }
 
+#[test]
+fn a_text_lasts_three_seconds_and_the_other_generators_five() {
+    let fps = Rational::new(25, 1);
+    assert_eq!(Generator::Text.default_len(fps), 75);
+    assert_eq!(Generator::SolidColor.default_len(fps), 125);
+    assert_eq!(Generator::Adjustment.default_len(fps), 125);
+}
+
+#[test]
+fn insert_title_keeps_the_given_style() {
+    let (mut project, tl) = project_with_tracks(&[TrackKind::Video]);
+    let mut history = History::default();
+    let title = TitleParams {
+        size: 99.0,
+        ..Default::default()
+    };
+
+    let id = insert_title(&mut project, &mut history, tl, title.clone(), 0, 10);
+
+    let clip = project.timelines[tl].clip(0, id).unwrap();
+    assert!(matches!(clip.source, ClipSource::Text));
+    assert_eq!((clip.timeline_start, clip.timeline_len), (10, 75));
+    assert_eq!(clip.effects.title, Some(title));
+    history.undo(&mut project);
+    assert!(project.timelines[tl].tracks[0].clips.is_empty());
+}
+
 fn place(
     project: &mut Project,
     history: &mut History,

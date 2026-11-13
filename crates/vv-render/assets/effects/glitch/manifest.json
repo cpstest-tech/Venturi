@@ -1,0 +1,20 @@
+{
+  "kind": "effect",
+  "name": {
+    "en": "Glitch",
+    "it": "Glitch"
+  },
+  "category": "distort",
+  "params": [
+    {
+      "id": "intensity",
+      "name": {
+        "en": "Intensity",
+        "it": "Intensità"
+      },
+      "min": 0,
+      "max": 1,
+      "default": 0.5
+    }
+  ]
+}

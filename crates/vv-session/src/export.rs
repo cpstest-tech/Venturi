@@ -19,10 +19,12 @@ use crate::frame_provider::{
     FrameProvider, GpuCompounds, OwnedLayer, media_source_frame, stack_layers, track_layers_at,
 };
 
-pub(crate) const PROJECT_CHANNELS: u16 = 2;
+pub const PROJECT_CHANNELS: u16 = 2;
 const RENDER_AHEAD_FRAMES: usize = 8;
 /// Mixed audio chunks (a few seconds each) ready ahead of the encoder.
 const AUDIO_AHEAD_CHUNKS: usize = 2;
+const PREVIEW_EVERY: std::time::Duration = std::time::Duration::from_millis(400);
+const PREVIEW_WIDTH: usize = 360;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum AspectMode {
@@ -44,6 +46,18 @@ pub struct ExportSettings {
     pub audio: Option<vv_media::AudioSettings>,
     /// GPU decoders to try, in order; empty decodes on the CPU.
     pub hw_decode: Vec<vv_media::HwDevice>,
+    /// Output frame rate; `None` keeps the timeline's.
+    pub fps: Option<vv_core::Rational>,
+    /// Off: only the audio file is written.
+    pub video_enabled: bool,
+    /// The audio as a separate file next to the video.
+    pub audio_file: Option<AudioFileExport>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AudioFileExport {
+    pub format: vv_media::AudioFileFormat,
+    pub bitrate_kbps: u32,
 }
 
 impl ExportSettings {
@@ -59,7 +73,20 @@ impl ExportSettings {
             video: vv_media::VideoSettings::default(),
             audio: Some(vv_media::AudioSettings::default()),
             hw_decode: Vec::new(),
+            fps: None,
+            video_enabled: true,
+            audio_file: None,
         }
+    }
+
+    /// Where the separate audio file goes: next to the video, same name.
+    pub fn audio_file_path(&self) -> Option<PathBuf> {
+        let file = self.audio_file.as_ref()?;
+        Some(self.output_path.with_extension(file.format.extension()))
+    }
+
+    pub fn output_fps(&self, timeline_fps: vv_core::Rational) -> vv_core::Rational {
+        self.fps.unwrap_or(timeline_fps)
     }
 
     /// Like `new`, but with the fastest encoders available on this
@@ -167,6 +194,50 @@ pub struct ExportProgress {
     pub startup: Option<std::time::Duration>,
     /// After the last frame is written: encoder flush and audio tail.
     pub finalize: Option<std::time::Duration>,
+    /// A recent output frame, small.
+    pub preview: Option<PreviewFrame>,
+    /// Changes with `preview`, so a reader copies it only when new.
+    pub preview_version: u64,
+}
+
+/// An RGBA picture for the export window.
+#[derive(Clone)]
+pub struct PreviewFrame {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+impl PreviewFrame {
+    /// Nearest-neighbour thumbnail of an I420 frame (BT.709, limited range).
+    pub fn from_i420(i420: &[u8], width: usize, height: usize, max_width: usize) -> Self {
+        let step = width.div_ceil(max_width.max(1)).max(1);
+        let (out_w, out_h) = (width / step, height / step);
+        let chroma_w = width.div_ceil(2);
+        let chroma_h = height.div_ceil(2);
+        let (luma, chroma) = i420.split_at(width * height);
+        let (u_plane, v_plane) = chroma.split_at(chroma_w * chroma_h);
+        let mut rgba = Vec::with_capacity(out_w * out_h * 4);
+        for y in 0..out_h {
+            for x in 0..out_w {
+                let (sx, sy) = (x * step, y * step);
+                let luma = (f32::from(luma[sy * width + sx]) - 16.0) * 1.1644;
+                let ci = (sy / 2) * chroma_w + sx / 2;
+                let u = f32::from(u_plane[ci]) - 128.0;
+                let v = f32::from(v_plane[ci]) - 128.0;
+                let r = luma + 1.7927 * v;
+                let g = luma - 0.2132 * u - 0.5329 * v;
+                let b = luma + 2.1124 * u;
+                rgba.extend([r, g, b].map(|c| c.clamp(0.0, 255.0) as u8));
+                rgba.push(255);
+            }
+        }
+        Self {
+            width: out_w as u32,
+            height: out_h as u32,
+            rgba,
+        }
+    }
 }
 
 impl ExportProgress {
@@ -351,7 +422,9 @@ pub fn scan_blocks_export(
         && project.timeline_uses_enabled_plugins(timeline)
 }
 
-/// Exports the frames in `range` to `output_path`. Blocking.
+/// Exports the frames in `range` to `output_path` and, if asked, the audio
+/// to its own file. Blocking. A cancelled or failed export leaves none of
+/// the files it started.
 pub fn export_timeline(
     project: &Project,
     timeline_id: TimelineId,
@@ -359,6 +432,103 @@ pub fn export_timeline(
     range: std::ops::Range<FrameIdx>,
     progress: &Mutex<ExportProgress>,
     cancel: &AtomicBool,
+) -> Result<(), ExportError> {
+    let mut created = Vec::new();
+    let result = export_files(
+        project,
+        timeline_id,
+        settings,
+        range,
+        progress,
+        cancel,
+        &mut created,
+    );
+    if result.is_err() {
+        for path in created {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+    result
+}
+
+fn export_files(
+    project: &Project,
+    timeline_id: TimelineId,
+    settings: &ExportSettings,
+    range: std::ops::Range<FrameIdx>,
+    progress: &Mutex<ExportProgress>,
+    cancel: &AtomicBool,
+    created: &mut Vec<PathBuf>,
+) -> Result<(), ExportError> {
+    if settings.video_enabled {
+        export_video(
+            project,
+            timeline_id,
+            settings,
+            range.clone(),
+            progress,
+            cancel,
+            created,
+        )?;
+    }
+    if let Some(path) = settings.audio_file_path()
+        && let Some(file) = &settings.audio_file
+    {
+        export_audio_file(
+            project,
+            timeline_id,
+            range,
+            file,
+            &path,
+            settings.video_enabled,
+            progress,
+            cancel,
+            created,
+        )?;
+    }
+    progress.lock().unwrap().done = true;
+    Ok(())
+}
+
+/// The timeline frame shown by output frame `index`.
+fn source_frame(
+    index: FrameIdx,
+    start: FrameIdx,
+    end: FrameIdx,
+    timeline_fps: vv_core::Rational,
+    output_fps: vv_core::Rational,
+) -> FrameIdx {
+    if timeline_fps == output_fps {
+        return start + index;
+    }
+    let num = i128::from(index) * i128::from(timeline_fps.num) * i128::from(output_fps.den);
+    let den = i128::from(timeline_fps.den) * i128::from(output_fps.num);
+    (start + (num / den.max(1)) as FrameIdx).min(end - 1)
+}
+
+/// Output frames covering `frames` timeline frames.
+fn output_frame_count(
+    frames: FrameIdx,
+    timeline_fps: vv_core::Rational,
+    output_fps: vv_core::Rational,
+) -> FrameIdx {
+    if timeline_fps == output_fps {
+        return frames;
+    }
+    let num = i128::from(frames) * i128::from(timeline_fps.den) * i128::from(output_fps.num);
+    let den = i128::from(timeline_fps.num) * i128::from(output_fps.den);
+    ((num + den - 1) / den.max(1)) as FrameIdx
+}
+
+#[allow(clippy::too_many_arguments)]
+fn export_video(
+    project: &Project,
+    timeline_id: TimelineId,
+    settings: &ExportSettings,
+    range: std::ops::Range<FrameIdx>,
+    progress: &Mutex<ExportProgress>,
+    cancel: &AtomicBool,
+    created: &mut Vec<PathBuf>,
 ) -> Result<(), ExportError> {
     let started = std::time::Instant::now();
     let finish = || {
@@ -368,7 +538,6 @@ pub fn export_timeline(
             p.finalize = Some(now.saturating_sub(p.elapsed));
         }
         p.elapsed = now;
-        p.done = true;
     };
     let timeline = project
         .timelines
@@ -383,7 +552,10 @@ pub fn export_timeline(
     }
 
     let range = range.start.max(0)..range.end.min(timeline.total_frames());
-    let total_frames = (range.end - range.start).max(0);
+    let output_fps = settings.output_fps(timeline.fps);
+    let retimed = output_fps != timeline.fps;
+    let total_frames =
+        output_frame_count((range.end - range.start).max(0), timeline.fps, output_fps);
     progress.lock().unwrap().total_frames = total_frames;
     if total_frames <= 0 {
         finish();
@@ -405,15 +577,20 @@ pub fn export_timeline(
             "output or intermediate dimensions exceed the GPU's {texture_limit}-pixel texture limit"
         )));
     }
+    created.push(settings.output_path.clone());
     let mut encoder = vv_media::Encoder::new(
         &settings.output_path,
         out_w,
         out_h,
-        timeline.fps,
+        output_fps,
         &settings.video,
         audio_settings.map(|a| (PROJECT_SAMPLE_RATE, PROJECT_CHANNELS, a)),
     )
-    .map_err(ExportError::failed)?;
+    .map_err(|e| {
+        // Nothing was written if the encoder did not open: an old file stays.
+        created.pop();
+        ExportError::failed(e)
+    })?;
 
     // Decode, GPU composition and encode on three threads: in series each one
     // waited for the others and none saturated the machine.
@@ -447,15 +624,23 @@ pub fn export_timeline(
         });
 
         let decode_range = range.clone();
+        let timeline_fps = timeline.fps;
         scope.spawn(move || {
             let mut provider = StreamingFrameProvider {
                 hw: settings.hw_decode.clone(),
                 ..Default::default()
             };
-            for frame in decode_range {
+            for index in 0..total_frames {
                 if cancel.load(Ordering::Relaxed) {
                     return;
                 }
+                let frame = source_frame(
+                    index,
+                    decode_range.start,
+                    decode_range.end,
+                    timeline_fps,
+                    output_fps,
+                );
                 let t = std::time::Instant::now();
                 let decoded = decode_video_frame(
                     project,
@@ -498,10 +683,16 @@ pub fn export_timeline(
         // The audio must be written along with the video: all of it after the video and
         // the muxer keeps the whole video in RAM and the interleaving becomes
         // quadratic (minutes on a timeline of a few minutes).
-        let mut audio = audio_mix
-            .is_some()
-            .then(|| AudioInterleaver::new(timeline, range.start, audio_rx));
-        let encoded = range.clone().try_for_each(|frame| {
+        let mut audio = audio_mix.is_some().then(|| {
+            AudioInterleaver::new(
+                timeline,
+                range.clone(),
+                retimed.then_some(output_fps),
+                audio_rx,
+            )
+        });
+        let mut last_preview = std::time::Instant::now() - PREVIEW_EVERY;
+        let encoded = (0..total_frames).try_for_each(|index| {
             if cancel.load(Ordering::Relaxed) {
                 return Err(ExportError::Cancelled);
             }
@@ -514,13 +705,21 @@ pub fn export_timeline(
                 .write_video_frame(&frame_i420)
                 .map_err(ExportError::failed)?;
             if let Some(audio) = &mut audio {
-                audio.write_until(&mut encoder, frame + 1)?;
+                audio.write_until(&mut encoder, index + 1)?;
             }
 
+            let preview = (last_preview.elapsed() >= PREVIEW_EVERY).then(|| {
+                last_preview = std::time::Instant::now();
+                PreviewFrame::from_i420(&frame_i420, out_w as usize, out_h as usize, PREVIEW_WIDTH)
+            });
             let mut p = progress.lock().unwrap();
             p.encode.add(t.elapsed());
-            p.current_frame = frame - range.start + 1;
+            p.current_frame = index + 1;
             p.elapsed = started.elapsed();
+            if preview.is_some() {
+                p.preview = preview;
+                p.preview_version += 1;
+            }
             if p.startup.is_none() {
                 p.startup = Some(p.elapsed);
             }
@@ -668,35 +867,51 @@ struct AudioInterleaver {
     taken: usize,
     written: usize,
     fps: f64,
+    start_frame: FrameIdx,
     start_sample: u64,
+    /// Samples in the mix: the end of the last frame never asks for more.
+    total: usize,
+    /// Set when the output frame rate is not the timeline's.
+    output_fps: Option<f64>,
 }
 
 impl AudioInterleaver {
     fn new(
         timeline: &Timeline,
-        start_frame: FrameIdx,
+        range: std::ops::Range<FrameIdx>,
+        output_fps: Option<vv_core::Rational>,
         chunks: std::sync::mpsc::Receiver<Vec<f32>>,
     ) -> Self {
         let fps = timeline.fps.as_f64();
+        let samples = audio_samples(timeline, range.clone());
         Self {
             chunks,
             chunk: Vec::new(),
             taken: 0,
             written: 0,
             fps,
-            start_sample: timeline_frame_to_sample(start_frame, fps, PROJECT_SAMPLE_RATE),
+            start_frame: range.start,
+            start_sample: timeline_frame_to_sample(range.start, fps, PROJECT_SAMPLE_RATE),
+            total: (samples.end - samples.start) as usize * PROJECT_CHANNELS as usize,
+            output_fps: output_fps.map(|f| f.as_f64()),
         }
     }
 
-    /// Writes the samples up to the start of `frame` (exclusive), waiting
-    /// for the mix to get there.
+    /// Writes the samples up to the end of the first `frames` output frames,
+    /// waiting for the mix to get there.
     fn write_until(
         &mut self,
         encoder: &mut vv_media::Encoder,
-        frame: FrameIdx,
+        frames: FrameIdx,
     ) -> Result<(), ExportError> {
-        let end_sample = timeline_frame_to_sample(frame, self.fps, PROJECT_SAMPLE_RATE);
-        let end = (end_sample - self.start_sample) as usize * PROJECT_CHANNELS as usize;
+        let end_sample = match self.output_fps {
+            Some(fps) => timeline_frame_to_sample(frames, fps, PROJECT_SAMPLE_RATE),
+            None => {
+                timeline_frame_to_sample(frames + self.start_frame, self.fps, PROJECT_SAMPLE_RATE)
+                    - self.start_sample
+            }
+        };
+        let end = (end_sample as usize * PROJECT_CHANNELS as usize).min(self.total);
         while self.written < end {
             if self.taken == self.chunk.len() {
                 let Ok(chunk) = self.chunks.recv() else {
@@ -716,6 +931,85 @@ impl AudioInterleaver {
     }
 }
 
+/// The mix of `range` into its own audio file. With `report` it also drives
+/// the progress (an audio-only export).
+#[allow(clippy::too_many_arguments)]
+fn export_audio_file(
+    project: &Project,
+    timeline_id: TimelineId,
+    range: std::ops::Range<FrameIdx>,
+    file: &AudioFileExport,
+    path: &Path,
+    report: bool,
+    progress: &Mutex<ExportProgress>,
+    cancel: &AtomicBool,
+    created: &mut Vec<PathBuf>,
+) -> Result<(), ExportError> {
+    let started = std::time::Instant::now();
+    let timeline = project
+        .timelines
+        .get(timeline_id)
+        .ok_or(ExportError::TimelineNotFound)?;
+    let range = range.start.max(0)..range.end.min(timeline.total_frames());
+    let samples = audio_samples(timeline, range.clone());
+    let total = (samples.end - samples.start) as f64;
+    if report {
+        let mut p = progress.lock().unwrap();
+        p.total_frames = (range.end - range.start).max(0);
+        p.output_path = path.to_owned();
+    }
+    created.push(path.to_owned());
+    let mut encoder = vv_media::AudioFileEncoder::new(
+        path,
+        PROJECT_SAMPLE_RATE,
+        PROJECT_CHANNELS,
+        file.format,
+        file.bitrate_kbps,
+    )
+    .map_err(|e| {
+        created.pop();
+        ExportError::failed(e)
+    })?;
+    let mut failure = None;
+    let mut done = 0usize;
+    let frames = (range.end - range.start).max(0) as f64;
+    render_offline(
+        project,
+        timeline,
+        samples,
+        &mut LevelCache::on_disk(),
+        |chunk| {
+            if cancel.load(Ordering::Relaxed) {
+                return ControlFlow::Break(());
+            }
+            if let Err(e) = encoder.write_samples(chunk) {
+                failure = Some(e);
+                return ControlFlow::Break(());
+            }
+            done += chunk.len() / PROJECT_CHANNELS as usize;
+            if report {
+                let mut p = progress.lock().unwrap();
+                p.current_frame = (done as f64 / total.max(1.0) * frames) as FrameIdx;
+                p.elapsed = started.elapsed();
+            }
+            ControlFlow::Continue(())
+        },
+    )?;
+    if cancel.load(Ordering::Relaxed) {
+        return Err(ExportError::Cancelled);
+    }
+    if let Some(e) = failure {
+        return Err(ExportError::failed(e));
+    }
+    encoder.finish().map_err(ExportError::failed)?;
+    if report {
+        let mut p = progress.lock().unwrap();
+        p.current_frame = p.total_frames;
+        p.elapsed = started.elapsed();
+    }
+    Ok(())
+}
+
 fn audio_samples(timeline: &Timeline, range: std::ops::Range<FrameIdx>) -> std::ops::Range<u64> {
     let fps = timeline.fps.as_f64();
     timeline_frame_to_sample(range.start, fps, PROJECT_SAMPLE_RATE)
@@ -724,7 +1018,7 @@ fn audio_samples(timeline: &Timeline, range: std::ops::Range<FrameIdx>) -> std::
 
 /// Mix of all the audio tracks at `PROJECT_SAMPLE_RATE`/`PROJECT_CHANNELS`,
 /// over the timeline frames in `range`: the same `mix_range` as the preview.
-pub(crate) fn mix_audio_track(
+pub fn mix_audio_track(
     project: &Project,
     timeline: &Timeline,
     range: std::ops::Range<FrameIdx>,

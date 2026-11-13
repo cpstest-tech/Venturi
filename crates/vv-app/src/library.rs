@@ -360,6 +360,20 @@ impl Library {
         Ok(id)
     }
 
+    /// A top level folder with a fixed `id`, created if missing: the ribbon's
+    /// categories.
+    pub fn ensure_folder(&mut self, id: &str, name: &str) -> Result<(), String> {
+        if self.folder(id).is_some() {
+            return Ok(());
+        }
+        self.folders.push(LibraryFolder {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            parent: None,
+        });
+        self.save_folders()
+    }
+
     pub fn rename_folder(&mut self, id: &str, name: String) -> Result<(), String> {
         if let Some(folder) = self.folders.iter_mut().find(|f| f.id == id) {
             folder.name = name;

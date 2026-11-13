@@ -58,6 +58,9 @@ pub enum CommandLabel {
     ResetGain,
     Title,
     ResetTransform,
+    TimelineResolution,
+    SetCaptions,
+    SetCover,
     ClipColor,
     ClipDisplayColor,
     SetKeyframe,
@@ -70,6 +73,7 @@ pub enum CommandLabel {
     Matte,
     Transition,
     MakeCompoundClip,
+    UngroupCompoundClip,
     MoveKeyframes,
     SetInterpolation,
     PasteAttributes,
@@ -1995,6 +1999,23 @@ pub fn set_clip_filters(
     )
 }
 
+/// Replaces the whole list of asset effects/filters, like `set_clip_filters`.
+pub fn set_clip_assets(
+    timeline: TimelineId,
+    track_index: usize,
+    clip_id: ClipId,
+    value: Vec<crate::model::AssetFx>,
+) -> SetClipValue<Vec<crate::model::AssetFx>> {
+    SetClipValue::new(
+        timeline,
+        track_index,
+        clip_id,
+        CommandLabel::Filters,
+        value,
+        |c| &mut c.effects.assets,
+    )
+}
+
 /// Replaces the whole mask list, like `set_clip_filters`.
 pub fn set_clip_masks(
     timeline: TimelineId,
@@ -3369,3 +3390,82 @@ impl Command for SetProcessingPrecision {
 #[cfg(test)]
 #[path = "tests/command.rs"]
 mod tests;
+
+/// Chooses the frame that stands for a timeline (the export cover).
+#[derive(Debug)]
+pub struct SetCover {
+    pub timeline: TimelineId,
+    pub frame: FrameIdx,
+    previous: Option<Option<FrameIdx>>,
+}
+
+impl SetCover {
+    pub fn new(timeline: TimelineId, frame: FrameIdx) -> Self {
+        Self {
+            timeline,
+            frame,
+            previous: None,
+        }
+    }
+}
+
+impl Command for SetCover {
+    fn label(&self) -> CommandLabel {
+        CommandLabel::SetCover
+    }
+
+    fn apply(&mut self, project: &mut Project) {
+        self.previous = Some(project.view.covers.insert(self.timeline, self.frame));
+    }
+
+    fn undo(&self, project: &mut Project) {
+        match self.previous {
+            Some(Some(frame)) => {
+                project.view.covers.insert(self.timeline, frame);
+            }
+            _ => {
+                project.view.covers.remove(&self.timeline);
+            }
+        }
+    }
+}
+
+/// Changes the frame size of a timeline (aspect ratio and resolution).
+#[derive(Debug)]
+pub struct SetTimelineResolution {
+    pub timeline: TimelineId,
+    pub resolution: (u32, u32),
+    previous: Option<(u32, u32)>,
+}
+
+impl SetTimelineResolution {
+    pub fn new(timeline: TimelineId, resolution: (u32, u32)) -> Self {
+        Self {
+            timeline,
+            resolution,
+            previous: None,
+        }
+    }
+}
+
+impl Command for SetTimelineResolution {
+    fn label(&self) -> CommandLabel {
+        CommandLabel::TimelineResolution
+    }
+
+    fn apply(&mut self, project: &mut Project) {
+        let Some(timeline) = project.timelines.get_mut(self.timeline) else {
+            return;
+        };
+        self.previous = Some(timeline.resolution);
+        timeline.resolution = self.resolution;
+    }
+
+    fn undo(&self, project: &mut Project) {
+        if let (Some(previous), Some(timeline)) =
+            (self.previous, project.timelines.get_mut(self.timeline))
+        {
+            timeline.resolution = previous;
+        }
+    }
+}

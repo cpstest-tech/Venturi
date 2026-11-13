@@ -1,3 +1,4 @@
+pub mod captions;
 pub mod clipboard;
 pub mod command;
 pub mod edit;
@@ -10,23 +11,26 @@ pub mod otio;
 pub mod persistence;
 pub mod pool;
 mod stable_hash;
+pub mod workflow;
 
+pub use captions::{CaptionWord, Captions, SetCaptions, SubtitleTemplate};
 pub use command::{
     AddAudioEffect, AddTrack, Command, CommandLabel, CompositeCommand, CompoundPlan, FadeEdge,
     GroupMark, History, InsertClip, JoinableStep, KeyframePick, KeyframeTarget, KeyframeValue,
     LiftDelete, LinkClips, MixerChannel, MixerParam, MoveAudioEffect, MoveClips, MoveKeyframes,
     RemoveAudioEffect, RemoveKeyframe, RemoveMedia, RemoveTrack, ResetTransformParams,
     RippleDeleteGap, SetAudioEffect, SetClipAttributes, SetClipColor, SetClipFade, SetClipFreeze,
-    SetClipSpeed, SetClipValue, SetClipsDisabled, SetClipsDisplayColor, SetCrossTransition,
-    SetKeyframeInterpolation, SetMarker, SetMediaPath, SetMixerParam, SetProcessingPrecision,
-    SetTrackFlag, SlipClip, SpeedFit, SplitClip, TrackFlag, TrimClip, TrimEdge, UnlinkClip,
-    UpsertKeyframe, compound_clip_commands, cut_overlaps, insert_overwriting, make_room_for_ranges,
-    plan_compound_clip, reset_clip_gain, set_clip_blend_mode, set_clip_filters, set_clip_flip,
-    set_clip_gain, set_clip_masks, set_clip_matte, set_clip_title, set_clip_transform_param,
-    set_clip_transition,
+    SetClipSpeed, SetClipValue, SetClipsDisabled, SetClipsDisplayColor, SetCover,
+    SetCrossTransition, SetKeyframeInterpolation, SetMarker, SetMediaPath, SetMixerParam,
+    SetProcessingPrecision, SetTimelineResolution, SetTrackFlag, SlipClip, SpeedFit, SplitClip,
+    TrackFlag, TrimClip, TrimEdge, UnlinkClip, UpsertKeyframe, compound_clip_commands,
+    cut_overlaps, insert_overwriting, make_room_for_ranges, plan_compound_clip, reset_clip_gain,
+    set_clip_assets, set_clip_blend_mode, set_clip_filters, set_clip_flip, set_clip_gain,
+    set_clip_masks, set_clip_matte, set_clip_title, set_clip_transform_param, set_clip_transition,
 };
 pub use grade::*;
 pub use mask::*;
+pub mod fx;
 pub use model::*;
 pub use otio::{
     MeasureTitle, OtioError, OtioImport, OtioWarning, TitleMetrics, export_otio, import_otio,
@@ -56,3 +60,7 @@ mod compound_clip_tests;
 #[cfg(test)]
 #[path = "tests/lib_clip_speed.rs"]
 mod clip_speed_tests;
+
+#[cfg(test)]
+#[path = "tests/workflow.rs"]
+mod workflow_tests;

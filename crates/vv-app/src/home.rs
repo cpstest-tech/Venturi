@@ -11,7 +11,7 @@ use crate::projects::{self, Aspect, ProjectFsError, ProjectSummary};
 
 const CARD_WIDTH: f32 = 220.0;
 const COVER_HEIGHT: f32 = CARD_WIDTH * 9.0 / 16.0;
-const CARD_HEIGHT: f32 = COVER_HEIGHT + 66.0;
+const CARD_HEIGHT: f32 = COVER_HEIGHT + 78.0;
 const CARD_GAP: f32 = 16.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -148,9 +148,9 @@ fn visible(cards: &[HomeCard], search: &str, sort: HomeSort, aspect: Option<Aspe
         .collect();
     let summary = |index: usize| &cards[index].summary;
     match sort {
-        HomeSort::Recent => shown.sort_by(|&a, &b| summary(b).modified.cmp(&summary(a).modified)),
+        HomeSort::Recent => shown.sort_by_key(|&index| std::cmp::Reverse(summary(index).modified)),
         HomeSort::Name => shown.sort_by_key(|&index| summary(index).name.to_lowercase()),
-        HomeSort::Size => shown.sort_by(|&a, &b| summary(b).size_bytes.cmp(&summary(a).size_bytes)),
+        HomeSort::Size => shown.sort_by_key(|&index| std::cmp::Reverse(summary(index).size_bytes)),
     }
     shown
 }
@@ -186,7 +186,27 @@ impl VenturiApp {
 
         let mut action = None;
         egui::Panel::top("home_bar").show(ui, |ui| self.home_bar(ui, root.as_deref(), &mut action));
-        egui::CentralPanel::default().show(ui, |ui| self.home_grid(ui, &mut action));
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::NONE
+                    .fill(theme::BG_WINDOW)
+                    .inner_margin(egui::Margin::same(theme::SPACE_4 as i8)),
+            )
+            .show(ui, |ui| {
+                paint_home_backdrop(ui);
+                if home_banner(ui) {
+                    action = Some(HomeAction::NewProject);
+                }
+                ui.add_space(theme::SPACE_4);
+                ui.label(
+                    egui::RichText::new(t!("home.projects_section"))
+                        .size(theme::FONT_SECTION)
+                        .strong()
+                        .color(theme::TEXT_PRIMARY),
+                );
+                ui.add_space(theme::SPACE_2);
+                self.home_grid(ui, &mut action);
+            });
         self.show_rename_dialog(&ctx);
         self.show_delete_dialog(&ctx);
         if let Some(action) = action {
@@ -227,11 +247,6 @@ impl VenturiApp {
                     }
                 });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let new = egui::Button::new(egui::RichText::new(t!("home.new_project")).strong())
-                    .fill(ui.visuals().selection.bg_fill);
-                if ui.add(new).clicked() {
-                    *action = Some(HomeAction::NewProject);
-                }
                 if ui
                     .button(t!("home.import_project"))
                     .on_hover_text(t!("home.import_project_hint"))
@@ -269,10 +284,6 @@ impl VenturiApp {
                 ui.add_space(ui.available_height() / 3.0);
                 if home.cards.is_empty() {
                     ui.heading(t!("home.empty"));
-                    ui.add_space(8.0);
-                    if ui.button(t!("home.new_project")).clicked() {
-                        *action = Some(HomeAction::NewProject);
-                    }
                 } else {
                     ui.label(t!("home.no_match"));
                 }
@@ -542,6 +553,95 @@ impl VenturiApp {
     }
 }
 
+const BANNER_HEIGHT: f32 = 145.0;
+const BANNER_FROM: egui::Color32 = egui::Color32::from_rgb(0x26, 0xc6, 0xda);
+const BANNER_TO: egui::Color32 = egui::Color32::from_rgb(0x8f, 0xe3, 0xf0);
+const BANNER_TEXT: egui::Color32 = egui::Color32::from_rgb(0x10, 0x20, 0x24);
+const HOME_GLOW: egui::Color32 = egui::Color32::from_rgb(0x0b, 0x16, 0x18);
+
+fn paint_home_backdrop(ui: &egui::Ui) {
+    let full = ui.max_rect();
+    let rect = egui::Rect::from_min_size(
+        full.min - egui::vec2(theme::SPACE_4, theme::SPACE_4),
+        egui::vec2(full.width() + 2.0 * theme::SPACE_4, 220.0),
+    );
+    let mut mesh = egui::Mesh::default();
+    let (top, bottom) = (HOME_GLOW, theme::BG_WINDOW);
+    mesh.colored_vertex(rect.left_top(), top);
+    mesh.colored_vertex(rect.right_top(), top);
+    mesh.colored_vertex(rect.right_bottom(), bottom);
+    mesh.colored_vertex(rect.left_bottom(), bottom);
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    ui.painter().add(egui::Shape::mesh(mesh));
+}
+
+fn home_banner(ui: &mut egui::Ui) -> bool {
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), BANNER_HEIGHT),
+        egui::Sense::click(),
+    );
+    const STRIPS: usize = 48;
+    let radius = theme::RADIUS_MODAL as u8;
+    let painter = ui.painter();
+    for i in 0..STRIPS {
+        let (x0, x1) = (
+            rect.left() + rect.width() * i as f32 / STRIPS as f32,
+            rect.left() + rect.width() * (i + 1) as f32 / STRIPS as f32 + 0.5,
+        );
+        let color = BANNER_FROM.lerp_to_gamma(BANNER_TO, i as f32 / (STRIPS - 1) as f32);
+        let color = if response.hovered() {
+            color
+                .gamma_multiply(1.0)
+                .lerp_to_gamma(egui::Color32::WHITE, 0.1)
+        } else {
+            color
+        };
+        let corner = egui::CornerRadius {
+            nw: if i == 0 { radius } else { 0 },
+            sw: if i == 0 { radius } else { 0 },
+            ne: if i == STRIPS - 1 { radius } else { 0 },
+            se: if i == STRIPS - 1 { radius } else { 0 },
+        };
+        painter.rect_filled(
+            egui::Rect::from_x_y_ranges(x0..=x1, rect.y_range()),
+            corner,
+            color,
+        );
+    }
+    let center = rect.center();
+    let plus = egui::Rect::from_center_size(
+        egui::pos2(center.x - 78.0, center.y),
+        egui::Vec2::splat(26.0),
+    );
+    painter.rect_filled(plus, theme::RADIUS_CONTROL, BANNER_TEXT);
+    let stroke = egui::Stroke::new(2.0, BANNER_FROM);
+    painter.line_segment(
+        [
+            plus.center() - egui::vec2(6.0, 0.0),
+            plus.center() + egui::vec2(6.0, 0.0),
+        ],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            plus.center() - egui::vec2(0.0, 6.0),
+            plus.center() + egui::vec2(0.0, 6.0),
+        ],
+        stroke,
+    );
+    painter.text(
+        egui::pos2(plus.right() + theme::SPACE_3, center.y),
+        egui::Align2::LEFT_CENTER,
+        t!("home.new_project"),
+        egui::FontId::proportional(20.0),
+        BANNER_TEXT,
+    );
+    response
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .clicked()
+}
+
 fn card_ui(ui: &mut egui::Ui, card: &HomeCard) -> Option<HomeAction> {
     let summary = &card.summary;
     let (rect, response) =
@@ -550,12 +650,12 @@ fn card_ui(ui: &mut egui::Ui, card: &HomeCard) -> Option<HomeAction> {
     let fill = if response.hovered() {
         visuals.widgets.hovered.weak_bg_fill
     } else {
-        visuals.faint_bg_color
+        egui::Color32::TRANSPARENT
     };
-    ui.painter().rect_filled(rect, 6.0, fill);
+    ui.painter().rect_filled(rect, theme::RADIUS_PANEL, fill);
     let cover_rect = egui::Rect::from_min_size(rect.min, egui::vec2(CARD_WIDTH, COVER_HEIGHT));
     ui.painter()
-        .rect_filled(cover_rect, 6.0, egui::Color32::BLACK);
+        .rect_filled(cover_rect, theme::RADIUS_CLIP, egui::Color32::BLACK);
     match &card.cover {
         Some(texture) => {
             let size = texture.size_vec2();
@@ -597,19 +697,25 @@ fn card_ui(ui: &mut egui::Ui, card: &HomeCard) -> Option<HomeAction> {
     ui.scope_builder(egui::UiBuilder::new().max_rect(text_rect), |ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
         ui.add(
-            egui::Label::new(egui::RichText::new(&summary.name).strong())
-                .truncate()
-                .selectable(false),
+            egui::Label::new(
+                egui::RichText::new(&summary.name)
+                    .strong()
+                    .size(theme::FONT_BODY)
+                    .color(theme::TEXT_PRIMARY),
+            )
+            .truncate()
+            .selectable(false),
         );
         let duration = summary
             .duration_secs
             .map_or_else(|| "—".to_owned(), format_duration);
         ui.add(
             egui::Label::new(
-                egui::RichText::new(format!("{} · {duration}", format_size(summary.size_bytes)))
+                egui::RichText::new(format!("{} | {duration}", format_size(summary.size_bytes)))
                     .small()
                     .weak(),
             )
+            .truncate()
             .selectable(false),
         );
         match &summary.error {
@@ -628,6 +734,7 @@ fn card_ui(ui: &mut egui::Ui, card: &HomeCard) -> Option<HomeAction> {
                 if let Some(modified) = summary.modified {
                     ui.add(
                         egui::Label::new(egui::RichText::new(format_date(modified)).small().weak())
+                            .truncate()
                             .selectable(false),
                     );
                 }
@@ -661,7 +768,7 @@ fn card_menu(ui: &mut egui::Ui, file: &Path, chosen: &mut Option<HomeAction>) {
     }
 }
 
-fn reveal_in_file_manager(dir: &Path) -> std::io::Result<()> {
+pub(crate) fn reveal_in_file_manager(dir: &Path) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]
     let program = "open";
     #[cfg(target_os = "windows")]

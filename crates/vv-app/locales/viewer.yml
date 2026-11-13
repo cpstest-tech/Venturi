@@ -27,8 +27,8 @@ toolbar.effects:
   it: "Effetti"
 
 timeline.empty_hint:
-  en: "Import a media file (or drag it here from the Media panel) to create the timeline."
-  it: "Importa un media (o trascinalo qui dal pannello Media) per creare la timeline."
+  en: "Drag your media here to start creating"
+  it: "Trascina qui i media per iniziare a creare"
 
 toolbar.snapping:
   en: "Magnet: snaps dragged clips to nearby edges"
@@ -104,3 +104,35 @@ viewer.zoom_fit:
 viewer.zoom_actual:
   en: "%{percent} (Actual Size)"
   it: "%{percent} (dimensione reale)"
+
+player.title:
+  en: "Player – %{name}"
+  it: "Lettore – %{name}"
+
+player.ratio:
+  en: Ratio
+  it: Rapporto
+
+player.original:
+  en: Original
+  it: Originale
+
+player.quality:
+  en: Full
+  it: Piena
+
+player.quality_full:
+  en: Full
+  it: Piena
+
+player.safe_zones:
+  en: Social safe zones
+  it: Zone sicure social
+
+player.fit_view:
+  en: Fit to view
+  it: Adatta alla vista
+
+player.fullscreen:
+  en: Full screen
+  it: Schermo intero

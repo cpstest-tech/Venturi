@@ -1,0 +1,9 @@
+{
+  "kind": "transition",
+  "name": {
+    "en": "Dip to black",
+    "it": "Passa dal nero"
+  },
+  "category": "basic",
+  "default_secs": 0.8
+}

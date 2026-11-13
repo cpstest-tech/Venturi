@@ -1,0 +1,30 @@
+{
+  "kind": "effect",
+  "name": {
+    "en": "Pulse",
+    "it": "Pulsazione"
+  },
+  "category": "motion",
+  "params": [
+    {
+      "id": "strength",
+      "name": {
+        "en": "Strength",
+        "it": "Intensità"
+      },
+      "min": 0,
+      "max": 0.5,
+      "default": 0.12
+    },
+    {
+      "id": "speed",
+      "name": {
+        "en": "Speed",
+        "it": "Velocità"
+      },
+      "min": 0,
+      "max": 8,
+      "default": 2
+    }
+  ]
+}

@@ -35,6 +35,7 @@ fn custom_export_stretches_high_precision_color_without_an_extra_quantization() 
             filters: Vec::new(),
             blend: Default::default(),
             masks: Vec::new(),
+            assets: Vec::new(),
         }];
         assert_eq!(
             compose_export_frame(
@@ -119,6 +120,7 @@ fn custom_export_layers() -> Vec<OwnedLayer> {
         filters: Vec::new(),
         blend: Default::default(),
         masks: Vec::new(),
+        assets: Vec::new(),
     };
     vec![
         solid(red(), Default::default()),
@@ -191,6 +193,8 @@ fn custom_export_encodes_the_requested_dimensions_and_black_bars() {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     }]);
     timeline.resolution = (16, 8);
     let id = project.timelines.insert(timeline);
@@ -305,6 +309,8 @@ fn render_video_frame_returns_black_in_a_gap() {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut active = StreamingFrameProvider::default();
@@ -324,6 +330,8 @@ fn render_video_frame_reads_solid_color_at_the_clips_source_frame() {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut active = StreamingFrameProvider::default();
@@ -351,6 +359,8 @@ fn render_video_frame_recurses_into_a_compound_clips_nested_timeline() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         }],
         markers: Vec::new(),
         master: Default::default(),
@@ -390,6 +400,8 @@ fn render_video_frame_recurses_into_a_compound_clips_nested_timeline() {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut provider = StreamingFrameProvider::default();
@@ -448,6 +460,8 @@ fn the_decoders_of_nested_clips_stay_open_between_frames() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         }],
         markers: Vec::new(),
         master: Default::default(),
@@ -487,6 +501,8 @@ fn the_decoders_of_nested_clips_stay_open_between_frames() {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut provider = StreamingFrameProvider::default();
@@ -524,6 +540,8 @@ fn render_video_frame_lets_the_track_below_show_through_the_compound_clips_empty
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         }],
         markers: Vec::new(),
         master: Default::default(),
@@ -564,6 +582,8 @@ fn render_video_frame_lets_the_track_below_show_through_the_compound_clips_empty
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         },
         Track {
             kind: TrackKind::Video,
@@ -574,6 +594,8 @@ fn render_video_frame_lets_the_track_below_show_through_the_compound_clips_empty
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         },
     ]);
     let compositor = vv_render::Compositor::new_headless();
@@ -645,6 +667,8 @@ fn render_video_frame_lets_the_track_below_show_through_a_transparent_png() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         },
         Track {
             kind: TrackKind::Video,
@@ -655,6 +679,8 @@ fn render_video_frame_lets_the_track_below_show_through_a_transparent_png() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         },
     ]);
     let compositor = vv_render::Compositor::new_headless();
@@ -691,6 +717,8 @@ fn render_video_frame_applies_the_transform_to_a_solid_color_clip() {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut active = StreamingFrameProvider::default();
@@ -741,6 +769,8 @@ fn render_video_frame_fails_loudly_when_the_clip_references_a_missing_media() {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut provider = StreamingFrameProvider::default();
@@ -763,6 +793,8 @@ fn render_video_frame_prefers_the_topmost_video_track() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         },
         Track {
             kind: TrackKind::Video,
@@ -773,6 +805,8 @@ fn render_video_frame_prefers_the_topmost_video_track() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         },
     ]);
     let compositor = vv_render::Compositor::new_headless();
@@ -806,6 +840,8 @@ fn mix_audio_track_is_silence_when_no_audio_track_has_clips() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         },
         Track {
             kind: TrackKind::Audio,
@@ -816,6 +852,8 @@ fn mix_audio_track_is_silence_when_no_audio_track_has_clips() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         },
     ]);
     let mixed = mix_audio_track(&project, &tl, 0..25).unwrap();
@@ -884,6 +922,8 @@ fn mix_audio_track_recurses_into_a_compound_clips_nested_timeline() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         }],
         markers: Vec::new(),
         master: Default::default(),
@@ -924,6 +964,8 @@ fn mix_audio_track_recurses_into_a_compound_clips_nested_timeline() {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     }]);
 
     let mixed = mix_audio_track(&project, &tl, 0..50).unwrap();
@@ -1010,6 +1052,8 @@ fn export_keeps_video_and_audio_frame_accurate_at_a_fractional_ntsc_fps() {
                 crossings: Vec::new(),
                 mix: Default::default(),
                 armed: Default::default(),
+                main: false,
+                subtitles: false,
             },
             Track {
                 kind: TrackKind::Audio,
@@ -1020,6 +1064,8 @@ fn export_keeps_video_and_audio_frame_accurate_at_a_fractional_ntsc_fps() {
                 crossings: Vec::new(),
                 mix: Default::default(),
                 armed: Default::default(),
+                main: false,
+                subtitles: false,
             },
         ],
         markers: Vec::new(),
@@ -1168,6 +1214,8 @@ fn mix_audio_track_plays_a_faster_clip_with_or_without_its_pitch() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         }]);
         let mixed = mix_audio_track(&project, &tl, 0..25).unwrap();
         // First channel, the middle half second: away from the stretch's edges.
@@ -1256,6 +1304,8 @@ fn mix_audio_track_of_a_range_is_the_same_part_of_the_whole_mix() {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     };
     let tl = timeline_with(vec![track(vec![clip(1, 30, 5)]), track(vec![faster])]);
 
@@ -1637,4 +1687,190 @@ fn a_scan_blocks_an_export_whose_compound_holds_an_enabled_plugin() {
 
     assert!(scan_blocks_export(true, &project, outer, true));
     assert!(!scan_blocks_export(false, &project, outer, true));
+}
+
+fn red_with_beep(dir: &TempDir, frames: FrameIdx) -> (Project, TimelineId) {
+    let beep_path = dir.join("beep.wav");
+    vv_media::test_support::ffmpeg(
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=1000:sample_rate=48000:duration=3",
+        ],
+        &beep_path,
+    );
+    let mut project = Project::default();
+    let beep = project.media_pool.insert(vv_core::MediaItem {
+        path: beep_path,
+        meta: vv_core::MediaMeta {
+            duration_frames: 75,
+            fps: vv_core::Rational::new(25, 1),
+            width: 0,
+            height: 0,
+            has_video: false,
+            has_audio: true,
+            sample_rate: 48_000,
+            channels: 1,
+            audio_streams: 1,
+            file: Default::default(),
+        },
+        content_hash: 1,
+        compound: None,
+        folder: None,
+    });
+    let audio = Clip::from_source_range(
+        ClipId(1),
+        ClipSource::Media(beep),
+        0,
+        frames,
+        0,
+        vv_core::Rational::one(),
+    );
+    let video = Track {
+        clips: vec![solid_color_clip(10, 0, frames, red())],
+        ..Track::new(TrackKind::Video)
+    };
+    let audio = Track {
+        clips: vec![audio],
+        ..Track::new(TrackKind::Audio)
+    };
+    let mut timeline = timeline_with(vec![video, audio]);
+    timeline.resolution = (64, 48);
+    let id = project.timelines.insert(timeline);
+    (project, id)
+}
+
+fn run_export(
+    project: &Project,
+    id: TimelineId,
+    settings: &ExportSettings,
+) -> Result<(), ExportError> {
+    let total = project.timelines[id].total_frames();
+    export_timeline(
+        project,
+        id,
+        settings,
+        0..total,
+        &Mutex::new(ExportProgress::default()),
+        &AtomicBool::new(false),
+    )
+}
+
+#[test]
+fn output_frames_map_to_timeline_frames_at_another_rate() {
+    let (tl, out) = (vv_core::Rational::new(25, 1), vv_core::Rational::new(50, 1));
+    assert_eq!(output_frame_count(25, tl, out), 50);
+    assert_eq!(
+        (0..4)
+            .map(|i| source_frame(i, 0, 25, tl, out))
+            .collect::<Vec<_>>(),
+        [0, 0, 1, 1]
+    );
+    let out = vv_core::Rational::new(10, 1);
+    assert_eq!(output_frame_count(25, tl, out), 10);
+    assert_eq!(source_frame(9, 0, 25, tl, out), 22);
+    assert_eq!(source_frame(3, 5, 30, tl, tl), 8);
+}
+
+#[test]
+fn export_at_another_frame_rate_keeps_the_duration() {
+    let dir = TempDir::new("vv-export-fps");
+    let (project, id) = red_with_beep(&dir, 50);
+    let mut settings = ExportSettings::new(dir.join("out.mp4"));
+    settings.fps = Some(vv_core::Rational::new(60, 1));
+    run_export(&project, id, &settings).unwrap();
+    let meta = vv_media::probe_media(&settings.output_path).unwrap();
+    assert_eq!(meta.fps, vv_core::Rational::new(60, 1));
+    let seconds = meta.duration_frames as f64 / 60.0;
+    assert!((seconds - 2.0).abs() < 0.1, "{seconds}");
+    let audio = vv_media::decode_audio_track(&settings.output_path, 0)
+        .unwrap()
+        .unwrap();
+    let audio_seconds =
+        audio.samples.len() as f64 / audio.channels as f64 / audio.sample_rate as f64;
+    assert!((audio_seconds - 2.0).abs() < 0.1, "{audio_seconds}");
+}
+
+#[test]
+fn a_bitrate_target_exports_in_cbr() {
+    let dir = TempDir::new("vv-export-bitrate");
+    let (project, id) = red_with_beep(&dir, 75);
+    let mut settings = ExportSettings::new(dir.join("out.mp4"));
+    settings.audio = None;
+    settings.video.bitrate = Some(vv_media::VideoBitrate {
+        kbps: 400,
+        constant: true,
+    });
+    run_export(&project, id, &settings).unwrap();
+    assert!(settings.output_path.is_file());
+}
+
+#[test]
+fn the_audio_file_is_written_with_or_without_the_video() {
+    let dir = TempDir::new("vv-export-audio");
+    let (project, id) = red_with_beep(&dir, 50);
+    let mut settings = ExportSettings::new(dir.join("out.mp4"));
+    settings.audio_file = Some(AudioFileExport {
+        format: vv_media::AudioFileFormat::Wav,
+        bitrate_kbps: 192,
+    });
+    run_export(&project, id, &settings).unwrap();
+    assert!(settings.output_path.is_file());
+    let wav = dir.join("out.wav");
+    assert!(wav.is_file());
+
+    settings.video_enabled = false;
+    settings.output_path = dir.join("only.mp4");
+    run_export(&project, id, &settings).unwrap();
+    assert!(!settings.output_path.exists());
+    let audio = vv_media::decode_audio_track(&dir.join("only.wav"), 0)
+        .unwrap()
+        .unwrap();
+    let seconds = audio.samples.len() as f64 / audio.channels as f64 / audio.sample_rate as f64;
+    assert!((seconds - 2.0).abs() < 0.1, "{seconds}");
+}
+
+#[test]
+fn a_cancelled_export_removes_its_partial_files() {
+    let dir = TempDir::new("vv-export-cancel");
+    let (project, id) = red_with_beep(&dir, 50);
+    let mut settings = ExportSettings::new(dir.join("out.mp4"));
+    settings.audio_file = Some(AudioFileExport {
+        format: vv_media::AudioFileFormat::Wav,
+        bitrate_kbps: 192,
+    });
+    let result = export_timeline(
+        &project,
+        id,
+        &settings,
+        0..50,
+        &Mutex::new(ExportProgress::default()),
+        &AtomicBool::new(true),
+    );
+    assert_eq!(result, Err(ExportError::Cancelled));
+    assert!(!settings.output_path.exists());
+    assert!(!dir.join("out.wav").exists());
+}
+
+#[test]
+fn a_failed_start_keeps_the_file_that_was_already_there() {
+    let dir = TempDir::new("vv-export-keep");
+    let (project, id) = red_with_beep(&dir, 50);
+    let mut settings = ExportSettings::new(dir.join("out.mp4"));
+    std::fs::write(&settings.output_path, b"old").unwrap();
+    settings.custom_size = Some((3, 3));
+    assert!(run_export(&project, id, &settings).is_err());
+    assert_eq!(std::fs::read(&settings.output_path).unwrap(), b"old");
+}
+
+#[test]
+fn the_preview_frame_is_a_small_picture_of_the_output() {
+    let frame = solid_i420(64, 32, RED_I420);
+    let preview = PreviewFrame::from_i420(&frame, 64, 32, 16);
+    assert_eq!((preview.width, preview.height), (16, 8));
+    let [r, g, b, a] = preview.rgba[..4] else {
+        panic!()
+    };
+    assert!(r > 200 && g < 40 && b < 40 && a == 255, "{r} {g} {b}");
 }

@@ -1,0 +1,11 @@
+[package]
+name = "vv-transcribe"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+whisper-rs = "0.16"
+ureq = "3"

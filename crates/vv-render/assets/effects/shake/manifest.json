@@ -1,0 +1,30 @@
+{
+  "kind": "effect",
+  "name": {
+    "en": "Shake",
+    "it": "Tremolio"
+  },
+  "category": "motion",
+  "params": [
+    {
+      "id": "amount",
+      "name": {
+        "en": "Amount",
+        "it": "Quantità"
+      },
+      "min": 0,
+      "max": 0.1,
+      "default": 0.02
+    },
+    {
+      "id": "speed",
+      "name": {
+        "en": "Speed",
+        "it": "Velocità"
+      },
+      "min": 0,
+      "max": 40,
+      "default": 14
+    }
+  ]
+}

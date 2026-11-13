@@ -36,9 +36,14 @@ impl Generator {
     ];
 
     const DEFAULT_SECS: f64 = 5.0;
+    const TEXT_SECS: f64 = 3.0;
 
     pub fn default_len(self, timeline_fps: Rational) -> FrameIdx {
-        (timeline_fps.as_f64() * Self::DEFAULT_SECS).round() as FrameIdx
+        let secs = match self {
+            Generator::Text => Self::TEXT_SECS,
+            _ => Self::DEFAULT_SECS,
+        };
+        (timeline_fps.as_f64() * secs).round() as FrameIdx
     }
 }
 
@@ -550,6 +555,30 @@ pub fn insert_generator(
         Generator::Text => clip.effects.title = Some(TitleParams::default()),
         Generator::Adjustment => {}
     }
+    insert_clips(
+        project,
+        history,
+        timeline_id,
+        vec![(track_index, clip, None::<u64>)],
+        CommandLabel::InsertClips,
+    );
+    id
+}
+
+/// Like `insert_generator` for a text clip, with `title` instead of the
+/// default one (a saved template).
+pub fn insert_title(
+    project: &mut Project,
+    history: &mut History,
+    timeline_id: TimelineId,
+    title: TitleParams,
+    track_index: usize,
+    start: FrameIdx,
+) -> ClipId {
+    let len = Generator::Text.default_len(project.timelines[timeline_id].fps);
+    let id = project.alloc_clip_id();
+    let mut clip = Clip::from_source_range(id, ClipSource::Text, 0, len, start, Rational::one());
+    clip.effects.title = Some(title);
     insert_clips(
         project,
         history,

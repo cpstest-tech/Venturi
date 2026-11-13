@@ -1,0 +1,165 @@
+_version: 2
+
+ribbon.tab_subtitles:
+  en: "Subtitles"
+  it: "Sottotitoli"
+
+subtitles.section_generate:
+  en: "Generate subtitles"
+  it: "Genera sottotitoli"
+
+subtitles.section_templates:
+  en: "Subtitle templates"
+  it: "Template sottotitoli"
+
+subtitles.section_add:
+  en: "Add subtitles"
+  it: "Aggiungi sottotitoli"
+
+subtitles.add_soon:
+  en: "Add subtitles by hand"
+  it: "Aggiungi i sottotitoli a mano"
+
+subtitles.generate:
+  en: "Generate subtitles"
+  it: "Genera sottotitoli"
+
+subtitles.generate_hint:
+  en: "Transcribes the audio of the timeline with a model that runs on this computer and places the subtitles on a text track."
+  it: "Trascrive l'audio della timeline con un modello che gira su questo computer e mette i sottotitoli su una traccia testo."
+
+subtitles.language:
+  en: "Language"
+  it: "Lingua"
+
+subtitles.language_auto:
+  en: "Automatic"
+  it: "Automatica"
+
+subtitles.stage_download:
+  en: "Downloading the model…"
+  it: "Download del modello…"
+
+subtitles.stage_audio:
+  en: "Preparing the audio…"
+  it: "Preparazione dell'audio…"
+
+subtitles.stage_transcribe:
+  en: "Transcribing…"
+  it: "Trascrizione…"
+
+subtitles.model_download_hint:
+  en: "The model (about 180 MB) is downloaded the first time."
+  it: "Il modello (circa 180 MB) viene scaricato la prima volta."
+
+subtitles.existing:
+  en: "%{words} words · %{language} · %{template}"
+  it: "%{words} parole · %{language} · %{template}"
+
+subtitles.no_audio:
+  en: "The timeline has no audio to transcribe."
+  it: "La timeline non ha audio da trascrivere."
+
+subtitles.no_model_dir:
+  en: "Cannot find a folder for the model."
+  it: "Impossibile trovare una cartella per il modello."
+
+subtitles.no_speech:
+  en: "No speech found."
+  it: "Nessun parlato trovato."
+
+subtitles.cancelled:
+  en: "Cancelled."
+  it: "Annullato."
+
+subtitles.pick_template:
+  en: "Pick a template first."
+  it: "Scegli prima un template."
+
+subtitles.category_word:
+  en: "Word by word"
+  it: "Word by word"
+
+subtitles.category_line:
+  en: "Line"
+  it: "Riga"
+
+subtitles.sample_word:
+  en: "Hello"
+  it: "Ciao"
+
+subtitles.sample_line:
+  en: "Hello everyone"
+  it: "Ciao a tutti"
+
+subtitles.tpl_word_pop:
+  en: "Pop"
+  it: "Pop"
+
+subtitles.tpl_word_yellow:
+  en: "Yellow pop"
+  it: "Pop giallo"
+
+subtitles.tpl_word_build:
+  en: "Build up"
+  it: "Progressivo"
+
+subtitles.tpl_line_classic:
+  en: "Classic"
+  it: "Classico"
+
+subtitles.tpl_line_outline:
+  en: "Bold"
+  it: "Grassetto"
+
+subtitles.tpl_line_yellow:
+  en: "Yellow"
+  it: "Giallo"
+
+subtitles.lang_it:
+  en: "Italian"
+  it: "Italiano"
+
+subtitles.lang_en:
+  en: "English"
+  it: "Inglese"
+
+subtitles.lang_es:
+  en: "Spanish"
+  it: "Spagnolo"
+
+subtitles.lang_fr:
+  en: "French"
+  it: "Francese"
+
+subtitles.lang_de:
+  en: "German"
+  it: "Tedesco"
+
+subtitles.lang_pt:
+  en: "Portuguese"
+  it: "Portoghese"
+
+subtitles.lang_nl:
+  en: "Dutch"
+  it: "Olandese"
+
+subtitles.lang_ru:
+  en: "Russian"
+  it: "Russo"
+
+subtitles.lang_pl:
+  en: "Polish"
+  it: "Polacco"
+
+subtitles.lang_tr:
+  en: "Turkish"
+  it: "Turco"
+
+subtitles.lang_ja:
+  en: "Japanese"
+  it: "Giapponese"
+
+subtitles.lang_zh:
+  en: "Chinese"
+  it: "Cinese"

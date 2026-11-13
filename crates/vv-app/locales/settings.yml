@@ -336,3 +336,93 @@ action.select_tool:
 action.slip_tool:
   en: Slip tool
   it: Strumento slip
+
+action.delete_left:
+  en: "Delete left of the playhead"
+  it: "Elimina a sinistra del playhead"
+
+action.delete_right:
+  en: "Delete right of the playhead"
+  it: "Elimina a destra del playhead"
+
+action.blade_tool:
+  en: "Blade mode"
+  it: "Modalità lametta"
+
+action.select_left_tool:
+  en: "Select to the left mode"
+  it: "Modalità seleziona verso sinistra"
+
+action.select_right_tool:
+  en: "Select to the right mode"
+  it: "Modalità seleziona verso destra"
+
+action.duplicate:
+  en: "Duplicate"
+  it: "Duplica"
+
+action.toggle_magnet:
+  en: "Main Track Magnet"
+  it: "Main Track Magnet"
+
+action.toggle_snapping:
+  en: "Auto Snapping"
+  it: "Auto Snapping"
+
+action.toggle_preview_axis:
+  en: "Preview Axis"
+  it: "Preview Axis"
+
+action.fit_timeline:
+  en: "Fit the timeline to the window"
+  it: "Adatta la timeline alla finestra"
+action.make_compound:
+  en: "Group the selection into a compound clip"
+  it: "Raggruppa la selezione in una compound clip"
+action.ungroup_compound:
+  en: "Ungroup the compound clip"
+  it: "Scompatta la compound clip"
+
+action.go_to_start:
+  en: "Go to start"
+  it: "Vai all'inizio"
+
+action.go_to_end:
+  en: "Go to end"
+  it: "Vai alla fine"
+
+action.previous_edit_point:
+  en: "Previous cut"
+  it: "Taglio precedente"
+
+action.next_edit_point:
+  en: "Next cut"
+  it: "Taglio successivo"
+
+action.step_backward_10:
+  en: "Back 10 frames"
+  it: "Indietro di 10 frame"
+
+action.step_forward_10:
+  en: "Forward 10 frames"
+  it: "Avanti di 10 frame"
+
+action.shuttle_back:
+  en: "Play backward (J)"
+  it: "Riproduci indietro (J)"
+
+action.shuttle_pause:
+  en: "Pause (K)"
+  it: "Pausa (K)"
+
+action.shuttle_forward:
+  en: "Play forward (L)"
+  it: "Riproduci avanti (L)"
+
+action.extract_audio:
+  en: "Extract audio"
+  it: "Estrai audio"
+
+action.group_clips:
+  en: "Group clips"
+  it: "Raggruppa clip"

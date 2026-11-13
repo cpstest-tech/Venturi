@@ -1,7 +1,12 @@
 //! GPU compositor (wgpu) and title rasterization, see
 //! ARCHITECTURE.md § GPU compositing.
 
+pub mod assets;
 pub mod compositor;
+mod custom_shader;
+#[cfg(test)]
+#[path = "tests/custom_shader.rs"]
+mod custom_shader_tests;
 pub mod scopes;
 mod smooth_cut;
 pub mod text;
@@ -10,6 +15,7 @@ pub use compositor::{
     Compositor, Layer, LayerContent, OutputFrame, PooledTexture, YuvChroma, YuvFrame,
     device_limits, fit_output_size,
 };
+pub use custom_shader::CustomPass;
 pub use scopes::{ScopeKind, Scopes};
 /// Re-exported: whoever owns a texture for `LayerContent::Texture` must use the
 /// same wgpu version as the compositor.

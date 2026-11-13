@@ -7,7 +7,7 @@ use std::sync::Arc;
 /// Linux dialog filters are case-sensitive globs, so `mp4` becomes `[mM][pP]4`
 /// to show `.MP4` (GoPro). macOS and Windows are already case-insensitive and
 /// do not take globs here.
-fn case_insensitive(exts: &[&str]) -> Vec<String> {
+pub(crate) fn case_insensitive(exts: &[&str]) -> Vec<String> {
     if !cfg!(target_os = "linux") {
         return exts.iter().map(ToString::to_string).collect();
     }
@@ -42,6 +42,7 @@ pub(crate) enum UnsavedChoice {
 /// carries the pool selection as it was when it opened.
 pub(crate) enum DialogKind {
     ImportMedia,
+    ImportToCategory(library_ribbon::Category),
     SaveProjectAs,
     ExportOtio(TimelineId),
     ImportOtio,
@@ -129,17 +130,7 @@ impl VenturiApp {
             // warnings stay as they are.
             E::ImportStarted { job } if !self.is_agent_job(job) => self.import_warnings.clear(),
             E::ImportStarted { .. } => {}
-            E::MediaAdded { job, media_id } => {
-                if !self.is_agent_job(job) {
-                    let meta = self.session.project.media_pool[media_id].meta.clone();
-                    if meta.has_video {
-                        self.ensure_timeline_for(&meta, Some(job));
-                    } else {
-                        self.ensure_timeline_audio_only(Some(job));
-                    }
-                }
-                self.enqueue_media_background_jobs(media_id);
-            }
+            E::MediaAdded { media_id, .. } => self.enqueue_media_background_jobs(media_id),
             E::ImportFinished {
                 job,
                 imported,
@@ -204,16 +195,7 @@ impl VenturiApp {
     }
 
     fn insert_media(&mut self, path: PathBuf, meta: vv_core::MediaMeta) -> MediaId {
-        let group = self.session.history.begin_group();
-        if meta.has_video {
-            self.ensure_timeline_for(&meta, None);
-        } else {
-            self.ensure_timeline_audio_only(None);
-        }
         let media_id = self.session.add_media(path, meta);
-        self.session
-            .history
-            .end_group_as(group, vv_core::CommandLabel::ImportMedia);
         self.enqueue_media_background_jobs(media_id);
         media_id
     }
@@ -329,6 +311,9 @@ impl VenturiApp {
             (DialogKind::ImportMedia, DialogOutcome::Files(Some(paths))) => {
                 self.import_media_files(paths);
             }
+            (DialogKind::ImportToCategory(category), DialogOutcome::Files(Some(paths))) => {
+                self.import_into_category(paths, category);
+            }
             (DialogKind::SaveProjectAs, DialogOutcome::File(Some(path))) => {
                 self.save_project_to(&path);
             }
@@ -378,7 +363,16 @@ impl VenturiApp {
         });
         // Drawn again this frame if the pool is still shown.
         let pool_area = self.library_ui.area.take();
+        let ribbon_area = self.library_ribbon.area.take();
         if paths.is_empty() {
+            return;
+        }
+        if let Some(category) = self.ribbon_import_category()
+            && ribbon_area
+                .zip(pointer)
+                .is_some_and(|(area, p)| area.contains(p))
+        {
+            self.import_into_category(paths, category);
             return;
         }
         let on_pool = pool_area
@@ -446,6 +440,10 @@ impl VenturiApp {
     // Opens the file dialog and imports the chosen files (used by the toolbar
     // button and by the Ctrl+I shortcut).
     pub(crate) fn import_media_dialog(&mut self) {
+        if let Some(category) = self.ribbon_import_category() {
+            self.import_to_category_dialog(category);
+            return;
+        }
         const VIDEO: &[&str] = vv_media::VIDEO_EXTENSIONS;
         const AUDIO: &[&str] = vv_media::AUDIO_EXTENSIONS;
         let media: Vec<&str> = [VIDEO, AUDIO, vv_media::IMAGE_EXTENSIONS].concat();
@@ -845,30 +843,10 @@ impl VenturiApp {
         self.restore_playhead();
     }
 
-    /// Opens the settings window: the export starts only from there
+    /// Opens the export modal: the export starts only from there
     /// (`run_export`).
     pub(crate) fn start_export(&mut self) {
-        // The button is disabled during an export, but Ctrl+Shift+E is not.
-        let Some(timeline_id) = self.timeline_id else {
-            return;
-        };
-        if self.export.is_some() || self.export_dialog.is_some() {
-            return;
-        }
-        let dialog = match self.last_export_settings.clone() {
-            Some(settings) => {
-                export_dialog::ExportDialog::new(settings, crate::hw_decode::export_choices())
-            }
-            None => export_dialog::ExportDialog::preferred(
-                export_dialog::default_output_path(
-                    self.session.path(),
-                    &self.project_label(),
-                    &self.session.project.timelines[timeline_id].name,
-                ),
-                crate::hw_decode::export_choices(),
-            ),
-        };
-        self.export_dialog = Some(dialog);
+        self.open_export_modal();
     }
 
     pub(crate) fn show_export_dialog(&mut self, ui: &mut egui::Ui) {
@@ -980,6 +958,10 @@ impl VenturiApp {
     }
 
     pub(crate) fn show_export_progress(&mut self, ui: &mut egui::Ui) {
+        // The export modal shows its own progress.
+        if self.export_modal.is_some() {
+            return;
+        }
         let Some(state) = &self.export else {
             return;
         };

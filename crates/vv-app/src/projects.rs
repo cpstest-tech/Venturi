@@ -10,6 +10,7 @@ use vv_core::{ClipSource, Project, TimelineId, TrackKind};
 
 pub const PROJECT_EXTENSION: &str = "vvproj";
 const COVER_FILE: &str = ".cover.png";
+const CUSTOM_COVER_FILE: &str = ".cover-custom.png";
 const COVER_WIDTH: u32 = 320;
 
 #[derive(Debug, thiserror::Error)]
@@ -370,6 +371,9 @@ fn dir_size(dir: &Path) -> u64 {
 /// The first video media of the main timeline, cached in the folder until
 /// the project changes again.
 fn cover(project: &Project, dir: &Path, project_modified: Option<SystemTime>) -> Option<Cover> {
+    if let Some(chosen) = read_png(&dir.join(CUSTOM_COVER_FILE)) {
+        return Some(chosen);
+    }
     let cached = dir.join(COVER_FILE);
     let cache_modified = std::fs::metadata(&cached).and_then(|m| m.modified()).ok();
     if cache_modified.is_some()
@@ -412,6 +416,21 @@ fn first_video_media(project: &Project) -> Option<&vv_core::MediaItem> {
         })
         .min_by_key(|(start, _)| *start)
         .map(|(_, item)| item)
+}
+
+/// The cover the user picked, kept next to the project file.
+pub fn write_custom_cover(project_file: &Path, width: u32, height: u32, rgba: &[u8]) {
+    let Some(dir) = project_file.parent() else {
+        return;
+    };
+    let cover = Cover {
+        width,
+        height,
+        rgba: rgba.to_vec(),
+    };
+    if let Some(png) = encode_png(&cover) {
+        let _ = vv_core::write_atomic(&dir.join(CUSTOM_COVER_FILE), &png);
+    }
 }
 
 fn encode_png(cover: &Cover) -> Option<Vec<u8>> {

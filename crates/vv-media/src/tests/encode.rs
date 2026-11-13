@@ -109,6 +109,7 @@ fn encodes_with_every_available_codec_and_preset_choice() {
                 codec,
                 preset: codec.presets().first().copied().unwrap_or_default().into(),
                 quality: codec.default_quality(),
+                bitrate: None,
             };
             let mut encoder =
                 Encoder::new(&path, 256, 256, fps, &video, Some((48000, 2, audio))).unwrap();
@@ -131,4 +132,51 @@ fn encodes_with_every_available_codec_and_preset_choice() {
 fn x264_passes_the_color_check() {
     assert_eq!(VideoCodec::X264.check_colors().unwrap(), None);
     assert!(VideoCodec::X264.is_available());
+}
+
+#[test]
+fn encodes_with_a_bitrate_target_in_both_modes() {
+    let dir = crate::test_support::TempDir::new("vv-media-encode-test");
+    let fps = vv_core::Rational::new(25, 1);
+    let frame = solid_i420(64, 64, [63, 102, 240]);
+    for constant in [true, false] {
+        let path = dir.join(format!("bitrate-{constant}.mp4"));
+        let video = VideoSettings {
+            bitrate: Some(VideoBitrate {
+                kbps: 800,
+                constant,
+            }),
+            ..VideoSettings::default()
+        };
+        let mut encoder = Encoder::new(&path, 64, 64, fps, &video, None).unwrap();
+        for _ in 0..25 {
+            encoder.write_video_frame(&frame).unwrap();
+        }
+        encoder.finish().unwrap();
+        let meta = crate::probe::probe(&path).unwrap();
+        assert_eq!((meta.width, meta.height), (64, 64), "constant={constant}");
+    }
+}
+
+#[test]
+fn writes_every_available_audio_file_format() {
+    let dir = crate::test_support::TempDir::new("vv-media-encode-test");
+    let samples: Vec<f32> = (0..48000 * 2)
+        .map(|i| ((i / 2) as f32 / 48000.0 * 440.0 * std::f32::consts::TAU).sin() * 0.5)
+        .collect();
+    for format in AudioFileFormat::ALL
+        .into_iter()
+        .filter(|f| f.is_available())
+    {
+        let path = dir.join(format!("out.{}", format.extension()));
+        let mut encoder = AudioFileEncoder::new(&path, 48000, 2, format, 192).unwrap();
+        encoder.write_samples(&samples).unwrap();
+        encoder.finish().unwrap();
+        let meta = crate::probe::probe(&path).unwrap();
+        assert!(meta.has_audio, "{format:?}");
+        assert!(!meta.has_video, "{format:?}");
+        let audio = crate::audio::decode_audio_track(&path, 0).unwrap().unwrap();
+        let peak = audio.samples.iter().cloned().fold(0.0_f32, f32::max);
+        assert!(peak > 0.1, "{format:?}: peak={peak}");
+    }
 }

@@ -1,0 +1,185 @@
+use super::*;
+use crate::{History, Timeline};
+
+fn words(spec: &[(&str, u32, u32)]) -> Vec<CaptionWord> {
+    spec.iter()
+        .map(|&(text, start_ms, end_ms)| CaptionWord {
+            text: text.into(),
+            start_ms,
+            end_ms,
+        })
+        .collect()
+}
+
+fn project() -> (Project, TimelineId) {
+    let mut project = Project::default();
+    let timeline = project.timelines.insert(Timeline {
+        name: "t".into(),
+        fps: Rational::new(25, 1),
+        resolution: (1920, 1080),
+        tracks: vec![Track::new_main()],
+        markers: Vec::new(),
+        master: Default::default(),
+    });
+    (project, timeline)
+}
+
+fn sample() -> Vec<CaptionWord> {
+    words(&[
+        ("Ciao", 0, 400),
+        ("a", 450, 600),
+        ("tutti.", 650, 1200),
+        ("Oggi", 2500, 2900),
+        ("parliamo", 2950, 3500),
+    ])
+}
+
+fn texts(project: &Project, timeline: TimelineId) -> Vec<String> {
+    let timeline = &project.timelines[timeline];
+    let track = &timeline.tracks[subtitle_track(timeline).unwrap()];
+    track
+        .clips
+        .iter()
+        .map(|c| c.effects.title.as_ref().unwrap().content.default.clone())
+        .collect()
+}
+
+fn generate(project: &mut Project, timeline: TimelineId, id: &str) -> SetCaptions {
+    let template = SubtitleTemplate::find(id).unwrap();
+    let words = sample();
+    let clips = build_clips(project, timeline, &words, template);
+    let captions = Captions {
+        language: "it".into(),
+        words,
+        template: id.into(),
+    };
+    SetCaptions::new(timeline, Some(captions), clips)
+}
+
+#[test]
+fn lines_break_on_sentence_end_and_pause() {
+    let lines = caption_lines(&sample());
+    let texts: Vec<_> = lines.iter().map(|l| l.text.as_str()).collect();
+    assert_eq!(texts, ["Ciao a tutti.", "Oggi parliamo"]);
+}
+
+#[test]
+fn long_text_wraps_at_the_character_limit() {
+    let many: Vec<_> = (0..20)
+        .map(|i| CaptionWord {
+            text: "parola".into(),
+            start_ms: i * 300,
+            end_ms: i * 300 + 250,
+        })
+        .collect();
+    assert!(
+        caption_lines(&many)
+            .iter()
+            .all(|l| l.text.chars().count() <= 32)
+    );
+}
+
+#[test]
+fn a_line_template_makes_one_clip_per_line() {
+    let (mut project, timeline) = project();
+    let mut history = History::default();
+    let command = generate(&mut project, timeline, "line_classic");
+    history.do_command(&mut project, Box::new(command));
+    assert_eq!(
+        texts(&project, timeline),
+        ["Ciao a tutti.", "Oggi parliamo"]
+    );
+}
+
+#[test]
+fn word_templates_make_one_clip_per_word() {
+    let (mut project, timeline) = project();
+    let mut history = History::default();
+    let command = generate(&mut project, timeline, "word_pop");
+    history.do_command(&mut project, Box::new(command));
+    assert_eq!(texts(&project, timeline).len(), 5);
+    let command = generate(&mut project, timeline, "word_build");
+    history.do_command(&mut project, Box::new(command));
+    assert_eq!(
+        texts(&project, timeline)[..3],
+        ["Ciao", "Ciao a", "Ciao a tutti."]
+    );
+}
+
+#[test]
+fn a_new_template_replaces_the_old_clips_and_keeps_the_words() {
+    let (mut project, timeline) = project();
+    let mut history = History::default();
+    let command = generate(&mut project, timeline, "word_pop");
+    history.do_command(&mut project, Box::new(command));
+    let command = generate(&mut project, timeline, "line_outline");
+    history.do_command(&mut project, Box::new(command));
+    assert_eq!(texts(&project, timeline).len(), 2);
+    let subtitle_tracks = project.timelines[timeline]
+        .tracks
+        .iter()
+        .filter(|t| t.subtitles)
+        .count();
+    assert_eq!(subtitle_tracks, 1);
+    assert_eq!(project.captions[&timeline].words, sample());
+    assert_eq!(project.captions[&timeline].template, "line_outline");
+}
+
+#[test]
+fn undo_restores_the_previous_clips_and_the_track() {
+    let (mut project, timeline) = project();
+    let mut history = History::default();
+    let command = generate(&mut project, timeline, "word_pop");
+    history.do_command(&mut project, Box::new(command));
+    let command = generate(&mut project, timeline, "line_classic");
+    history.do_command(&mut project, Box::new(command));
+    history.undo(&mut project);
+    assert_eq!(texts(&project, timeline).len(), 5);
+    assert_eq!(project.captions[&timeline].template, "word_pop");
+    history.undo(&mut project);
+    assert_eq!(project.timelines[timeline].tracks.len(), 1);
+    assert!(project.captions.is_empty());
+}
+
+#[test]
+fn clips_never_overlap_and_have_a_length() {
+    let (mut project, timeline) = project();
+    let tight = words(&[("a", 0, 10), ("b", 10, 20), ("c", 20, 30)]);
+    let template = SubtitleTemplate::find("word_pop").unwrap();
+    let clips = build_clips(&mut project, timeline, &tight, template);
+    for pair in clips.windows(2) {
+        assert!(pair[0].timeline_end() <= pair[1].timeline_start);
+    }
+    assert!(clips.iter().all(|c| c.timeline_len >= 1));
+}
+
+#[test]
+fn srt_and_txt_follow_the_lines() {
+    let srt = to_srt(&sample());
+    assert!(srt.starts_with("1\n00:00:00,000 --> 00:00:01,200\nCiao a tutti.\n\n2\n"));
+    assert_eq!(to_txt(&sample()), "Ciao a tutti. Oggi parliamo\n");
+}
+
+#[test]
+fn captions_survive_a_save_and_old_files_load_without_them() {
+    let (mut project, timeline) = project();
+    let mut history = History::default();
+    let command = generate(&mut project, timeline, "line_classic");
+    history.do_command(&mut project, Box::new(command));
+    let text = crate::persistence::project_to_string(&project).unwrap();
+    let loaded = crate::persistence::project_from_str(&text).unwrap();
+    assert_eq!(loaded.captions, project.captions);
+    assert!(
+        loaded.timelines[timeline]
+            .tracks
+            .iter()
+            .any(|t| t.subtitles)
+    );
+    let empty = crate::persistence::project_to_string(&Project::default()).unwrap();
+    assert!(
+        crate::persistence::project_from_str(&empty)
+            .unwrap()
+            .captions
+            .is_empty()
+    );
+}

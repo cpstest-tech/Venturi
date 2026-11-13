@@ -298,6 +298,8 @@ fn would_create_a_cycle_catches_an_indirect_cycle_through_a_nested_compound_clip
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     });
 
     assert!(project.would_create_a_cycle(media_b, a), "A -> B -> A");

@@ -279,6 +279,21 @@ impl TimelineAudio {
         self.publish();
     }
 
+    /// Leaves the media preview with no timeline to fall back on.
+    pub fn clear_media(&mut self) {
+        if self.synced_media.take().is_none() {
+            return;
+        }
+        self.mix = Arc::new(MixSnapshot::new(
+            self.mix.sample_rate,
+            self.mix.channels,
+            Vec::new(),
+            Vec::new(),
+            Channel::UNITY,
+        ));
+        self.publish();
+    }
+
     /// After a new snapshot, the fast forward stretched from the old one may
     /// be stale. Another timeline or an edit throws it away at once: it
     /// would play the old audio. Audio that only arrived replaces a window

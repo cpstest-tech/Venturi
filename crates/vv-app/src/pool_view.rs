@@ -36,6 +36,12 @@ pub(crate) enum Thumb {
     None,
 }
 
+/// Star and "+" shown over an item the pointer is on.
+#[derive(Clone, Copy)]
+pub(crate) struct HoverActions {
+    pub favorite: bool,
+}
+
 pub(crate) struct PoolEntry<I, F> {
     pub id: I,
     pub name: String,
@@ -45,6 +51,9 @@ pub(crate) struct PoolEntry<I, F> {
     pub proxy: Option<proxy_worker::ProxyState>,
     /// A slow double click on the name starts a rename.
     pub renamable: bool,
+    pub hover: Option<HoverActions>,
+    /// Already used in the timeline: shows the "Added" tag on grid tiles.
+    pub added: bool,
 }
 
 pub(crate) struct PoolFolder<F> {
@@ -65,6 +74,10 @@ pub(crate) enum PoolEvent<I, F, A> {
     /// The payload is an [`ItemsDrag`]: for the timeline the caller turns
     /// it into a `timeline_ui::MediaDragSet`.
     DragStarted(Vec<I>),
+    Clicked(I),
+    ToggleFavorite(I),
+    /// The "+" of an item: insert it at the playhead.
+    Insert(I),
     Action(A),
 }
 
@@ -886,7 +899,7 @@ fn item_row<I: PoolId, F: PoolId, M: PoolMenus<I, F>>(
             ui.group(|ui| {
                 ui.set_min_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    paint_thumb(ui, &entry.thumb, meta, DETAILS_THUMB);
+                    let _ = paint_thumb(ui, &entry.thumb, meta, DETAILS_THUMB);
                     let name_right = name_col_right.min(ui.max_rect().right() - DURATION_COL_W);
                     let name_w = name_width(ui, entry, name_right);
                     ui.vertical(|ui| {
@@ -932,7 +945,8 @@ fn item_row<I: PoolId, F: PoolId, M: PoolMenus<I, F>>(
                 .show(ui, |ui| {
                     ui.set_width(grid_thumb.x);
                     ui.vertical(|ui| {
-                        paint_thumb(ui, &entry.thumb, meta, grid_thumb);
+                        let thumb_rect = paint_thumb(ui, &entry.thumb, meta, grid_thumb);
+                        paint_tile_tags(ui, thumb_rect, entry);
                         name(ui);
                     });
                 })
@@ -971,7 +985,22 @@ fn item_row<I: PoolId, F: PoolId, M: PoolMenus<I, F>>(
     if state.selected.contains(id) {
         paint_selected(ui, rect, 4.0);
     }
+    if let Some(actions) = entry.hover
+        && !is_renaming
+        && ui.rect_contains_pointer(rect)
+        && !resp.dragged()
+    {
+        let (star, plus) =
+            crate::library_ribbon::hover_buttons(ui, interact_id, rect, actions.favorite);
+        if star {
+            events.push(PoolEvent::ToggleFavorite(id.clone()));
+        }
+        if plus {
+            events.push(PoolEvent::Insert(id.clone()));
+        }
+    }
     if resp.clicked() {
+        events.push(PoolEvent::Clicked(id.clone()));
         let modifiers = ui.input(|i| i.modifiers);
         let on_name = entry.renamable
             && modifiers.is_none()
@@ -1129,7 +1158,7 @@ fn paint_thumb(
     thumb: &Thumb,
     meta: &vv_core::MediaMeta,
     thumb_size: egui::Vec2,
-) {
+) -> egui::Rect {
     let (rect, _) = ui.allocate_exact_size(thumb_size, egui::Sense::hover());
     if let Thumb::Texture(texture) = thumb {
         let tex_size = texture.size_vec2();
@@ -1141,7 +1170,7 @@ fn paint_thumb(
                 ui,
                 egui::Rect::from_center_size(rect.center(), tex_size * scale),
             );
-        return;
+        return rect;
     }
     ui.painter()
         .rect_filled(rect, 2.0, ui.visuals().extreme_bg_color);
@@ -1163,6 +1192,37 @@ fn paint_thumb(
             );
         }
         _ => {}
+    }
+    rect
+}
+
+fn paint_tile_tags<I, F>(ui: &egui::Ui, rect: egui::Rect, entry: &PoolEntry<I, F>) {
+    let painter = ui.painter();
+    let font = egui::FontId::proportional(crate::theme::FONT_SMALL);
+    let tag = |text: String, anchor: egui::Align2, corner: egui::Pos2| {
+        let galley = painter.layout_no_wrap(text, font.clone(), crate::theme::TEXT_PRIMARY);
+        let size = galley.size() + egui::vec2(8.0, 2.0);
+        let tag_rect = anchor.anchor_size(corner, size);
+        painter.rect_filled(tag_rect, crate::theme::RADIUS_TAG, theme::BG_WINDOW);
+        painter.galley(
+            tag_rect.min + egui::vec2(4.0, 1.0),
+            galley,
+            crate::theme::TEXT_PRIMARY,
+        );
+    };
+    if entry.meta.duration_frames > 0 && !entry.meta.is_image() {
+        tag(
+            duration_text(&entry.meta),
+            egui::Align2::RIGHT_TOP,
+            rect.right_top() + egui::vec2(-4.0, 4.0),
+        );
+    }
+    if entry.added {
+        tag(
+            t!("ribbon.added").into_owned(),
+            egui::Align2::LEFT_TOP,
+            rect.left_top() + egui::vec2(4.0, 4.0),
+        );
     }
 }
 

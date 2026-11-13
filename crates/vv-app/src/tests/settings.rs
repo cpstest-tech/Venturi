@@ -60,11 +60,11 @@ fn clear_mark_shortcuts_use_alt_i_o_and_x() {
 #[test]
 fn assigning_a_shortcut_takes_it_away_from_other_actions() {
     let mut keymap = Keymap::default();
-    let stolen = keymap.assign(Action::Split, Some(0), Shortcut::plain(egui::Key::D));
+    let stolen = keymap.assign(Action::Split, Some(0), Shortcut::plain(egui::Key::V));
     assert_eq!(stolen, vec![Action::ToggleDisabled]);
     assert_eq!(
         keymap.shortcuts(Action::Split),
-        &[Shortcut::plain(egui::Key::D)]
+        &[Shortcut::plain(egui::Key::V)]
     );
     assert!(keymap.shortcuts(Action::ToggleDisabled).is_empty());
 }
@@ -552,4 +552,66 @@ fn projects_folder_layout_and_open_project_survive_save_and_load() {
     assert_eq!(loaded.projects_dir, None);
     assert_eq!(loaded.open_project, None);
     assert_eq!(loaded.projects_dir(), default_projects_dir());
+}
+
+#[test]
+fn the_default_shortcuts_follow_the_timeline_spec() {
+    use egui::Key;
+    let keymap = Keymap::default();
+    let plain = Shortcut::plain;
+    let ctrl = Shortcut::ctrl;
+    let shift = |key| Shortcut {
+        shift: true,
+        ..Shortcut::plain(key)
+    };
+    let ctrl_shift = |key| Shortcut {
+        shift: true,
+        ..Shortcut::ctrl(key)
+    };
+    let expected = [
+        (Action::TogglePlayback, plain(Key::Space)),
+        (Action::Split, ctrl(Key::B)),
+        (Action::DeleteLeft, plain(Key::Q)),
+        (Action::DeleteRight, plain(Key::W)),
+        (Action::Delete, plain(Key::Delete)),
+        (Action::Delete, plain(Key::Backspace)),
+        (Action::Undo, ctrl(Key::Z)),
+        (Action::Redo, ctrl(Key::Y)),
+        (Action::Redo, ctrl_shift(Key::Z)),
+        (Action::Copy, ctrl(Key::C)),
+        (Action::Cut, ctrl(Key::X)),
+        (Action::Paste, ctrl(Key::V)),
+        (Action::Duplicate, ctrl(Key::D)),
+        (Action::SelectTool, plain(Key::A)),
+        (Action::BladeTool, plain(Key::B)),
+        (Action::SelectLeftTool, plain(Key::OpenBracket)),
+        (Action::SelectRightTool, plain(Key::CloseBracket)),
+        (Action::ToggleMagnet, plain(Key::P)),
+        (Action::ToggleSnapping, plain(Key::N)),
+        (Action::TogglePreviewAxis, plain(Key::S)),
+        (Action::AddMarker, plain(Key::M)),
+        (Action::ZoomIn, ctrl(Key::Plus)),
+        (Action::ZoomOut, ctrl(Key::Minus)),
+        (Action::FitTimeline, shift(Key::Z)),
+        (Action::StepBackward, plain(Key::ArrowLeft)),
+        (Action::StepForward, plain(Key::ArrowRight)),
+        (Action::StepBackward10, shift(Key::ArrowLeft)),
+        (Action::StepForward10, shift(Key::ArrowRight)),
+        (Action::PreviousEditPoint, plain(Key::ArrowUp)),
+        (Action::NextEditPoint, plain(Key::ArrowDown)),
+        (Action::GoToStart, plain(Key::Home)),
+        (Action::GoToEnd, plain(Key::End)),
+        (Action::ShuttleBack, plain(Key::J)),
+        (Action::ShuttlePause, plain(Key::K)),
+        (Action::ShuttleForward, plain(Key::L)),
+        (Action::ExtractAudio, ctrl_shift(Key::S)),
+        (Action::GroupClips, ctrl(Key::G)),
+        (Action::ToggleDisabled, plain(Key::V)),
+    ];
+    for (action, shortcut) in expected {
+        assert!(
+            keymap.shortcuts(action).contains(&shortcut),
+            "{action:?} should use {shortcut}"
+        );
+    }
 }

@@ -31,6 +31,8 @@ fn active_video_clip_at_prefers_the_topmost_video_track_where_it_has_a_clip() {
                 crossings: Vec::new(),
                 mix: Default::default(),
                 armed: Default::default(),
+                main: false,
+                subtitles: false,
             },
             Track {
                 kind: TrackKind::Video,
@@ -41,6 +43,8 @@ fn active_video_clip_at_prefers_the_topmost_video_track_where_it_has_a_clip() {
                 crossings: Vec::new(),
                 mix: Default::default(),
                 armed: Default::default(),
+                main: false,
+                subtitles: false,
             },
         ],
         markers: Vec::new(),
@@ -77,6 +81,8 @@ fn active_video_clip_at_skips_what_is_not_composited() {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     };
     let mut disabled = clip_at(0, 10, 2);
     disabled.disabled = true;
@@ -116,6 +122,8 @@ fn active_video_clips_at_returns_every_covering_track_bottom_to_top() {
                 crossings: Vec::new(),
                 mix: Default::default(),
                 armed: Default::default(),
+                main: false,
+                subtitles: false,
             },
             Track {
                 kind: TrackKind::Video,
@@ -126,6 +134,8 @@ fn active_video_clips_at_returns_every_covering_track_bottom_to_top() {
                 crossings: Vec::new(),
                 mix: Default::default(),
                 armed: Default::default(),
+                main: false,
+                subtitles: false,
             },
         ],
         markers: Vec::new(),
@@ -166,6 +176,8 @@ fn active_video_clip_at_ignores_audio_tracks() {
                 crossings: Vec::new(),
                 mix: Default::default(),
                 armed: Default::default(),
+                main: false,
+                subtitles: false,
             },
             Track {
                 kind: TrackKind::Audio,
@@ -176,6 +188,8 @@ fn active_video_clip_at_ignores_audio_tracks() {
                 crossings: Vec::new(),
                 mix: Default::default(),
                 armed: Default::default(),
+                main: false,
+                subtitles: false,
             },
         ],
         markers: Vec::new(),
@@ -235,6 +249,8 @@ fn total_frames_is_the_furthest_clip_end_across_tracks() {
                 crossings: Vec::new(),
                 mix: Default::default(),
                 armed: Default::default(),
+                main: false,
+                subtitles: false,
             },
             Track {
                 kind: TrackKind::Audio,
@@ -245,6 +261,8 @@ fn total_frames_is_the_furthest_clip_end_across_tracks() {
                 crossings: Vec::new(),
                 mix: Default::default(),
                 armed: Default::default(),
+                main: false,
+                subtitles: false,
             },
         ],
         markers: Vec::new(),
@@ -394,6 +412,8 @@ fn refresh_clip_rates_conforms_a_clip_loaded_without_a_rate() {
             crossings: Vec::new(),
             mix: Default::default(),
             armed: Default::default(),
+            main: false,
+            subtitles: false,
         }],
         markers: Vec::new(),
         master: Default::default(),
@@ -531,6 +551,7 @@ fn transitions_do_not_apply_to_adjustment_clips() {
         direction: PushDirection::Right,
         ease: Ease::InOut,
         curve: 0.5,
+        asset: None,
     };
     let mut adjustment = clip_at(10, 10, 2);
     adjustment.source = ClipSource::Adjustment;
@@ -558,6 +579,7 @@ fn edge_cross_dissolve_fades_opacity_without_moving_the_clip() {
         direction: PushDirection::Right,
         ease: Ease::None,
         curve: 0.5,
+        asset: None,
     };
     let mut clip = clip_at(0, 100, 1);
     clip.effects.transition_in = Some(dissolve.clone());

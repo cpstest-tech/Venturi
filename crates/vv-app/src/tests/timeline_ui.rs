@@ -1978,3 +1978,28 @@ fn a_clip_whose_audio_failed_shows_a_warning_badge() {
         std::collections::HashMap::from([(clip_id, ClipAudioFailure::Decode("corrupt".into()))]);
     assert_eq!(badges(&failed) - badges(&Default::default()), 1);
 }
+
+#[test]
+fn keyframe_diamonds_follow_the_transform_keyframes_inside_the_clip() {
+    let mut clip = Clip::new(
+        ClipId(1),
+        ClipSource::SolidColor,
+        0,
+        100,
+        50,
+        vv_core::Rational::one(),
+        vv_core::Rational::one(),
+    );
+    let zoom = clip
+        .effects
+        .transform
+        .track_mut(vv_core::TransformParam::ZoomX);
+    zoom.upsert(10, 1.0, vv_core::Interpolation::Linear);
+    zoom.upsert(30, 2.0, vv_core::Interpolation::Linear);
+    let position = clip
+        .effects
+        .transform
+        .track_mut(vv_core::TransformParam::PositionX);
+    position.upsert(30, 5.0, vv_core::Interpolation::Linear);
+    assert_eq!(keyframe_timeline_frames(&clip), vec![110, 130]);
+}

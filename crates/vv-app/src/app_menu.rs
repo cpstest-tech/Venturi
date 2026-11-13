@@ -20,7 +20,7 @@ impl VenturiApp {
             self.timeline_state
                 .drop_locked(&self.session.project.timelines[timeline_id]);
         }
-        let capturing_shortcut = self
+        let blocks_shortcuts = self
             .settings_dialog
             .as_ref()
             .is_some_and(|d| d.is_capturing())
@@ -28,17 +28,23 @@ impl VenturiApp {
                 .preset_dialog
                 .as_ref()
                 .is_some_and(|d| d.is_capturing())
-            || self.library_ui.confirm_delete.is_some();
+            || self.library_ui.confirm_delete.is_some()
+            || self.export_modal.is_some()
+            || self.cover_picker.is_some()
+            || self.pending_project_switch.is_some();
         let library_tab = self.library_ui.tab == library_ui::PoolTab::Library;
         let keymap = self.settings.keymap.clone();
         let menu_paste = std::mem::take(&mut self.menu_paste_pending);
+        let ctx = ui.ctx().clone();
         let mut open_compound = false;
+        let mut make_compound = false;
+        let mut ungroup_compound = false;
         let mut exit_compound = false;
         ui.input(|i| {
             arrow_input.1 = i.time;
             // Mouse "back" button, as in a web browser.
             exit_compound = i.pointer.button_pressed(egui::PointerButton::Extra1);
-            if typing || capturing_shortcut || menu_open {
+            if typing || blocks_shortcuts || menu_open {
                 return;
             }
             let pressed = |action| keymap.pressed(action, i);
@@ -69,14 +75,87 @@ impl VenturiApp {
             if pressed(Action::Split) {
                 self.split_at_playhead();
             }
-            if pressed(Action::SelectTool) {
-                self.timeline_state.tool = timeline_ui::TimelineTool::Select;
+            for (action, tool) in [
+                (Action::SelectTool, timeline_ui::TimelineTool::Select),
+                (Action::BladeTool, timeline_ui::TimelineTool::Blade),
+                (
+                    Action::SelectLeftTool,
+                    timeline_ui::TimelineTool::SelectLeft,
+                ),
+                (
+                    Action::SelectRightTool,
+                    timeline_ui::TimelineTool::SelectRight,
+                ),
+                (Action::SlipTool, timeline_ui::TimelineTool::Slip),
+            ] {
+                if pressed(action) {
+                    self.set_timeline_tool(tool);
+                }
+            }
+            for (action, command) in [
+                (Action::DeleteLeft, timeline_ui::TimelineCommand::DeleteLeft),
+                (
+                    Action::DeleteRight,
+                    timeline_ui::TimelineCommand::DeleteRight,
+                ),
+                (Action::Duplicate, timeline_ui::TimelineCommand::Duplicate),
+                (
+                    Action::ExtractAudio,
+                    timeline_ui::TimelineCommand::ExtractAudio,
+                ),
+                (Action::GroupClips, timeline_ui::TimelineCommand::Group),
+            ] {
+                if pressed(action) {
+                    self.run_timeline_command(&ctx, command);
+                }
+            }
+            if pressed(Action::ToggleMagnet) {
+                self.timeline_state.magnet = !self.timeline_state.magnet;
+            }
+            if pressed(Action::ToggleSnapping) {
+                self.snapping_enabled = !self.snapping_enabled;
+            }
+            if pressed(Action::TogglePreviewAxis) {
+                self.timeline_state.preview_axis = !self.timeline_state.preview_axis;
+            }
+            if pressed(Action::FitTimeline) {
+                self.timeline_state.fit_requested = true;
+            }
+            if pressed(Action::GoToStart) {
+                self.go_to_start();
+            }
+            if pressed(Action::GoToEnd) {
+                self.go_to_end();
+            }
+            if pressed(Action::PreviousEditPoint) {
+                self.jump_to_edit_point(false);
+            }
+            if pressed(Action::NextEditPoint) {
+                self.jump_to_edit_point(true);
+            }
+            if pressed(Action::StepBackward10) {
+                self.step_playhead_by_ten(false);
+            }
+            if pressed(Action::StepForward10) {
+                self.step_playhead_by_ten(true);
+            }
+            if pressed(Action::ShuttleBack) {
+                self.shuttle_back();
+            }
+            if pressed(Action::ShuttlePause) {
+                self.shuttle_pause();
+            }
+            if pressed(Action::ShuttleForward) {
+                self.shuttle_forward();
             }
             // Enter also ends the mask being drawn in the viewer.
             open_compound = pressed(Action::OpenCompound) && !self.mask_overlay.drawing;
             exit_compound |= pressed(Action::ExitCompound);
-            if pressed(Action::SlipTool) {
-                self.timeline_state.tool = timeline_ui::TimelineTool::Slip;
+            if pressed(Action::MakeCompound) {
+                make_compound = true;
+            }
+            if pressed(Action::UngroupCompound) {
+                ungroup_compound = true;
             }
             if pressed(Action::ToggleDisabled) {
                 self.toggle_disabled_selected();
@@ -224,9 +303,19 @@ impl VenturiApp {
             }
         }
         self.timeline_state.open_selected_compound = open_compound && !pool_focused;
+        if make_compound && !pool_focused {
+            self.make_compound_from_selection();
+        }
+        if ungroup_compound && !pool_focused {
+            self.ungroup_selected_compound();
+        }
         self.exit_compound_requested = exit_compound;
         self.handle_clipboard_events(ui, &clipboard_events);
         if self.step_playhead_with_arrows(arrow_input.0, arrow_input.1) {
+            ui.ctx().request_repaint();
+        }
+        let dt = ui.input(|i| i.stable_dt).min(0.1);
+        if self.drive_reverse_shuttle(dt) {
             ui.ctx().request_repaint();
         }
     }
@@ -254,27 +343,38 @@ impl VenturiApp {
         let keymap = self.settings.keymap.clone();
         let mut set_fullscreen = None;
         let mut go_home = false;
-        egui::Panel::top("menu_bar").show(ui, |ui| {
-            let row = ui
-                .horizontal(|ui| {
-                    go_home = ui.button("🏠").on_hover_text(t!("top_bar.home")).clicked();
-                    self.show_menus(ui, &keymap, &mut set_fullscreen);
-                })
-                .response
-                .rect;
-            let row = egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), row.y_range());
-            self.show_top_bar_center(ui, row);
-            let mut right = ui.new_child(
-                egui::UiBuilder::new()
-                    .max_rect(row)
-                    .layout(egui::Layout::right_to_left(egui::Align::Center)),
-            );
-            let export = egui::Button::new(egui::RichText::new(t!("top_bar.export")).strong())
-                .fill(right.visuals().selection.bg_fill);
-            if right.add(export).clicked() {
-                self.export_modal_open = true;
-            }
-        });
+        egui::Panel::top("menu_bar")
+            .frame(
+                egui::Frame::NONE
+                    .fill(theme::BG_WINDOW)
+                    .inner_margin(egui::Margin::symmetric(theme::SPACE_2 as i8, 6)),
+            )
+            .show(ui, |ui| {
+                let row = ui
+                    .horizontal(|ui| {
+                        go_home = ui.button("🏠").on_hover_text(t!("top_bar.home")).clicked();
+                        self.show_menus(ui, &keymap, &mut set_fullscreen);
+                    })
+                    .response
+                    .rect;
+                let row = egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), row.y_range());
+                self.show_top_bar_center(ui, row);
+                let mut right = ui.new_child(
+                    egui::UiBuilder::new()
+                        .max_rect(row)
+                        .layout(egui::Layout::right_to_left(egui::Align::Center)),
+                );
+                let export = egui::Button::new(
+                    egui::RichText::new(t!("top_bar.export"))
+                        .color(theme::ON_ACCENT)
+                        .size(theme::FONT_BODY),
+                )
+                .fill(theme::ACCENT)
+                .corner_radius(theme::RADIUS_CONTROL);
+                if right.add(export).clicked() {
+                    self.open_export_modal();
+                }
+            });
 
         if go_home {
             self.request_project_switch(ProjectSwitch::Home);
@@ -349,22 +449,6 @@ impl VenturiApp {
         }
     }
 
-    pub(crate) fn show_export_modal(&mut self, ctx: &egui::Context) {
-        if !self.export_modal_open {
-            return;
-        }
-        let mut close = false;
-        let modal = egui::Modal::new(egui::Id::new("export_modal")).show(ctx, |ui| {
-            ui.set_min_width(360.0);
-            ui.heading(t!("top_bar.export"));
-            ui.add_space(12.0);
-            close = ui.button(t!("common.close")).clicked();
-        });
-        if close || modal.should_close() {
-            self.export_modal_open = false;
-        }
-    }
-
     fn show_menus(
         &mut self,
         ui: &mut egui::Ui,
@@ -374,7 +458,7 @@ impl VenturiApp {
         egui::MenuBar::new().ui(ui, |ui| {
             let mut bar_menus = Vec::new();
             let export_disabled =
-                self.timeline_id.is_none() || self.export.is_some() || self.export_dialog.is_some();
+                self.timeline_id.is_none() || self.export.is_some() || self.export_modal.is_some();
 
             bar_menus.push(
                 ui.menu_button(t!("menu.file"), |ui| {
@@ -979,6 +1063,9 @@ fn command_label(label: vv_core::CommandLabel) -> std::borrow::Cow<'static, str>
         L::ToggleAudioEffect => t!("history.toggle_audio_effect"),
         L::Title => t!("history.title"),
         L::ResetTransform => t!("history.reset_transform"),
+        L::TimelineResolution => t!("history.timeline_resolution"),
+        L::SetCaptions => t!("history.set_captions"),
+        L::SetCover => t!("history.set_cover"),
         L::ClipColor => t!("history.clip_color"),
         L::ClipDisplayColor => t!("history.clip_display_color"),
         L::SetKeyframe => t!("history.set_keyframe"),
@@ -991,6 +1078,7 @@ fn command_label(label: vv_core::CommandLabel) -> std::borrow::Cow<'static, str>
         L::Matte => t!("history.matte"),
         L::Transition => t!("history.transition"),
         L::MakeCompoundClip => t!("history.make_compound_clip"),
+        L::UngroupCompoundClip => t!("history.ungroup_compound_clip"),
         L::MoveKeyframes => t!("history.move_keyframes"),
         L::SetInterpolation => t!("history.set_interpolation"),
         L::PasteAttributes => t!("history.paste_attributes"),

@@ -11,8 +11,13 @@ mod autosave;
 mod color_window;
 mod compressor_panel;
 mod eq_panel;
+mod cover;
 mod export_dialog;
+mod export_modal;
+mod export_plan;
+mod first_media;
 mod forced_relink_dialog;
+mod fx_library;
 mod grade_panel;
 mod home;
 mod hw_decode;
@@ -20,6 +25,7 @@ mod i18n;
 mod keyframe_editor;
 mod library;
 mod library_copy;
+mod library_ribbon;
 mod library_ui;
 mod mask_overlay;
 mod mask_panel;
@@ -35,9 +41,11 @@ mod paste_image;
 mod plugin_editors;
 mod pool_view;
 mod presets;
+mod project_details;
 mod project_io;
 mod projects;
 mod properties_panel;
+mod properties_tabs;
 mod proxy_worker;
 mod render_ahead;
 mod settings;
@@ -45,9 +53,13 @@ mod settings_dialog;
 mod silence_dialog;
 mod slip_viewer;
 mod speed_dialog;
+mod subtitles;
+mod subtitles_ui;
 mod theme;
 mod thumbnail_worker;
 mod timeline_audio;
+mod timeline_bar;
+mod timeline_commands;
 mod timeline_ui;
 mod transport;
 mod viewer_overlay;
@@ -163,13 +175,11 @@ struct PanelTarget {
     is_text: bool,
 }
 
-/// Tab of the properties panel: the parameters of a video clip, those
-/// of its audio part, or the list of everything that is selected.
+/// Which clips the properties panel edits: a video clip or its audio part.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PropertiesTab {
     Video,
     Audio,
-    Selection,
 }
 
 /// System fonts for the Title panel, read the first time they are needed.
@@ -426,12 +436,17 @@ struct VenturiApp {
     scrub_audio: bool,
 
     arrow_hold: Option<ArrowHold>,
+    /// J held: the playhead walks backwards.
+    reverse_shuttle: Option<timeline_commands::ReverseShuttle>,
+    /// The frame the preview axis last sent the player to.
+    hover_jumped: Option<FrameIdx>,
 
     /// Snapping: in drags the clips snap to the nearby edges.
     snapping_enabled: bool,
     /// Transform handles over the viewer (button under the viewer).
     show_transform_overlay: bool,
     overlay_drag: Option<viewer_overlay::OverlayDrag>,
+    details_editing: bool,
 
     /// X and Y zoom of the Transform panel kept together (the lock between the
     /// two fields): a UI preference, not a project one.
@@ -439,6 +454,7 @@ struct VenturiApp {
 
     /// Tab open in the properties panel.
     properties_tab: PropertiesTab,
+    clip_tab: properties_tabs::ClipTab,
     fonts: FontCatalog,
 
     export: Option<ExportUiState>,
@@ -449,6 +465,11 @@ struct VenturiApp {
     project_copier: Option<library_copy::ProjectCopier>,
     effects_panel: media_pool_ui::EffectsPanelState,
     library_ui: library_ui::LibraryUiState,
+    library_ribbon: library_ribbon::RibbonState,
+    fx: fx_library::FxState,
+    toast: Option<(String, std::time::Instant)>,
+    /// Per file, see `first_media::probe_rotation`.
+    media_rotation: HashMap<PathBuf, u16>,
     preset_dialog: Option<presets::PresetDialog>,
     /// A clipboard read for a paste in flight, see `request_clipboard_image`.
     clipboard_image_rx: Option<mpsc::Receiver<Option<paste_image::ClipboardImage>>>,
@@ -535,7 +556,9 @@ struct VenturiApp {
     project_name_edit: Option<String>,
     /// Width of the top bar's centre group in the last frame, to centre it.
     top_bar_center_width: f32,
-    export_modal_open: bool,
+    export_modal: Option<export_modal::ExportModal>,
+    subtitles: subtitles::SubtitleState,
+    cover_picker: Option<cover::CoverPicker>,
     /// Name of the project reopened after a crash, until acknowledged.
     recovered_project: Option<String>,
 }
@@ -599,11 +622,15 @@ impl Default for VenturiApp {
             selection_follows_playhead: true,
             scrub_audio: true,
             arrow_hold: None,
+            reverse_shuttle: None,
+            hover_jumped: None,
             snapping_enabled: true,
             show_transform_overlay: true,
             overlay_drag: None,
+            details_editing: false,
             zoom_link: true,
             properties_tab: PropertiesTab::Video,
+            clip_tab: properties_tabs::ClipTab::default(),
             fonts: FontCatalog::default(),
             export: None,
             export_dialog: None,
@@ -613,6 +640,10 @@ impl Default for VenturiApp {
             project_copier: None,
             effects_panel: Default::default(),
             library_ui: Default::default(),
+            library_ribbon: Default::default(),
+            fx: Default::default(),
+            toast: None,
+            media_rotation: Default::default(),
             preset_dialog: None,
             clipboard_image_rx: None,
             plugin_scan_rx: None,
@@ -662,7 +693,9 @@ impl Default for VenturiApp {
             home: home::HomeState::default(),
             project_name_edit: None,
             top_bar_center_width: 0.0,
-            export_modal_open: false,
+            export_modal: None,
+            subtitles: subtitles::SubtitleState::default(),
+            cover_picker: None,
             recovered_project: None,
         }
     }
@@ -711,11 +744,11 @@ impl VenturiApp {
                 // (near clipping) — the same convention as a common
                 // VU meter.
                 let color = if level > 0.9 {
-                    egui::Color32::from_rgb(220, 50, 50)
+                    crate::theme::ERROR
                 } else if level > 0.7 {
-                    egui::Color32::from_rgb(230, 200, 50)
+                    crate::theme::WARNING
                 } else {
-                    egui::Color32::from_rgb(60, 200, 90)
+                    crate::theme::SUCCESS
                 };
                 painter.rect_filled(fill_rect, 2.0, color);
             }
@@ -944,6 +977,8 @@ impl VenturiApp {
                 timeline_id,
                 self.session.history.generation(),
             );
+        } else {
+            audio.clear_media();
         }
     }
 
@@ -1474,14 +1509,62 @@ impl VenturiApp {
         self.ensure_timeline_with(vv_core::Rational::new(25, 1), (1920, 1080), true, None)
     }
 
-    /// Like `ensure_timeline`, but a new timeline takes fps and resolution
-    /// from `meta` (media with video only).
+    /// Like `ensure_timeline`, but a new timeline takes its format from the
+    /// first media (see `first_media`; media with video only).
     fn ensure_timeline_for(
         &mut self,
         meta: &vv_core::MediaMeta,
+        rotation: u16,
         import: Option<vv_session::JobId>,
     ) -> TimelineId {
-        self.ensure_timeline_with(meta.fps, (meta.width, meta.height), true, import)
+        let format = first_media::project_format(meta, rotation);
+        self.ensure_timeline_with(format.fps, format.resolution, true, import)
+    }
+
+    /// Clockwise turn recorded in the media's file, probed once per path.
+    fn media_rotation(&mut self, media_id: MediaId) -> u16 {
+        let Some(item) = self.session.project.media_pool.get(media_id) else {
+            return 0;
+        };
+        if item.compound.is_some() || !item.meta.has_video || item.meta.is_image() {
+            return 0;
+        }
+        let path = item.path.clone();
+        *self
+            .media_rotation
+            .entry(path.clone())
+            .or_insert_with(|| first_media::probe_rotation(&path))
+    }
+
+    /// Turns a clip upright when its file carries a rotation the engine
+    /// does not apply, through the clip's own transform.
+    fn upright_clip(
+        &mut self,
+        timeline_id: TimelineId,
+        clip: (usize, ClipId),
+        media_id: MediaId,
+        meta: &vv_core::MediaMeta,
+    ) {
+        let rotation = self.media_rotation(media_id);
+        if rotation == 0 {
+            return;
+        }
+        let canvas = self.session.project.timelines[timeline_id].resolution;
+        let (turn, zoom) = first_media::rotation_fit((meta.width, meta.height), canvas, rotation);
+        for (param, value) in [
+            (vv_core::TransformParam::Rotation, turn),
+            (vv_core::TransformParam::ZoomX, zoom),
+            (vv_core::TransformParam::ZoomY, zoom),
+        ] {
+            self.session
+                .apply(Box::new(vv_core::set_clip_transform_param(
+                    timeline_id,
+                    clip.0,
+                    clip.1,
+                    param,
+                    value,
+                )));
+        }
     }
 
     /// Like `ensure_timeline`, but without a video track: a drop of audio only must
@@ -1504,7 +1587,7 @@ impl VenturiApp {
         }
         let mut tracks = Vec::new();
         if include_video_track {
-            tracks.push(Track::new(TrackKind::Video));
+            tracks.push(Track::new_main());
         }
         tracks.push(Track::new(TrackKind::Audio));
         let timeline = vv_core::Timeline {
@@ -1538,7 +1621,7 @@ impl VenturiApp {
             name,
             fps,
             resolution,
-            tracks: vec![Track::new(TrackKind::Video), Track::new(TrackKind::Audio)],
+            tracks: vec![Track::new_main(), Track::new(TrackKind::Audio)],
             markers: Vec::new(),
             master: Default::default(),
         })
@@ -1847,6 +1930,20 @@ impl VenturiApp {
         start: FrameIdx,
         target: timeline_ui::MediaDropTarget,
     ) {
+        let title = (generator == timeline_ui::Generator::Text)
+            .then(|| self.dropped_text_title())
+            .flatten();
+        self.add_generator_with_title(generator, title, start, target);
+    }
+
+    /// `title` replaces the default one of a text clip (a saved template).
+    fn add_generator_with_title(
+        &mut self,
+        generator: timeline_ui::Generator,
+        title: Option<vv_core::TitleParams>,
+        start: FrameIdx,
+        target: timeline_ui::MediaDropTarget,
+    ) {
         let group = self.session.history.begin_group();
         let timeline_id = self.ensure_timeline();
         if let Some(tracks) = self.resolve_drop_tracks(timeline_id, target, true, false) {
@@ -1855,15 +1952,29 @@ impl VenturiApp {
             let video_track = tracks
                 .video
                 .expect("generator: video track always resolved");
-            vv_core::edit::insert_generator(
-                &mut self.session.project,
-                &mut self.session.history,
-                timeline_id,
-                generator,
-                video_track,
-                start,
-                None,
-            );
+            match title {
+                Some(title) => {
+                    vv_core::edit::insert_title(
+                        &mut self.session.project,
+                        &mut self.session.history,
+                        timeline_id,
+                        title,
+                        video_track,
+                        start,
+                    );
+                }
+                None => {
+                    vv_core::edit::insert_generator(
+                        &mut self.session.project,
+                        &mut self.session.history,
+                        timeline_id,
+                        generator,
+                        video_track,
+                        start,
+                        None,
+                    );
+                }
+            }
         }
         self.session
             .history
@@ -1882,6 +1993,9 @@ impl VenturiApp {
             }
             timeline_ui::TimelineDrag::Generator(g) => {
                 self.add_generator_to_timeline_at(*g, start, target)
+            }
+            timeline_ui::TimelineDrag::Fx(fx) => {
+                self.add_fx_element_at(&fx.id, fx.millis, start, target)
             }
         }
     }
@@ -2175,8 +2289,8 @@ impl VenturiApp {
             let frame = playhead.max(clip.timeline_start);
             let involved = match timeline.tracks[track_index].crossing_at(frame) {
                 Some((left, right, crossing)) if left.id == clip.id || right.id == clip.id => {
-                    // A Smooth Cut merges both sides into one layer.
-                    if crossing.transition.kind == vv_core::TransitionKind::SmoothCut {
+                    // A Smooth Cut or asset transition merges both sides into one layer.
+                    if crossing.transition.merges_sides() {
                         1
                     } else {
                         2
@@ -2288,7 +2402,8 @@ impl VenturiApp {
         // If a timeline does not exist yet (e.g. first drag&drop from the media
         // pool), it is created on the fly inheriting fps/resolution from this
         // media.
-        let timeline_id = self.ensure_timeline_for(&meta, None);
+        let rotation = self.media_rotation(media_id);
+        let timeline_id = self.ensure_timeline_for(&meta, rotation, None);
         if self
             .session
             .project
@@ -2351,7 +2466,10 @@ impl VenturiApp {
         // fps and resolution from the first *video* media of the set: an audio at the
         // head has no resolution to give the timeline.
         let timeline_id = match drops.iter().find(|(d, meta)| d.takes_video(meta)) {
-            Some((_, video_meta)) => self.ensure_timeline_for(video_meta, None),
+            Some((first, video_meta)) => {
+                let rotation = self.media_rotation(first.media_id);
+                self.ensure_timeline_for(video_meta, rotation, None)
+            }
             None => self.ensure_timeline_audio_only(None),
         };
         // A drop that would close a cycle (a timeline imported inside
@@ -2385,6 +2503,14 @@ impl VenturiApp {
             self.insert_media_clip(timeline_id, *drag, meta, cursor, tracks);
             let rate = vv_core::Rational::conform_rate(timeline_fps, meta.fps);
             cursor += drag.timeline_len(rate);
+        }
+        if self.timeline_state.magnet {
+            vv_core::workflow::compact_main_track(
+                &mut self.session.project,
+                &mut self.session.history,
+                timeline_id,
+                &[],
+            );
         }
         self.session
             .history
@@ -2451,7 +2577,8 @@ impl VenturiApp {
         start: FrameIdx,
         tracks: TargetTracks,
     ) {
-        vv_core::edit::insert_media(
+        let takes_video = drag.takes_video(meta);
+        let inserted = vv_core::edit::insert_media(
             &mut self.session.project,
             &mut self.session.history,
             timeline_id,
@@ -2459,12 +2586,16 @@ impl VenturiApp {
                 media_id: drag.media_id,
                 source_in: drag.source_in,
                 source_out: drag.source_out,
-                video: drag.takes_video(meta),
+                video: takes_video,
                 audio: drag.takes_audio(meta),
             },
             start,
             tracks,
         );
+        // The video clip comes first.
+        if takes_video && let Some(&clip) = inserted.as_ref().and_then(|clips| clips.first()) {
+            self.upright_clip(timeline_id, clip, drag.media_id, meta);
+        }
     }
 
     /// Transform handles of the first selected video clip, if it is under
@@ -2616,6 +2747,69 @@ impl VenturiApp {
     }
 
     /// `(total, playhead, (in, out), playing)` of the playback bar.
+    fn transport_fps(&self) -> f64 {
+        if self.browsing.is_some() {
+            self.browse_fps()
+        } else {
+            self.timeline_id
+                .map_or(1.0, |id| self.session.project.timelines[id].fps.as_f64())
+        }
+    }
+
+    fn player_options(&self) -> transport::PlayerOptions {
+        let ratio = self.timeline_id.map_or(first_media::Ratio::Original, |id| {
+            first_media::Ratio::of(self.session.project.timelines[id].resolution)
+        });
+        transport::PlayerOptions {
+            ratio,
+            quality: self.settings.preview_resolution,
+        }
+    }
+
+    /// Size of the first video or photo on the timeline, as shown upright.
+    fn original_resolution(&mut self, timeline_id: TimelineId) -> Option<(u32, u32)> {
+        let media_id = self.session.project.timelines[timeline_id]
+            .tracks
+            .iter()
+            .flat_map(|track| &track.clips)
+            .filter_map(|clip| match clip.source {
+                vv_core::ClipSource::Media(id) => Some((clip.timeline_start, id)),
+                _ => None,
+            })
+            .filter(|(_, id)| {
+                self.session
+                    .project
+                    .media_pool
+                    .get(*id)
+                    .is_some_and(|m| m.meta.has_video)
+            })
+            .min_by_key(|(start, _)| *start)
+            .map(|(_, id)| id)?;
+        let meta = self.session.project.media_pool.get(media_id)?.meta.clone();
+        let rotation = self.media_rotation(media_id);
+        Some(first_media::effective_size(
+            (meta.width, meta.height),
+            rotation,
+        ))
+    }
+
+    /// One undo step; the Player's «Rapporto» and the project properties both go here.
+    pub(crate) fn set_project_ratio(&mut self, ratio: first_media::Ratio) {
+        let Some(timeline_id) = self.timeline_id else {
+            return;
+        };
+        let current = self.session.project.timelines[timeline_id].resolution;
+        let original = self.original_resolution(timeline_id);
+        let resolution = ratio.resolution(current, original);
+        if resolution != current {
+            self.session
+                .apply(Box::new(vv_core::SetTimelineResolution::new(
+                    timeline_id,
+                    resolution,
+                )));
+        }
+    }
+
     fn transport_state(&self) -> (FrameIdx, FrameIdx, (FrameIdx, FrameIdx), bool) {
         let playing = self.is_timeline_playing();
         if self.browsing.is_some() {
@@ -2646,6 +2840,8 @@ impl VenturiApp {
         const BAR_ZONE: f32 = 90.0;
         let screen = ctx.content_rect();
         let (total, playhead, marks, playing) = self.transport_state();
+        let fps = self.transport_fps();
+        let options = self.player_options();
         let mut action = transport::TransportResponse::default();
         egui::Area::new(egui::Id::new("fullscreen_viewer"))
             .order(egui::Order::Foreground)
@@ -2695,7 +2891,9 @@ impl VenturiApp {
                         .rect_filled(bar, 0.0, egui::Color32::from_black_alpha(170));
                     let inner = bar.shrink2(egui::vec2(24.0, 24.0));
                     ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
-                        action = transport::show_transport(ui, total, playhead, marks, playing);
+                        action = transport::show_transport(
+                            ui, total, playhead, marks, playing, fps, options,
+                        );
                     });
                 }
             });
@@ -2721,57 +2919,59 @@ impl VenturiApp {
                 .map(ToString::to_string)
                 .unwrap_or_default()
         };
-        let zoom_rect = ui
-            .add_enabled_ui(geometry.is_some(), |ui| {
-                ui.menu_button(format!("{label} ⏷"), |ui| {
-                    let Some((area, frame_px)) = geometry else {
-                        return;
-                    };
-                    let fit =
-                        egui::Button::selectable(self.viewer_zoom.is_fit(), t!("viewer.zoom_fit"))
-                            .shortcut_text(shortcut_text(Action::ViewerZoomFit));
-                    if ui.add(fit).clicked() {
-                        self.viewer_zoom.fit();
-                        ui.close();
-                    }
-                    ui.separator();
-                    let current = self.viewer_zoom.scale(area, frame_px, ppp);
-                    for preset in viewer_zoom::PRESETS {
-                        let percent = viewer_zoom::percent_label(preset);
-                        let button = if preset == 1.0 {
-                            egui::Button::selectable(
-                                false,
-                                t!("viewer.zoom_actual", percent = percent),
-                            )
-                            .shortcut_text(shortcut_text(Action::ViewerZoomActual))
-                        } else {
-                            egui::Button::selectable(false, percent)
+        let title = self
+            .timeline_id
+            .map(|id| t!("player.title", name = self.timeline_display_name(id)).into_owned());
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), 40.0 - theme::SPACE_2),
+            egui::Layout::right_to_left(egui::Align::Center),
+            |ui| {
+                ui.add_enabled_ui(geometry.is_some(), |ui| {
+                    ui.menu_button("≡", |ui| {
+                        let Some((area, frame_px)) = geometry else {
+                            return;
                         };
-                        let selected =
-                            !self.viewer_zoom.is_fit() && (current - preset).abs() < 1e-4;
-                        if ui.add(button.selected(selected)).clicked() {
-                            self.viewer_zoom.set_scale(preset, area, frame_px, ppp);
+                        ui.weak(&label);
+                        let fit = egui::Button::selectable(
+                            self.viewer_zoom.is_fit(),
+                            t!("viewer.zoom_fit"),
+                        )
+                        .shortcut_text(shortcut_text(Action::ViewerZoomFit));
+                        if ui.add(fit).clicked() {
+                            self.viewer_zoom.fit();
                             ui.close();
                         }
-                    }
-                })
-                .response
-                .on_hover_text(t!("viewer.zoom_hint"));
-            })
-            .response
-            .rect;
-        if let Some(timeline_id) = self.timeline_id {
-            // Symmetric around the center, so it never overlaps the zoom menu.
-            let full = ui.max_rect();
-            let half_width =
-                (full.width() / 2.0 - (zoom_rect.right() - full.left()) - 8.0).max(0.0);
-            let rect = egui::Rect::from_x_y_ranges(
-                full.center().x - half_width..=full.center().x + half_width,
-                zoom_rect.y_range(),
-            );
-            let name = self.timeline_display_name(timeline_id);
-            ui.put(rect, egui::Label::new(name).selectable(false).truncate());
-        }
+                        ui.separator();
+                        let current = self.viewer_zoom.scale(area, frame_px, ppp);
+                        for preset in viewer_zoom::PRESETS {
+                            let percent = viewer_zoom::percent_label(preset);
+                            let button = if preset == 1.0 {
+                                egui::Button::selectable(
+                                    false,
+                                    t!("viewer.zoom_actual", percent = percent),
+                                )
+                                .shortcut_text(shortcut_text(Action::ViewerZoomActual))
+                            } else {
+                                egui::Button::selectable(false, percent)
+                            };
+                            let selected =
+                                !self.viewer_zoom.is_fit() && (current - preset).abs() < 1e-4;
+                            if ui.add(button.selected(selected)).clicked() {
+                                self.viewer_zoom.set_scale(preset, area, frame_px, ppp);
+                                ui.close();
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text(t!("viewer.zoom_hint"));
+                });
+                if let Some(title) = title {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.add(egui::Label::new(title).selectable(false).truncate());
+                    });
+                }
+            },
+        );
     }
 
     fn show_viewer_overlay(
@@ -2943,12 +3143,7 @@ impl VenturiApp {
             return;
         }
         let selected: Vec<(usize, ClipId)> = self.timeline_state.selected.iter().copied().collect();
-        vv_core::edit::delete_clips(
-            &mut self.session.project,
-            &mut self.session.history,
-            timeline_id,
-            &selected,
-        );
+        self.delete_clips_with_magnet(timeline_id, &selected);
         self.timeline_state.clear_selection();
         self.sync_selection_to_playhead();
     }
@@ -3624,57 +3819,10 @@ pub(crate) fn format_duration(duration_frames: vv_core::FrameIdx, fps: f64) -> S
 
 #[derive(Clone, Copy)]
 enum ToolbarIcon {
-    Media,
-    Effects,
-    Curves,
-    Mixer,
     Color,
 }
 
-/// Panel toggle of the toolbar: hand-drawn icon and label, filled with the
-/// accent when the panel is open.
-fn toolbar_toggle(
-    ui: &mut egui::Ui,
-    on: &mut bool,
-    icon: ToolbarIcon,
-    label: &str,
-) -> egui::Response {
-    const ICON: f32 = 14.0;
-    const PADDING: f32 = 6.0;
-    let galley = ui.painter().layout_no_wrap(
-        label.to_owned(),
-        egui::TextStyle::Button.resolve(ui.style()),
-        egui::Color32::PLACEHOLDER,
-    );
-    let size = egui::vec2(
-        PADDING * 3.0 + ICON + galley.size().x,
-        ui.spacing().interact_size.y,
-    );
-    let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::click());
-    if response.clicked() {
-        *on = !*on;
-        response.mark_changed();
-    }
-    let visuals = ui.style().interact_selectable(&response, *on);
-    let painter = ui.painter();
-    if *on || response.hovered() {
-        painter.rect_filled(rect, 3.0, visuals.weak_bg_fill);
-    }
-    let color = visuals.fg_stroke.color;
-    let icon_center = egui::pos2(rect.left() + PADDING + ICON / 2.0, rect.center().y);
-    paint_toolbar_icon(painter, icon, icon_center, color);
-    painter.galley(
-        egui::pos2(
-            rect.left() + PADDING * 2.0 + ICON,
-            rect.center().y - galley.size().y / 2.0,
-        ),
-        galley,
-        color,
-    );
-    response
-}
-
-/// `toolbar_toggle` without its label, for a panel's header.
+/// Hand-drawn icon toggle, filled with the accent when on.
 fn icon_toggle(ui: &mut egui::Ui, on: &mut bool, icon: ToolbarIcon) -> egui::Response {
     let side = ui.spacing().interact_size.y;
     let (rect, mut response) = ui.allocate_exact_size(egui::vec2(side, side), egui::Sense::click());
@@ -3699,57 +3847,6 @@ fn paint_toolbar_icon(
 ) {
     let stroke = egui::Stroke::new(1.3, color);
     match icon {
-        // Two stacked frames.
-        ToolbarIcon::Media => {
-            let back =
-                egui::Rect::from_center_size(c + egui::vec2(2.0, -2.0), egui::vec2(10.0, 7.0));
-            let front = back.translate(egui::vec2(-4.0, 4.0));
-            painter.line_segment([back.left_top(), back.right_top()], stroke);
-            painter.line_segment([back.right_top(), back.right_bottom()], stroke);
-            painter.rect_stroke(front, 1.0, stroke, egui::StrokeKind::Middle);
-        }
-        // Four-point spark.
-        ToolbarIcon::Effects => {
-            let (long, short) = (6.5, 1.8);
-            let points = (0..8)
-                .map(|i| {
-                    let angle =
-                        i as f32 * std::f32::consts::FRAC_PI_4 - std::f32::consts::FRAC_PI_2;
-                    let r = if i % 2 == 0 { long } else { short };
-                    c + r * egui::vec2(angle.cos(), angle.sin())
-                })
-                .collect();
-            painter.add(egui::Shape::closed_line(points, stroke));
-        }
-        // An S curve between two keyframe dots.
-        ToolbarIcon::Curves => {
-            let (from, to) = (c + egui::vec2(-6.0, 4.0), c + egui::vec2(6.0, -4.0));
-            painter.add(egui::epaint::CubicBezierShape::from_points_stroke(
-                [
-                    from,
-                    c + egui::vec2(1.0, 4.0),
-                    c + egui::vec2(-1.0, -4.0),
-                    to,
-                ],
-                false,
-                egui::Color32::TRANSPARENT,
-                stroke,
-            ));
-            painter.circle_filled(from, 1.8, color);
-            painter.circle_filled(to, 1.8, color);
-        }
-        // Three faders.
-        ToolbarIcon::Mixer => {
-            for (dx, knob) in [(-4.0, 2.0), (0.0, -3.0), (4.0, 0.5)] {
-                let x = c.x + dx;
-                painter.line_segment([egui::pos2(x, c.y - 6.0), egui::pos2(x, c.y + 6.0)], stroke);
-                painter.rect_filled(
-                    egui::Rect::from_center_size(egui::pos2(x, c.y + knob), egui::vec2(3.5, 2.0)),
-                    0.5,
-                    color,
-                );
-            }
-        }
         // A color wheel with its puck off center.
         ToolbarIcon::Color => {
             painter.circle_stroke(c, 6.0, stroke);
@@ -3786,133 +3883,6 @@ fn agent_indicator(ui: &mut egui::Ui, last_tool: Option<&str>) {
             ui.label(t!("toolbar.mcp_last_tool", tool = tool));
         }
     });
-}
-
-/// Hand-drawn magnet: on some platforms (Asahi) egui's fonts
-/// do not have the 🧲 glyph.
-fn magnet_toggle(ui: &mut egui::Ui, enabled: &mut bool) -> egui::Response {
-    let size = egui::vec2(26.0, 22.0);
-    let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::click());
-    if response.clicked() {
-        *enabled = !*enabled;
-        response.mark_changed();
-    }
-    if ui.is_rect_visible(rect) {
-        let visuals = ui.style().interact_selectable(&response, *enabled);
-        let painter = ui.painter();
-        painter.rect_filled(rect, visuals.corner_radius, visuals.weak_bg_fill);
-
-        let c = rect.center();
-        let r: f32 = 6.0;
-        let leg_top = c.y - 6.0;
-        let arc_center_y = c.y + 1.0;
-        let stroke = egui::Stroke::new(2.0, visuals.fg_stroke.color);
-
-        painter.line_segment(
-            [
-                egui::pos2(c.x - r, leg_top),
-                egui::pos2(c.x - r, arc_center_y),
-            ],
-            stroke,
-        );
-        painter.line_segment(
-            [
-                egui::pos2(c.x + r, leg_top),
-                egui::pos2(c.x + r, arc_center_y),
-            ],
-            stroke,
-        );
-        // Lower arc: t=0 -> left leg, t=π -> right leg,
-        // passing through the lowest point at t=π/2 (it closes the "U").
-        let arc_points: Vec<egui::Pos2> = (0..=16)
-            .map(|i| {
-                let t = std::f32::consts::PI * (i as f32 / 16.0);
-                egui::pos2(c.x - r * t.cos(), arc_center_y + r * t.sin())
-            })
-            .collect();
-        painter.add(egui::Shape::line(arc_points, stroke));
-
-        // Poles at the two tips, colored like a real horseshoe
-        // magnet (schoolbook convention: red and grey).
-        let pole_size = egui::vec2(r + 1.0, 3.0);
-        painter.rect_filled(
-            egui::Rect::from_center_size(egui::pos2(c.x - r, leg_top - 1.0), pole_size),
-            1.0,
-            egui::Color32::from_rgb(200, 60, 60),
-        );
-        painter.rect_filled(
-            egui::Rect::from_center_size(egui::pos2(c.x + r, leg_top - 1.0), pole_size),
-            1.0,
-            egui::Color32::from_rgb(200, 200, 200),
-        );
-    }
-    response
-}
-
-/// The timeline tools are mutually exclusive: clicking the active one keeps it.
-fn timeline_tool_button(
-    ui: &mut egui::Ui,
-    current: &mut timeline_ui::TimelineTool,
-    tool: timeline_ui::TimelineTool,
-) -> egui::Response {
-    let size = egui::vec2(26.0, 22.0);
-    let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::click());
-    if response.clicked() && *current != tool {
-        *current = tool;
-        response.mark_changed();
-    }
-    if ui.is_rect_visible(rect) {
-        let visuals = ui.style().interact_selectable(&response, *current == tool);
-        let painter = ui.painter();
-        painter.rect_filled(rect, visuals.corner_radius, visuals.weak_bg_fill);
-        let color = visuals.fg_stroke.color;
-        let stroke = egui::Stroke::new(1.3, color);
-        let c = rect.center();
-        match tool {
-            timeline_ui::TimelineTool::Select => {
-                let tip = c + egui::vec2(-3.5, -7.0);
-                let outline = [
-                    (0.0, 0.0),
-                    (0.0, 12.0),
-                    (3.0, 9.2),
-                    (5.2, 13.8),
-                    (7.2, 12.9),
-                    (5.0, 8.4),
-                    (8.8, 8.4),
-                ]
-                .map(|(x, y)| tip + egui::vec2(x, y));
-                painter.add(egui::Shape::closed_line(outline.to_vec(), stroke));
-            }
-            // "[ ]" with arrows inside, like the timeline cursor.
-            timeline_ui::TimelineTool::Slip => {
-                for (x, towards) in [(c.x - 7.0, 1.0), (c.x + 7.0, -1.0)] {
-                    painter.add(egui::Shape::line(
-                        vec![
-                            egui::pos2(x + towards * 3.0, c.y - 6.0),
-                            egui::pos2(x, c.y - 6.0),
-                            egui::pos2(x, c.y + 6.0),
-                            egui::pos2(x + towards * 3.0, c.y + 6.0),
-                        ],
-                        stroke,
-                    ));
-                }
-                painter.line_segment([c - egui::vec2(3.0, 0.0), c + egui::vec2(3.0, 0.0)], stroke);
-                for dir in [-1.0f32, 1.0] {
-                    let tip = c + egui::vec2(dir * 4.5, 0.0);
-                    painter.add(egui::Shape::convex_polygon(
-                        vec![
-                            tip,
-                            tip - egui::vec2(dir * 3.0, 2.8),
-                            tip - egui::vec2(dir * 3.0, -2.8),
-                        ],
-                        color,
-                        egui::Stroke::NONE,
-                    ));
-                }
-            }
-        }
-    }
-    response
 }
 
 /// Box with four corner handles and the pivot at the center.
@@ -4251,36 +4221,6 @@ impl VenturiApp {
 
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.horizontal(|ui| {
-                toolbar_toggle(
-                    ui,
-                    &mut self.settings.panels.media_pool_open,
-                    ToolbarIcon::Media,
-                    &t!("toolbar.media_pool"),
-                );
-                toolbar_toggle(
-                    ui,
-                    &mut self.settings.panels.effects_open,
-                    ToolbarIcon::Effects,
-                    &t!("toolbar.effects"),
-                );
-                toolbar_toggle(
-                    ui,
-                    &mut self.settings.panels.keyframe_editor_open,
-                    ToolbarIcon::Curves,
-                    &t!("toolbar.keyframe_editor"),
-                );
-                toolbar_toggle(
-                    ui,
-                    &mut self.settings.panels.mixer_open,
-                    ToolbarIcon::Mixer,
-                    &t!("toolbar.mixer"),
-                );
-                toolbar_toggle(
-                    ui,
-                    &mut self.settings.panels.color_window_open,
-                    ToolbarIcon::Color,
-                    &t!("toolbar.color"),
-                );
                 if let Some(err) = &self.project_error {
                     ui.separator();
                     ui.colored_label(theme::ERROR, err);
@@ -4303,7 +4243,10 @@ impl VenturiApp {
 
         self.show_export_dialog(ui);
         self.show_export_modal(ui.ctx());
+        self.show_cover_picker(ui.ctx());
+        self.poll_subtitles(ui.ctx());
         self.show_recovery_notice(ui.ctx());
+        self.show_toast(ui.ctx());
         self.show_settings_dialog(ui.ctx());
         self.show_about_dialog(ui.ctx());
         self.show_project_settings(ui.ctx());
@@ -4323,6 +4266,9 @@ impl VenturiApp {
             self.open_paste_attributes_dialog();
         }
         self.show_paste_attributes_dialog(ui.ctx());
+        if std::mem::take(&mut self.timeline_state.edit_cover) {
+            self.open_cover_picker();
+        }
         if let Some(clips) = self.timeline_state.save_preset_requested.take() {
             self.open_save_preset_dialog(&clips);
         }
@@ -4380,7 +4326,7 @@ impl VenturiApp {
         }
 
         let rects = egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(ui.visuals().panel_fill))
+            .frame(egui::Frame::NONE.fill(theme::BG_WINDOW))
             .show(ui, |ui| {
                 if self.workspace.has_docked_blocks() {
                     self.workspace.layout_ui(ui)
@@ -4395,7 +4341,7 @@ impl VenturiApp {
         self.show_block(ui, &rects, Block::Library, |app, ui| {
             app.show_library_block(ui, &mut preview_action)
         });
-        if !self.settings.panels.media_pool_open || !self.workspace.is_shown(Block::Library) {
+        if !self.workspace.is_shown(Block::Library) {
             self.media_pool_state.focused = false;
         }
 
@@ -4582,6 +4528,9 @@ impl VenturiApp {
             // take it away on the next frame.
             self.active_clip = None;
             self.browsing = Some(browsed);
+            if std::mem::take(&mut self.library_ribbon.autoplay) {
+                self.toggle_browse_playback();
+            }
         }
         if let Some(frame) = pending_playhead {
             self.timeline_state.playhead = frame.max(0);
@@ -4613,6 +4562,21 @@ impl VenturiApp {
 
         if self.viewer_fullscreen {
             transport_action = self.show_fullscreen_viewer(ui.ctx());
+        }
+        if transport_action.toggle_fullscreen {
+            self.viewer_fullscreen = !self.viewer_fullscreen;
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.viewer_fullscreen));
+        }
+        if transport_action.fit_view {
+            self.viewer_zoom.fit();
+        }
+        if let Some(quality) = transport_action.quality {
+            self.settings.preview_resolution = quality;
+            self.apply_preview_resolution();
+        }
+        if let Some(ratio) = transport_action.ratio {
+            self.set_project_ratio(ratio);
         }
 
         let pointer_down = ui.input(|i| i.pointer.any_down());
@@ -4657,10 +4621,12 @@ impl VenturiApp {
         content: impl FnOnce(&mut Self, &mut egui::Ui) -> R,
     ) -> Option<R> {
         if let Some(&rect) = rects.get(&block) {
+            ui.painter()
+                .rect_filled(rect, theme::panel_radius(), theme::BG_PANEL);
             let mut child = ui.new_child(
                 egui::UiBuilder::new()
                     .id_salt(("block", block))
-                    .max_rect(rect.shrink(2.0)),
+                    .max_rect(rect.shrink(theme::SPACE_1)),
             );
             child.set_clip_rect(rect.intersect(ui.clip_rect()));
             return Some(content(self, &mut child));
@@ -4697,51 +4663,29 @@ impl VenturiApp {
 
     fn show_library_block(&mut self, ui: &mut egui::Ui, preview_action: &mut Option<Browsed>) {
         // A block with both sections off shows the pool rather than nothing.
-        let pool_open = self.settings.panels.media_pool_open || !self.settings.panels.effects_open;
-        let mut effects_rect = None;
-        if pool_open {
-            let pool = if self.settings.panels.effects_open {
-                let (pool_rect, rest) =
-                    split_left_column(ui, &mut self.settings.panels.media_pool_fraction);
-                effects_rect = Some(rest);
-                ui.scope_builder(egui::UiBuilder::new().max_rect(pool_rect), |ui| {
-                    self.show_media_pool(ui, preview_action)
-                })
-                .response
-            } else {
-                ui.scope(|ui| self.show_media_pool(ui, preview_action))
-                    .response
-            };
-            // Whoever got the last click decides who gets Del/Backspace.
-            if let Some(pos) = ui.ctx().input(|i| {
-                i.pointer
-                    .any_pressed()
-                    .then(|| i.pointer.interact_pos())
-                    .flatten()
-            }) {
-                self.media_pool_state.focused = pool.rect.contains(pos);
-            }
-            // Highlights the pool while a file is dragged from the file manager.
-            if ui.ctx().input(|i| !i.raw.hovered_files.is_empty()) {
-                ui.ctx()
-                    .layer_painter(egui::LayerId::new(
-                        egui::Order::Foreground,
-                        egui::Id::new("media_pool_drop_highlight"),
-                    ))
-                    .rect_stroke(
-                        pool.rect,
-                        4.0,
-                        egui::Stroke::new(2.0, ui.visuals().selection.bg_fill),
-                        egui::StrokeKind::Inside,
-                    );
-            }
+        let pool = ui.scope(|ui| self.show_ribbon(ui, preview_action)).response;
+        // Whoever got the last click decides who gets Del/Backspace.
+        if let Some(pos) = ui.ctx().input(|i| {
+            i.pointer
+                .any_pressed()
+                .then(|| i.pointer.interact_pos())
+                .flatten()
+        }) {
+            self.media_pool_state.focused = pool.rect.contains(pos);
         }
-        if let Some(rect) = effects_rect {
-            ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                self.show_effects_list(ui)
-            });
-        } else if self.settings.panels.effects_open {
-            self.show_effects_list(ui);
+        // Highlights the pool while a file is dragged from the file manager.
+        if ui.ctx().input(|i| !i.raw.hovered_files.is_empty()) {
+            ui.ctx()
+                .layer_painter(egui::LayerId::new(
+                    egui::Order::Foreground,
+                    egui::Id::new("media_pool_drop_highlight"),
+                ))
+                .rect_stroke(
+                    pool.rect,
+                    4.0,
+                    egui::Stroke::new(2.0, ui.visuals().selection.bg_fill),
+                    egui::StrokeKind::Inside,
+                );
         }
     }
 
@@ -4763,6 +4707,28 @@ impl VenturiApp {
                 .show(ui, |ui| {
                     self.draw_audiometer(ui);
                 });
+        }
+        let can_undo = self.session.history.position() > 0;
+        let can_redo = self.session.history.labels().count() > self.session.history.position();
+        egui::Panel::top("timeline_bar")
+            .resizable(false)
+            .show(ui, |ui| {
+                timeline_bar::show_bar(
+                    ui,
+                    &mut self.timeline_state,
+                    &mut self.snapping_enabled,
+                    &self.settings.keymap,
+                    can_undo,
+                    can_redo,
+                );
+            });
+        self.timeline_state.thumbnails.clear();
+        for (hash, texture) in &self.thumbnails {
+            if let Some(texture) = texture {
+                self.timeline_state
+                    .thumbnails
+                    .insert(*hash, (texture.id(), texture.size_vec2()));
+            }
         }
         let exit_requested = std::mem::take(&mut self.exit_compound_requested);
         if let Some(timeline_id) = self.timeline_id {
@@ -4835,12 +4801,11 @@ impl VenturiApp {
                 self.enter_compound_timeline(nested_id, at, Some(clip));
             }
         } else {
-            let drop_rect = ui.available_rect_before_wrap();
-            let drop_id = ui.id().with("timeline_drop_zone_empty");
-            let drop_resp = ui.interact(drop_rect, drop_id, egui::Sense::hover());
-            dropped_on_empty_timeline = timeline_ui::TimelineDrag::released(&drop_resp);
-            ui.label(t!("timeline.empty_hint"));
+            dropped_on_empty_timeline =
+                timeline_bar::show_empty(ui, timeline_ui::TRACK_HEADER_WIDTH);
         }
+        let ctx = ui.ctx().clone();
+        self.run_timeline_commands(&ctx);
         (media_drop, dropped_on_empty_timeline)
     }
 
@@ -4860,31 +4825,38 @@ impl VenturiApp {
             .resizable(false)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    magnet_toggle(ui, &mut self.snapping_enabled)
-                        .on_hover_text(t!("toolbar.snapping"));
                     transform_overlay_toggle(ui, &mut self.show_transform_overlay)
                         .on_hover_text(t!("toolbar.transform_overlay"));
-                    ui.separator();
-                    let keymap = &self.settings.keymap;
-                    let tool = &mut self.timeline_state.tool;
-                    timeline_tool_button(ui, tool, timeline_ui::TimelineTool::Select)
-                        .on_hover_text(
-                            keymap.menu_label(&t!("toolbar.select_tool"), Action::SelectTool),
-                        );
-                    timeline_tool_button(ui, tool, timeline_ui::TimelineTool::Slip).on_hover_text(
-                        keymap.menu_label(&t!("toolbar.slip_tool"), Action::SlipTool),
-                    );
                 });
             });
         let (total, playhead, marks, playing) = self.transport_state();
+        let fps = self.transport_fps();
+        let options = self.player_options();
         egui::Panel::bottom("transport")
             .resizable(false)
             .show(ui, |ui| {
-                transport_action = transport::show_transport(ui, total, playhead, marks, playing);
+                transport_action =
+                    transport::show_transport(ui, total, playhead, marks, playing, fps, options);
             });
         egui::Panel::top("viewer_zoom_bar")
             .resizable(false)
             .show(ui, |ui| self.show_viewer_zoom_bar(ui));
+        // Preview Axis: the player shows the frame under the axis while the
+        // playhead stays; restored before anything else reads it.
+        let real_playhead = self.timeline_state.playhead;
+        if let Some(frame) = self.preview_axis_frame() {
+            self.timeline_state.playhead = frame;
+            if self.hover_jumped != Some(frame) {
+                if let Some(render_ahead) = &self.render_ahead {
+                    render_ahead.jump_to(frame);
+                }
+                self.hover_jumped = Some(frame);
+            }
+        } else if self.hover_jumped.take().is_some()
+            && let Some(render_ahead) = &self.render_ahead
+        {
+            render_ahead.jump_to(real_playhead);
+        }
         let slip_split = self.slip_split_layers();
         if slip_split.is_some() {
             // The buffers of the two ends fill on their own threads.
@@ -4929,6 +4901,7 @@ impl VenturiApp {
                     filters: Vec::new(),
                     blend: vv_core::BlendMode::Normal,
                     masks: Vec::new(),
+                    assets: Vec::new(),
                 };
                 self.show_composited(vec![layer], output);
             }
@@ -4937,6 +4910,7 @@ impl VenturiApp {
             self.show_composited(layers, output);
         }
 
+        self.timeline_state.playhead = real_playhead;
         match self.last_viewer_frame_kind {
             Some(ViewerFrameKind::Video) => {
                 if let (Some(id), Some(tex_size)) = (self.video_texture_id, self.video_display_size)
@@ -5166,12 +5140,11 @@ fn main() -> eframe::Result<()> {
         "venturi",
         options,
         Box::new(move |cc| {
-            // Timeline zoom with Alt+scroll instead of the default Ctrl.
-            // Shift+scroll is left free for the vertical zoom of the tracks,
-            // so the horizontal scroll moves to Ctrl+scroll.
+            // Timeline zoom with Ctrl+scroll. Shift+scroll is left free for the
+            // vertical zoom of the tracks, so the horizontal scroll is Alt+scroll.
             cc.egui_ctx.options_mut(|o| {
-                o.input_options.zoom_modifier = egui::Modifiers::ALT;
-                o.input_options.horizontal_scroll_modifier = egui::Modifiers::CTRL;
+                o.input_options.zoom_modifier = egui::Modifiers::CTRL;
+                o.input_options.horizontal_scroll_modifier = egui::Modifiers::ALT;
             });
             theme::apply(&cc.egui_ctx);
             let mut app = VenturiApp::default();
@@ -5182,6 +5155,7 @@ fn main() -> eframe::Result<()> {
                 .set_waker(vv_session::Waker::new(move || egui_ctx.request_repaint()));
             app.settings_path = settings_path;
             if let Some(root) = library::Library::default_root() {
+                vv_render::assets::set_user_dir(root.parent().map(|p| p.join("assets")));
                 app.library = library::Library::open(root);
             }
             app.settings = settings;

@@ -1,0 +1,105 @@
+_version: 2
+
+fx.tab_filters:
+  en: "Filters"
+  it: "Filtri"
+
+fx.tab_transitions:
+  en: "Transitions"
+  it: "Transizioni"
+
+fx.cat_classic:
+  en: "Classic"
+  it: "Classici"
+
+fx.cat_basic:
+  en: "Basic"
+  it: "Base"
+
+fx.cat_motion:
+  en: "Motion"
+  it: "Movimento"
+
+fx.cat_distort:
+  en: "Distortion"
+  it: "Distorsione"
+
+fx.cat_style:
+  en: "Style"
+  it: "Stile"
+
+fx.cat_film:
+  en: "Film"
+  it: "Pellicola"
+
+fx.cat_bw:
+  en: "Black and white"
+  it: "Bianco e nero"
+
+fx.cat_stylize:
+  en: "Stylize"
+  it: "Stilizzate"
+
+fx.no_favorites:
+  en: "No favorites yet: tap the star on an item"
+  it: "Nessun preferito: tocca la stella su un elemento"
+
+fx.drag_effect:
+  en: "Drag onto a clip, or onto the timeline to affect the tracks below"
+  it: "Trascina su una clip, o sulla timeline per agire sulle tracce sotto"
+
+fx.drag_transition:
+  en: "Drag between two adjacent clips"
+  it: "Trascina tra due clip adiacenti"
+
+fx.no_adjacent_pair:
+  en: "No adjacent clip pair found"
+  it: "Nessuna coppia di clip adiacenti trovata"
+
+fx.compound_needs_selection:
+  en: "Select the layers to group first"
+  it: "Seleziona prima i livelli da raggruppare"
+
+fx.not_compound:
+  en: "Select a compound clip to ungroup"
+  it: "Seleziona una compound clip da scompattare"
+
+fx.ungroup_has_effects:
+  en: "Remove the compound clip's own effects before ungrouping it"
+  it: "Rimuovi gli effetti della compound clip prima di scompattarla"
+
+fx.props_title:
+  en: "Effects and filters"
+  it: "Effetti e filtri"
+
+fx.remove:
+  en: "Remove"
+  it: "Rimuovi"
+
+fx.enabled:
+  en: "Enabled"
+  it: "Attivo"
+
+fx.unknown:
+  en: "Missing effect"
+  it: "Effetto mancante"
+
+fx.transition_title:
+  en: "Transition"
+  it: "Transizione"
+
+fx.transition_duration:
+  en: "Duration (s)"
+  it: "Durata (s)"
+
+fx.transition_limit:
+  en: "Limited by the length of the two clips"
+  it: "Limitata dalla lunghezza delle due clip"
+
+fx.element_name:
+  en: "Effect"
+  it: "Effetto"
+
+menu.ungroup_compound_clip:
+  en: "Ungroup compound clip"
+  it: "Scompatta compound clip"

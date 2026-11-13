@@ -130,3 +130,27 @@ fn frame_to_clip_inverts_clip_to_frame() {
     let back = frame_to_clip(&t, clip_to_frame(&t, p));
     assert!((back[0] - p[0]).abs() < 1e-3 && (back[1] - p[1]).abs() < 1e-3);
 }
+
+#[test]
+fn a_moved_clip_snaps_to_the_canvas_centre_per_axis() {
+    let clip_box = ClipBox::new((1920, 1080), (1920, 1080), [0.0; 4], [false; 2]);
+    let mut t = Transform {
+        position: [3.0, 200.0],
+        ..Transform::default()
+    };
+    let centered = snap_to_center(&mut t, &clip_box, 5.0);
+    assert_eq!(centered, [true, false]);
+    assert_eq!(t.position, [0.0, 200.0]);
+}
+
+#[test]
+fn snapping_follows_the_clip_centre_not_the_position() {
+    let clip_box = ClipBox::new(
+        (1920, 1080),
+        (1920, 1080),
+        [100.0, 0.0, 0.0, 0.0],
+        [false; 2],
+    );
+    let mut t = Transform::default();
+    assert_eq!(snap_to_center(&mut t, &clip_box, 0.0), [false, true]);
+}

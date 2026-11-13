@@ -65,48 +65,6 @@ fn column_input(events: Vec<egui::Event>) -> egui::RawInput {
 }
 
 #[test]
-fn left_column_split_follows_the_drag_and_keeps_both_panes_visible() {
-    let ctx = egui::Context::default();
-    let mut fraction = 0.5;
-    let split = |events, fraction: &mut f32| {
-        let mut rects = None;
-        ctx.run_ui(column_input(events), |ui| {
-            rects = Some(split_left_column(ui, fraction));
-        })
-        .textures_delta
-        .clear();
-        rects.unwrap()
-    };
-    let (pool, effects) = split(vec![], &mut fraction);
-    assert!((pool.height() - effects.height()).abs() < 1.0);
-
-    let grab = egui::pos2(150.0, pool.bottom() + COLUMN_SPLITTER_HEIGHT / 2.0);
-    let button = |pressed| egui::Event::PointerButton {
-        pos: grab,
-        button: egui::PointerButton::Primary,
-        pressed,
-        modifiers: egui::Modifiers::NONE,
-    };
-    split(vec![egui::Event::PointerMoved(grab)], &mut fraction);
-    split(vec![button(true)], &mut fraction);
-    split(
-        vec![egui::Event::PointerMoved(grab + egui::vec2(0.0, 100.0))],
-        &mut fraction,
-    );
-    let (dragged_pool, _) = split(vec![], &mut fraction);
-    assert!(
-        (dragged_pool.height() - pool.height() - 100.0).abs() < 1.0,
-        "{} -> {}",
-        pool.height(),
-        dragged_pool.height()
-    );
-
-    let mut fraction = 1.0;
-    let (_, effects) = split(vec![], &mut fraction);
-    assert!(effects.height() >= MIN_COLUMN_PANE_HEIGHT - 0.5);
-}
-
-#[test]
 fn pool_swipe_keeps_scrolling_after_release_only_when_enabled() {
     for enabled in [true, false] {
         let ctx = egui::Context::default();

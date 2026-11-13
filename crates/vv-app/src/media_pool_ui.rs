@@ -521,6 +521,17 @@ impl VenturiApp {
         ui.allocate_rect(area, egui::Sense::hover());
     }
 
+    /// No media of its own yet (a compound clip is not one).
+    fn project_pool_is_empty(&self) -> bool {
+        self.session.project.folders.is_empty()
+            && self
+                .session
+                .project
+                .media_pool
+                .values()
+                .all(|item| item.compound.is_some())
+    }
+
     fn show_project_pool(&mut self, ui: &mut egui::Ui, preview_action: &mut Option<Browsed>) {
         if let Some(worker) = &self.proxy_worker {
             let progress = worker.progress();
@@ -550,6 +561,23 @@ impl VenturiApp {
                 }
             }
         }
+        if self.project_pool_is_empty() {
+            if library_ribbon::empty_state(ui, &t!("ribbon.media_empty")) {
+                self.import_media_dialog();
+            }
+            return;
+        }
+        let used: std::collections::HashSet<MediaId> = self
+            .session
+            .project
+            .timelines
+            .values()
+            .flat_map(|t| t.tracks.iter().flat_map(|tr| tr.clips.iter()))
+            .filter_map(|c| match c.source {
+                vv_core::ClipSource::Media(id) => Some(id),
+                _ => None,
+            })
+            .collect();
         let entries = self
             .session
             .project
@@ -577,6 +605,13 @@ impl VenturiApp {
                         .as_ref()
                         .and_then(|w| w.state(item.content_hash)),
                     renamable: item.compound.is_some(),
+                    added: used.contains(&id),
+                    hover: item.compound.is_none().then(|| pool_view::HoverActions {
+                        favorite: library_ribbon::is_favorite(
+                            &self.settings.favorites,
+                            &library_ribbon::media_key(&item.path.to_string_lossy()),
+                        ),
+                    }),
                 }
             })
             .collect();
@@ -630,6 +665,15 @@ impl VenturiApp {
                         *preview_action = Some(Browsed::Media(id));
                     }
                 }
+                PoolEvent::Clicked(_) => {}
+                PoolEvent::ToggleFavorite(id) => {
+                    if let Some(item) = self.session.project.media_pool.get(id) {
+                        let key = library_ribbon::media_key(&item.path.to_string_lossy());
+                        library_ribbon::toggle_favorite(&mut self.settings.favorites, &key);
+                        self.persist_settings();
+                    }
+                }
+                PoolEvent::Insert(id) => self.insert_pool_media_at_playhead(id),
                 PoolEvent::DragStarted(media) => {
                     let set = timeline_ui::MediaDragSet {
                         items: media
@@ -727,49 +771,6 @@ impl VenturiApp {
         });
         ui.allocate_rect(area, egui::Sense::hover());
     }
-}
-
-const COLUMN_SPLITTER_HEIGHT: f32 = 8.0;
-const MIN_COLUMN_PANE_HEIGHT: f32 = 60.0;
-
-/// Draggable separator between the media pool (above) and the Effects panel
-/// (below). Returns the rects of the two panes. The split is kept as a
-/// fraction so the panes scale with the window.
-pub(crate) fn split_left_column(ui: &egui::Ui, fraction: &mut f32) -> (egui::Rect, egui::Rect) {
-    let column = ui.available_rect_before_wrap();
-    let panes_height = (column.height() - COLUMN_SPLITTER_HEIGHT).max(0.0);
-    let max_pool = (panes_height - MIN_COLUMN_PANE_HEIGHT).max(0.0);
-    let clamp_pool = |h: f32| h.min(max_pool).max(MIN_COLUMN_PANE_HEIGHT.min(max_pool));
-    let mut pool_height = clamp_pool(*fraction * panes_height);
-    let splitter_rect = |pool_height: f32| {
-        egui::Rect::from_min_size(
-            column.min + egui::vec2(0.0, pool_height),
-            egui::vec2(column.width(), COLUMN_SPLITTER_HEIGHT),
-        )
-    };
-    let resp = ui.interact(
-        splitter_rect(pool_height),
-        ui.id().with("left_column_splitter"),
-        egui::Sense::drag(),
-    );
-    let active = resp.hovered() || resp.dragged();
-    if active {
-        ui.ctx()
-            .output_mut(|o| o.cursor_icon = egui::CursorIcon::ResizeVertical);
-    }
-    if resp.dragged() && panes_height > 0.0 {
-        pool_height = clamp_pool(pool_height + resp.drag_delta().y);
-        *fraction = pool_height / panes_height;
-    }
-    let splitter = splitter_rect(pool_height);
-    ui.painter().hline(
-        splitter.x_range(),
-        splitter.center().y,
-        egui::Stroke::new(1.0, egui::Color32::from_gray(if active { 160 } else { 80 })),
-    );
-    let pool = egui::Rect::from_min_max(column.min, egui::pos2(column.max.x, splitter.top()));
-    let effects = egui::Rect::from_min_max(egui::pos2(column.min.x, splitter.bottom()), column.max);
-    (pool, effects)
 }
 
 #[cfg(test)]

@@ -1,0 +1,8 @@
+{
+  "kind": "transition",
+  "name": {
+    "en": "Slide",
+    "it": "Scorrimento"
+  },
+  "category": "motion"
+}

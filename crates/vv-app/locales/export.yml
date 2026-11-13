@@ -179,3 +179,127 @@ export.cancelled:
 export.already_running:
   en: "Another export is already running"
   it: "È già in corso un altro export"
+
+export.edit_cover:
+  en: "✎ Edit cover"
+  it: "✎ Modifica copertina"
+
+export.timeline:
+  en: "Export timeline"
+  it: "Esporta timeline"
+
+export.name:
+  en: "Name"
+  it: "Nome"
+
+export.export_to:
+  en: "Export to"
+  it: "Esporta su"
+
+export.video:
+  en: "Video"
+  it: "Video"
+
+export.audio:
+  en: "Audio"
+  it: "Audio"
+
+export.captions:
+  en: "Export captions"
+  it: "Esporta sottotitoli"
+
+export.format:
+  en: "Format"
+  it: "Formato"
+
+export.audio_only_hint:
+  en: "Video is off: only the audio file is exported."
+  it: "Video disattivato: viene esportato solo il file audio."
+
+export.captions_srt_hint:
+  en: "SRT: text with timestamps."
+  it: "SRT: testo con i timestamp."
+
+export.captions_txt_hint:
+  en: "TXT: continuous text. Visual subtitles are always burned into the video, unless their track is hidden."
+  it: "TXT: testo continuo. I sottotitoli visivi sono sempre impressi nel video, salvo traccia nascosta."
+
+export.bitrate:
+  en: "Bitrate"
+  it: "Bitrate"
+
+export.match_best:
+  en: "Match the best video"
+  it: "Come il video migliore"
+
+export.match_best_value:
+  en: "Match the best video (%{value})"
+  it: "Come il video migliore (%{value})"
+
+export.bitrate_recommended:
+  en: "Recommended"
+  it: "Consigliato"
+
+export.bitrate_lower:
+  en: "Lower"
+  it: "Più basso"
+
+export.bitrate_higher:
+  en: "Higher"
+  it: "Più alto"
+
+export.bitrate_custom:
+  en: "Custom"
+  it: "Personalizzato"
+
+export.codec:
+  en: "Codec"
+  it: "Codec"
+
+export.container:
+  en: "Format"
+  it: "Formato"
+
+export.invalid_combination:
+  en: "This format cannot hold the chosen codec."
+  it: "Questo formato non supporta il codec scelto."
+
+export.color_space:
+  en: "Color space"
+  it: "Spazio colore"
+
+export.color_space_value:
+  en: "Rec. 709 SDR"
+  it: "Rec. 709 SDR"
+
+export.summary:
+  en: "Duration: %{duration} | Size: about %{size}"
+  it: "Durata: %{duration} | Dimensioni: circa %{size}"
+
+export.size_hint:
+  en: "Size = (video bitrate + audio bitrate) × duration ÷ 8. Audio counts as %{audio} kbps. With VBR the result is approximate."
+  it: "Peso = (bitrate video + bitrate audio) × durata ÷ 8. L'audio conta %{audio} kbps. Con VBR il risultato è approssimativo."
+
+export.done:
+  en: "Export finished"
+  it: "Esportazione completata"
+
+export.remaining:
+  en: "Time left: %{time}"
+  it: "Tempo rimanente: %{time}"
+
+export.starting:
+  en: "Starting…"
+  it: "Avvio…"
+
+export.open_folder:
+  en: "Open folder"
+  it: "Apri cartella"
+
+cover.title:
+  en: "Edit cover"
+  it: "Modifica copertina"
+
+cover.confirm:
+  en: "Set cover"
+  it: "Imposta copertina"

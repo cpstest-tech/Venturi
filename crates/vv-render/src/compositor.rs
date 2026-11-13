@@ -861,6 +861,7 @@ pub struct Compositor {
     adapter_name: String,
     /// Built on first use: most projects never need it.
     smooth_cut: std::sync::OnceLock<crate::smooth_cut::SmoothCut>,
+    custom: crate::custom_shader::CustomShaders,
 }
 
 #[derive(Default)]
@@ -1105,6 +1106,7 @@ impl Compositor {
             cache: None,
         });
 
+        let device_for_custom = Arc::clone(&device);
         let compositor = Self {
             device,
             queue,
@@ -1119,6 +1121,7 @@ impl Compositor {
             scratch: Arc::default(),
             adapter_name,
             smooth_cut: std::sync::OnceLock::new(),
+            custom: crate::custom_shader::CustomShaders::new(&device_for_custom),
         };
         compositor.log_work_format();
         compositor
@@ -1175,6 +1178,7 @@ impl Compositor {
         if format != self.work.format {
             self.work = WorkPipelines::new(&self.device, &self.bind_group_layout, format);
             self.scratch.lock().unwrap().clear();
+            self.custom.clear();
         }
         self.log_work_format();
     }
@@ -1430,6 +1434,68 @@ impl Compositor {
             texture: Some(out),
             pool: Arc::clone(&self.scratch),
         }
+    }
+
+    /// One asset shader over `a` (and `b`, the incoming side of a transition;
+    /// `a` again for an effect). `None` if the shader does not compile: the
+    /// caller keeps its input. Owned like the other `*_to_owned_texture`.
+    pub fn render_custom_pass(
+        &self,
+        pass: &crate::CustomPass,
+        a: &wgpu::Texture,
+        b: &wgpu::Texture,
+    ) -> Option<PooledTexture> {
+        let pipeline =
+            self.custom
+                .pipeline(&self.device, self.work.format, pass.key, pass.source)?;
+        let out = self.scratch_texture(a.width(), a.height());
+        let uniform = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("vv-render custom uniform"),
+                contents: bytemuck::cast_slice(&pass.uniform((a.width(), a.height()))),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        let view_a = a.create_view(&wgpu::TextureViewDescriptor::default());
+        let view_b = b.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("vv-render custom bind group"),
+            layout: &self.custom.layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view_a),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&view_b),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: uniform.as_entire_binding(),
+                },
+            ],
+        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("vv-render custom encoder"),
+            });
+        self.pass(
+            &mut encoder,
+            &out.create_view(&wgpu::TextureViewDescriptor::default()),
+            wgpu::LoadOp::Clear(TRANSPARENT),
+            Some((&bind_group, &pipeline)),
+        );
+        self.queue.submit(Some(encoder.finish()));
+        Some(PooledTexture {
+            texture: Some(out),
+            pool: Arc::clone(&self.scratch),
+        })
     }
 
     /// `fill` composed alone and cut out by `matte`, composed alone too.

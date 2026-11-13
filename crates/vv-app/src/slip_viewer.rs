@@ -75,6 +75,7 @@ pub fn split_layers(
             filters: Vec::new(),
             blend: vv_core::BlendMode::Normal,
             masks: Vec::new(),
+            assets: Vec::new(),
         })
         .collect()
 }

@@ -160,6 +160,18 @@ history.reset_transform:
   en: "Reset transform"
   it: "Reimposta trasformazione"
 
+history.timeline_resolution:
+  en: "Change aspect ratio"
+  it: "Cambia rapporto dimensioni"
+
+history.set_captions:
+  en: "Generate subtitles"
+  it: "Genera sottotitoli"
+
+history.set_cover:
+  en: "Change cover"
+  it: "Cambia copertina"
+
 history.clip_color:
   en: "Clip color"
   it: "Colore clip"
@@ -199,6 +211,10 @@ history.transition:
 history.make_compound_clip:
   en: "Compound clip"
   it: "Compound clip"
+
+history.ungroup_compound_clip:
+  en: "Ungroup compound clip"
+  it: "Scompatta compound clip"
 
 history.blend_mode:
   en: "Blend mode"

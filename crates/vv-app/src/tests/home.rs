@@ -44,7 +44,7 @@ fn search_ignores_case_and_the_format_filter_narrows_further() {
         card("Matrimonio", 1, 3, Aspect::Wide),
     ];
     let shown = visible(&cards, "  VACANZE ", HomeSort::Name, None);
-    assert_eq!(names(&cards, &shown), ["vacanze montagna", "Vacanze Mare"]);
+    assert_eq!(names(&cards, &shown), ["Vacanze Mare", "vacanze montagna"]);
     let shown = visible(&cards, "vacanze", HomeSort::Name, Some(Aspect::Vertical));
     assert_eq!(names(&cards, &shown), ["vacanze montagna"]);
     assert!(visible(&cards, "", HomeSort::Name, Some(Aspect::Square)).is_empty());

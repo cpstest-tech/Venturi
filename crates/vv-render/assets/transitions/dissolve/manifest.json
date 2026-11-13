@@ -1,0 +1,9 @@
+{
+  "kind": "transition",
+  "name": {
+    "en": "Dissolve",
+    "it": "Dissolvenza"
+  },
+  "category": "basic",
+  "default_secs": 0.5
+}

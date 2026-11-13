@@ -1,0 +1,20 @@
+{
+  "kind": "transition",
+  "name": {
+    "en": "Pixelate",
+    "it": "Pixel"
+  },
+  "category": "stylize",
+  "params": [
+    {
+      "id": "size",
+      "name": {
+        "en": "Max block",
+        "it": "Blocco massimo"
+      },
+      "min": 8,
+      "max": 160,
+      "default": 64
+    }
+  ]
+}

@@ -143,3 +143,7 @@ home.fs_error:
 home.date:
   en: "%{year}-%{month}-%{day} %{hour}:%{minute}"
   it: "%{day}/%{month}/%{year} %{hour}:%{minute}"
+
+home.projects_section:
+  en: Projects
+  it: Progetti

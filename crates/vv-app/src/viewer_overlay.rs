@@ -15,6 +15,8 @@ const ROTATION_ARM: f32 = 100.0;
 /// Rotation step with Shift held.
 const ROTATION_SNAP: f32 = 15.0;
 const MIN_ZOOM: f32 = 0.01;
+/// On-screen distance within which a moved clip snaps to the canvas centre.
+const CENTER_SNAP: f32 = 6.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Handle {
@@ -201,6 +203,41 @@ fn drag_transform(
     t
 }
 
+/// Bounding box of the clip in the frame: [min x, max x, min y, max y],
+/// timeline pixels from the centre, Y up.
+pub(crate) fn frame_bounds(
+    timeline_size: (u32, u32),
+    source_size: (u32, u32),
+    transform: &Transform,
+) -> [f32; 4] {
+    let clip_box = ClipBox::new(timeline_size, source_size, transform.crop, transform.flip);
+    [(-1.0, 1.0), (1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)]
+        .map(|(sx, sy)| clip_to_frame(transform, clip_box.point(sx, sy)))
+        .iter()
+        .fold([f32::MAX, f32::MIN, f32::MAX, f32::MIN], |b, p| {
+            [
+                b[0].min(p[0]),
+                b[1].max(p[0]),
+                b[2].min(p[1]),
+                b[3].max(p[1]),
+            ]
+        })
+}
+
+/// Pulls the clip's centre onto the canvas centre, per axis, when it is within
+/// `threshold` timeline pixels. The flags tell which axes end up centred.
+fn snap_to_center(t: &mut Transform, clip_box: &ClipBox, threshold: f32) -> [bool; 2] {
+    let center = clip_to_frame(t, clip_box.point(0.0, 0.0));
+    let mut centered = [false; 2];
+    for axis in 0..2 {
+        if center[axis].abs() <= threshold {
+            t.position[axis] -= center[axis];
+            centered[axis] = true;
+        }
+    }
+    centered
+}
+
 /// Clockwise angle (degrees) taking `from` onto `to`, vectors from the pivot
 /// with Y up, in the range (-180, 180].
 pub(crate) fn clockwise_turn(from: [f32; 2], to: [f32; 2]) -> f32 {
@@ -278,6 +315,7 @@ pub fn show(
         egui::Sense::drag(),
     );
     let mut changed = None;
+    let mut guides = [false; 2];
     if resp.drag_started()
         && let Some(press) = ui.input(|i| i.pointer.press_origin())
     {
@@ -308,13 +346,18 @@ pub fn show(
             t
         } else {
             let delta = pos - d.start_pointer;
-            drag_transform(
+            let mut t = drag_transform(
                 &d.start,
                 &clip_box,
                 d.handle,
                 [delta.x / scale, -delta.y / scale],
                 shift,
-            )
+            );
+            if d.handle == Handle::Move {
+                let start_box = ClipBox::new(timeline_size, source_size, t.crop, t.flip);
+                guides = snap_to_center(&mut t, &start_box, CENTER_SNAP / scale);
+            }
+            t
         };
         changed = Some(new);
     }
@@ -343,7 +386,25 @@ pub fn show(
 
     let painter = ui.painter().with_clip_rect(area);
     let accent = crate::theme::ACCENT;
-    let line = egui::Stroke::new(1.0, egui::Color32::from_rgb(225, 232, 245));
+    let line = egui::Stroke::new(1.0, egui::Color32::WHITE);
+    let dashed = egui::Stroke::new(1.0, accent);
+    let dash = |a: egui::Pos2, b: egui::Pos2| {
+        painter.extend(egui::Shape::dashed_line(&[a, b], dashed, 6.0, 4.0));
+    };
+    if guides[0] {
+        let x = frame_rect.center().x;
+        dash(
+            egui::pos2(x, frame_rect.top()),
+            egui::pos2(x, frame_rect.bottom()),
+        );
+    }
+    if guides[1] {
+        let y = frame_rect.center().y;
+        dash(
+            egui::pos2(frame_rect.left(), y),
+            egui::pos2(frame_rect.right(), y),
+        );
+    }
     let mut outline = corners.to_vec();
     outline.push(corners[0]);
     painter.add(egui::Shape::line(outline, line));
@@ -353,7 +414,7 @@ pub fn show(
             center,
             radius,
             egui::Color32::WHITE,
-            egui::Stroke::new(1.5, accent),
+            egui::Stroke::new(1.0, crate::theme::BG_WINDOW),
         );
     };
     for (_, p) in &scale_handles {
@@ -364,7 +425,7 @@ pub fn show(
         painter.add(egui::Shape::convex_polygon(
             vec![*a - across, *b - across, *b + across, *a + across],
             egui::Color32::WHITE,
-            egui::Stroke::new(1.5, accent),
+            egui::Stroke::new(1.0, crate::theme::BG_WINDOW),
         ));
     }
     dot(knob, HANDLE_RADIUS);

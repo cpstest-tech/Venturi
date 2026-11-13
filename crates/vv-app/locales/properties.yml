@@ -8,10 +8,6 @@ props.tab_audio:
   en: "Audio"
   it: "Audio"
 
-props.tab_selection:
-  en: "Selection"
-  it: "Selezione"
-
 
 
 props.text:
@@ -648,3 +644,292 @@ mask.feather:
 mask.expansion:
   en: "Expansion"
   it: "Espansione"
+
+details.title:
+  en: "Details"
+  it: "Dettagli"
+
+details.name:
+  en: "Name"
+  it: "Nome"
+
+details.path:
+  en: "Path"
+  it: "Percorso"
+
+details.ratio:
+  en: "Aspect ratio"
+  it: "Rapporto dimensioni"
+
+details.resolution:
+  en: "Resolution"
+  it: "Risoluzione"
+
+details.frame_rate:
+  en: "Frame rate"
+  it: "Frequenza fotogrammi"
+
+details.color_space:
+  en: "Color space"
+  it: "Spazio colore"
+
+details.edit:
+  en: "Edit"
+  it: "Modifica"
+
+details.done:
+  en: "Done"
+  it: "Fine"
+
+props.tab_speed:
+  en: "Speed"
+  it: "Velocità"
+
+props.tab_animation:
+  en: "Animation"
+  it: "Animazione"
+
+props.tab_adjust:
+  en: "Adjust"
+  it: "Regola"
+
+props.sub_basic:
+  en: "Basic"
+  it: "Base"
+
+props.sub_remove_bg:
+  en: "Remove background"
+  it: "Rimuovi lo sfondo"
+
+props.sub_mask:
+  en: "Mask"
+  it: "Maschera"
+
+props.sub_retouch:
+  en: "Retouch"
+  it: "Ritocco"
+
+props.speed_normal:
+  en: "Normal"
+  it: "Normale"
+
+props.speed_curve:
+  en: "Curve"
+  it: "Curva"
+
+props.speed_value:
+  en: "Speed"
+  it: "Velocità"
+
+props.speed_duration:
+  en: "Duration"
+  it: "Durata"
+
+props.keep_pitch:
+  en: "Keep pitch"
+  it: "Mantieni tonalità"
+
+props.speed_media_only:
+  en: "Speed applies to media clips only."
+  it: "La velocità vale solo per le clip multimediali."
+
+props.speed_curve_hint:
+  en: "Speed ramping with a Bézier graph"
+  it: "Speed ramping con grafico di Bézier"
+
+props.stabilize:
+  en: "Stabilize"
+  it: "Stabilizza"
+
+props.canvas:
+  en: "Canvas"
+  it: "Canvas"
+
+props.canvas_blur:
+  en: "Blur background"
+  it: "Sfondo sfocato"
+
+props.canvas_color:
+  en: "Background color"
+  it: "Colore di sfondo"
+
+props.chroma_key:
+  en: "Chroma Key"
+  it: "Chroma Key"
+
+props.chroma_color:
+  en: "Color"
+  it: "Colore"
+
+props.strength:
+  en: "Strength"
+  it: "Intensità"
+
+props.shadow:
+  en: "Shadow"
+  it: "Ombra"
+
+props.auto_cutout:
+  en: "Auto Cutout"
+  it: "Ritaglio automatico"
+
+props.mask_shapes:
+  en: "Shape"
+  it: "Forma"
+
+props.mask_none:
+  en: "None"
+  it: "Nessuna"
+
+props.mask_split:
+  en: "Split"
+  it: "Divisa"
+
+props.mask_filmstrip:
+  en: "Filmstrip"
+  it: "Pellicola"
+
+props.mask_circle:
+  en: "Circle"
+  it: "Cerchio"
+
+props.mask_rectangle:
+  en: "Rectangle"
+  it: "Rettangolo"
+
+props.mask_star:
+  en: "Star"
+  it: "Stella"
+
+props.mask_heart:
+  en: "Heart"
+  it: "Cuore"
+
+props.enhance:
+  en: "Enhance"
+  it: "Migliora"
+
+props.noise_reduction:
+  en: "Noise reduction"
+  it: "Riduzione rumore"
+
+props.voice_changer:
+  en: "Voice changer"
+  it: "Cambia voce"
+
+props.fade_in:
+  en: "Fade in"
+  it: "Dissolvenza in entrata"
+
+props.fade_out:
+  en: "Fade out"
+  it: "Dissolvenza in uscita"
+
+props.anim_in:
+  en: "In"
+  it: "Entrata"
+
+props.anim_out:
+  en: "Out"
+  it: "Uscita"
+
+props.anim_combo:
+  en: "Combo"
+  it: "Combinata"
+
+props.anim_duration:
+  en: "Duration"
+  it: "Durata"
+
+props.anim_speed:
+  en: "Speed"
+  it: "Velocità"
+
+props.lut:
+  en: "LUT"
+  it: "LUT"
+
+props.lut_import:
+  en: "Import .cube…"
+  it: "Importa .cube…"
+
+props.adj_basic:
+  en: "Basic"
+  it: "Base"
+
+props.temp:
+  en: "Temperature"
+  it: "Temperatura"
+
+props.hue:
+  en: "Hue"
+  it: "Tonalità"
+
+props.brightness:
+  en: "Brightness"
+  it: "Luminosità"
+
+props.contrast:
+  en: "Contrast"
+  it: "Contrasto"
+
+props.highlight:
+  en: "Highlight"
+  it: "Luci"
+
+props.shadows:
+  en: "Shadows"
+  it: "Ombre"
+
+props.sharpen:
+  en: "Sharpen"
+  it: "Nitidezza"
+
+props.vignette:
+  en: "Vignette"
+  it: "Vignettatura"
+
+props.hsl:
+  en: "HSL"
+  it: "HSL"
+
+props.curves_rgb:
+  en: "RGB curves"
+  it: "Curve RGB"
+
+props.bubble_effects:
+  en: "Bubble / Effects"
+  it: "Fumetto / Effetti"
+
+props.text_animation:
+  en: "Text animation"
+  it: "Animazione testo"
+
+props.uniform:
+  en: "Uniform size"
+  it: "Dimensione uniforme"
+
+props.resize:
+  en: "Resize"
+  it: "Ridimensiona"
+
+props.align_top:
+  en: "Align top"
+  it: "Allinea in alto"
+
+props.align_middle:
+  en: "Align middle"
+  it: "Allinea al centro verticale"
+
+props.align_bottom:
+  en: "Align bottom"
+  it: "Allinea in basso"
+
+props.reset_icon_hint:
+  en: "Reset to default"
+  it: "Ripristina il valore predefinito"
+
+props.reset_section_hint:
+  en: "Reset the section"
+  it: "Ripristina la sezione"
+

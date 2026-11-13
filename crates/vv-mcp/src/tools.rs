@@ -392,7 +392,7 @@ pub struct AddTitleArgs {
     pub text: String,
     /// Timeline start frame; what is there on the track is overwritten.
     pub at: i64,
-    /// In timeline frames. Default 5 s.
+    /// In timeline frames. Default 3 s.
     #[serde(default)]
     pub duration: Option<i64>,
     /// Video track ("V1", ...). Default: the first unlocked one.

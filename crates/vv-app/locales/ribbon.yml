@@ -1,0 +1,165 @@
+_version: 2
+
+ribbon.tab_media:
+  en: "Media"
+  it: "Media"
+
+ribbon.tab_audio:
+  en: "Audio"
+  it: "Audio"
+
+ribbon.tab_text:
+  en: "Text"
+  it: "Testo"
+
+ribbon.tab_sticker:
+  en: "Stickers"
+  it: "Sticker"
+
+ribbon.favorites:
+  en: "Favorites"
+  it: "Preferiti"
+
+ribbon.project_media:
+  en: "Project media"
+  it: "Media del progetto"
+
+ribbon.audio_music:
+  en: "Music"
+  it: "Musica"
+
+ribbon.audio_sfx:
+  en: "Sound effects"
+  it: "Effetti sonori"
+
+ribbon.text_add:
+  en: "Add text"
+  it: "Aggiungi testo"
+
+ribbon.text_effects:
+  en: "Text effects"
+  it: "Text effects"
+
+ribbon.text_yours:
+  en: "Yours"
+  it: "Tuoi"
+
+ribbon.sticker_shapes:
+  en: "Shapes"
+  it: "Forme"
+
+ribbon.sticker_emoji:
+  en: "Emoji"
+  it: "Emoji"
+
+ribbon.sticker_arrows:
+  en: "Arrows"
+  it: "Frecce"
+
+ribbon.sticker_social:
+  en: "Social"
+  it: "Social"
+
+ribbon.sticker_other:
+  en: "Other"
+  it: "Altro"
+
+ribbon.import:
+  en: "Import"
+  it: "Importa"
+
+ribbon.remove:
+  en: "Remove"
+  it: "Rimuovi"
+
+ribbon.favorite:
+  en: "Add to favorites"
+  it: "Aggiungi ai preferiti"
+
+ribbon.unfavorite:
+  en: "Remove from favorites"
+  it: "Togli dai preferiti"
+
+ribbon.add_to_timeline:
+  en: "Add to the timeline at the playhead"
+  it: "Aggiungi alla timeline nel punto del playhead"
+
+ribbon.item_hint:
+  en: "Click: select · drag onto the timeline, or use + to add it at the playhead"
+  it: "Click: seleziona · trascina sulla timeline, oppure usa + per aggiungerlo al playhead"
+
+ribbon.media_empty:
+  en: "Drag and drop video, photos and audio files here"
+  it: "Trascina e rilascia video, foto e file audio qui"
+
+ribbon.favorites_empty:
+  en: "No favorites yet. Click the star on an item to add it."
+  it: "Nessun preferito. Clicca la stellina su un elemento per aggiungerlo."
+
+ribbon.audio_empty:
+  en: "Empty. Import audio files with Import or drop them here."
+  it: "Vuota. Importa file audio con Importa o trascinali qui."
+
+ribbon.sticker_empty:
+  en: "Empty. Import PNG or WebP images with Import or drop them here."
+  it: "Vuota. Importa immagini PNG o WebP con Importa o trascinale qui."
+
+ribbon.templates_empty:
+  en: "No templates yet. Use \"Save as template\" in the text properties."
+  it: "Nessun template. Usa «Salva come template» nelle proprietà del testo."
+
+ribbon.text_default:
+  en: "Default text"
+  it: "Testo predefinito"
+
+ribbon.text_effects_soon:
+  en: "Text effects"
+  it: "Text effects"
+
+ribbon.save_template:
+  en: "Save as template"
+  it: "Salva come template"
+
+ribbon.template_name:
+  en: "Style %{number}"
+  it: "Stile %{number}"
+
+ribbon.sticker_format_soon:
+  en: "%{name}: SVG and GIF stickers are coming soon"
+  it: "%{name}: gli sticker SVG e GIF saranno presto disponibili"
+
+ribbon.import_unsupported:
+  en: "%{name}: format not supported here"
+  it: "%{name}: formato non supportato qui"
+
+ribbon.curves_hint:
+  en: "Edit the keyframe curves of the selected clip."
+  it: "Modifica le curve dei keyframe della clip selezionata."
+
+ribbon.mixer_hint:
+  en: "Levels, effects and meters of the audio tracks."
+  it: "Livelli, effetti e meter delle tracce audio."
+
+ribbon.color_hint:
+  en: "Color grading and scopes of the selected clip."
+  it: "Correzione colore e scope della clip selezionata."
+
+ribbon.open_window:
+  en: "Open %{name}"
+  it: "Apri %{name}"
+
+ribbon.close_window:
+  en: "Close %{name}"
+  it: "Chiudi %{name}"
+
+ribbon.added:
+  en: "Added"
+  it: "Aggiunto"
+
+ribbon.group_media:
+  en: "Media"
+  it: "Media"
+
+ribbon.group_stickers:
+  en: "Categories"
+  it: "Categorie"

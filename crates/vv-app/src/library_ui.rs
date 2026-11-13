@@ -414,6 +414,8 @@ impl VenturiApp {
                 thumb,
                 proxy: None,
                 renamable: true,
+                hover: None,
+                added: false,
             });
         }
         let folders = self
@@ -465,6 +467,7 @@ impl VenturiApp {
                 PoolEvent::Open(id) => *preview_action = Some(Browsed::Asset(id)),
                 // Imported only once the drag leaves the library, see below.
                 PoolEvent::DragStarted(_) => {}
+                PoolEvent::Clicked(_) | PoolEvent::ToggleFavorite(_) | PoolEvent::Insert(_) => {}
                 PoolEvent::Action(LibraryAction::AddToProject) => {
                     self.add_selected_library_assets_to_project()
                 }

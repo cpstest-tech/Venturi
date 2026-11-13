@@ -1,0 +1,20 @@
+{
+  "kind": "filter",
+  "name": {
+    "en": "Vintage",
+    "it": "Vintage"
+  },
+  "category": "film",
+  "params": [
+    {
+      "id": "intensity",
+      "name": {
+        "en": "Intensity",
+        "it": "Intensità"
+      },
+      "min": 0,
+      "max": 1,
+      "default": 0.8
+    }
+  ]
+}

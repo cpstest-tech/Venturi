@@ -1,15 +1,41 @@
 # Handoff — CapCut-style workflow
 
+## Build status (phases 1, 2, 4; phase 5 at the end)
+
+`cargo build --release` is clean, `cargo test --workspace` passes (the audio
+test `timeline_audio::seeking_outside_the_window_restarts_fast_forward_from_there`
+is timing sensitive and failed once under load, passing alone). Installed with
+`scripts/install-linux.sh` into `~/.local` (`~/.local/bin` is not in `PATH`).
+Not tried by hand yet: everything GUI-related below.
+
+Fixes made while compiling: an unescaped quote in `locales/ribbon.yml` (it
+broke the whole `i18n!` macro), a double borrow in `timeline_commands.rs`,
+and the preview audio staying loaded when leaving a media preview with no
+timeline (`TimelineAudio::clear_media`). Tests that assumed the old behaviour
+now switch the Main Track magnet off (`timeline_state.magnet = false`), since
+the magnet packs clips to the start by default.
+
+### UI pass after the first build
+
+- **Home card**: the date overflowed the card; the card is taller and every
+  text line truncates.
+- **Multifunction ribbon** (Library block): tabs Media, Audio, Text, Sticker,
+  **Effects, Curves, Mixer, Color**. Effects shows the effects/presets list
+  inline. Curves, Mixer and Color are still floating windows: selecting the
+  tab opens the window and the tab holds an open/close button. The five
+  toolbar toggles and the pool/effects column splitter were removed
+  (`media_pool_open`, `effects_open`, `media_pool_fraction` remain in the
+  settings file, unused).
+- **Text previews**: cards in Add text, Yours and Favorites show the title as
+  the compositor draws it (`vv_render::text::render_title`, project
+  proportions, dark frame), cached per template and refreshed when the
+  template or timeline size changes. Text effects is still disabled.
+
 Spec: `docs/spec-workflow.md` · gap analysis: `docs/gap-analysis.md`.
 
 ## Phase 1 — Home, layout, top bar, saving
 
-Status: **code written, not compiled and no tests run** (the phase rules say
-"do not compile"). Formatting was checked with `/usr/bin/rustfmt --edition
-2024 --check`. Note that the rustup `stable` toolchain on this machine is
-broken (missing `librustc_driver`, missing manifest). `Cargo.lock` was updated
-with the 1.93.1 toolchain's `cargo metadata`, which resolves dependencies
-without building anything. The only addition is `egui_tiles 0.17.1`.
+Status: **compiled and tested** (see "Build status" below).
 
 ### Decisions taken (user answers)
 
@@ -113,4 +139,455 @@ without building anything. The only addition is `egui_tiles 0.17.1`.
 - `menu.inspector` and the panel-width settings (`inspector_open`,
   `left_column_width`, `inspector_width`, `timeline_height`) are gone. Their
   old keys in `settings.json` are ignored.
-- Open questions for later phases: Q1, Q3, Q5, Q6 and Q7 in the gap analysis.
+- Open questions for later phases: Q1, Q6 and Q7 in the gap analysis (Q3 and Q5 were answered in phase 2).
+
+## Phase 2 — Timeline
+
+Status: **compiled and tested** (see "Build status" below).
+
+### Decisions taken (user answers)
+
+- **Q3, audio of video clips**: unchanged model. Video and audio stay two clips
+  on separate tracks joined by `linked_group`; the waveform is drawn on the
+  audio row. "Extract audio" unlinks the audio from the picture (or recreates
+  it as unlinked clips on a free audio row if it was missing).
+- **Q5, Magnet**: with the Magnet on, only the **Main Track** is kept free of
+  holes. The global ripple stays as the separate `<` command (RippleDelete).
+- **Main Track**: `Track::main` (serde default `false`). A new timeline gets
+  `Track::new_main()`; `Timeline::main_track_index()` falls back to the first
+  video track, so old projects need no migration and no version bump.
+- **Linkage**: computed on the fly, nothing stored. A clip on another track
+  follows the Main Track clip that contains its start
+  (`workflow::linkage_anchors`).
+
+### Done
+
+- `vv-core/src/workflow.rs` (tests in `tests/workflow.rs`): `delete_side`
+  (Q/W), `compact_main_track` (Magnet + Linkage, one undo step), `extract_audio`,
+  `freeze_frame` (3 s still, later clips slide right), `duplicate_after`
+  (Ctrl+D inserts after the selection), `edit_points` (↑/↓).
+- Bar above the timeline (`timeline_bar.rs`): mouse-mode menu (Select, Blade,
+  Select left/right, plus the existing Slip), Undo/Redo, Split, Delete
+  left/right, Delete; on the right Magnet, Snapping, Linkage, Preview Axis and
+  a log-scale zoom slider. Snapping moved here from the player bar.
+- Empty state: ruler, empty Main Track and the hint (also drawn when the
+  project has no timeline yet; the first media still creates it).
+- Track header: 120 px fixed column, camera/note/T icon, "Main Track" label,
+  Lock, Eye, Speaker. Eye = hides the layer (video tracks), Speaker = mutes
+  (audio tracks); the other one is shown disabled with a tooltip. Solo, Arm for
+  recording and Remove track moved to the header's right-click menu (the Main
+  Track cannot be removed).
+- Clips: colours per kind (video blue, audio green, text orange, effects
+  indigo); filmstrip on video clips; thick `[` `]` bracket on the trim handle
+  with the existing ↔ cursor; white border on selection (already there); fade
+  dots always visible on audio clips.
+- Modes: Blade cuts the clicked clip (and its linked group) where the pointer
+  is, snapping included; Select left/right take every clip starting before/after
+  the clicked one. In these modes a drag does not move clips.
+- Magnet: after Move, Trim and Speed gestures, Del, Q/W, Cut and media drops,
+  inside the same undo group as the gesture. Linkage: dragging a Main Track clip
+  drags the clips anchored to it.
+- Preview Axis: line under the pointer; the player shows that frame while the
+  playhead stays (the playhead is swapped for the composition only).
+- Right-click menu on clips: Freeze Frame, Reverse (disabled, «Presto
+  disponibile»), Mirror, Extract audio, Copy, Cut, Paste, Duplicate,
+  Disable/Enable, Delete. Right-click on an unselected clip selects it first.
+- Shortcuts (`settings.rs`): Ctrl+B, Q, W, A/B/[/], Ctrl+D, P, N, S, Shift+Z,
+  Home/End, ↑/↓, Shift+←/→, J/K/L, Ctrl+Shift+S, Ctrl+G, V, Ctrl+Y.
+  Zoom is Ctrl+wheel (egui `zoom_modifier`), horizontal scroll moved to
+  Alt+wheel.
+- Tests: `vv-core/src/tests/workflow.rs`, gesture tests in
+  `tests/timeline_ui_gestures.rs` (the harness now starts with Magnet and
+  Linkage off, to keep the old gesture tests valid), app tests in
+  `tests/main.rs`, defaults in `tests/settings.rs`.
+
+### Remains / known limits
+
+- **Compile, then `cargo clippy --all-targets -D warnings` and `cargo test`.**
+  Then try the "Fatto quando" montage by hand: split, Q/W, Magnet ripple,
+  snapping, Linkage, lock/hide/mute, zoom, undo of every gesture.
+- Default shortcut changes that may surprise: Split T → Ctrl+B, Disable D → V,
+  Select V → A, Slip B → Shift+A, Save As Ctrl+Shift+S → Ctrl+Alt+S (the spec
+  gives Ctrl+Shift+S to Extract audio), "A" fast playback is unbound (L does it).
+  Users with saved keymaps keep their old keys.
+- **Filmstrip** tiles the single pool thumbnail: real per-position frames need
+  a decoder job (the only public helper, `vv_media::generate_thumbnail`, seeks
+  at most 1 s in and is engine code).
+- **Waveform on video clips** is not drawn (Q3 kept the separate audio clip).
+- **Reverse** is a placeholder (needs backward decoding in the engine). **J**
+  scrubs the playhead backwards at 1×/2×/4×/8× without audio; the player does
+  not play in reverse.
+- Dragging a Main Track clip over a neighbour still overwrites it (existing
+  behaviour) and the Magnet then closes the hole, instead of reordering the
+  clips as CapCut does.
+- Freeze Frame slides everything starting at the playhead on the unlocked
+  tracks; a clip on another track that merely crosses the playhead stays put.
+- Magnet, Linkage and Preview Axis are per session, not saved in the settings.
+- Header: the Eye on audio tracks and the Speaker on video tracks are disabled.
+- Pinch zoom uses egui's `zoom_delta` (already there); not tried on a trackpad.
+- Compound Clip, keyframe diamonds and Ungroup (Alt+Shift+G) are later phases.
+
+## Phase 4 — Base library (Media, Audio, Text, Sticker)
+
+Status: **compiled and tested** (see "Build status" below).
+
+### Decisions taken (user answers)
+
+- **First media**: the project format is set when the first media is *inserted*
+  in the timeline, not on import (import no longer creates a timeline).
+- **Rotation**: read outside the engine with `ffprobe` (`first_media::probe_rotation`,
+  cached per file). The clip is turned upright through its own Transform
+  (rotation + zoom, one undo group with the insertion), so preview and export
+  stay identical.
+- **Stickers v1**: static images only (PNG/WebP...). SVG and GIF are listed in the
+  file dialog and refused with a «presto disponibile» message.
+- **Audio and Sticker storage**: the user's global library (`library.rs`);
+  each category is a reserved top-level library folder (`ribbon-audio-music`,
+  `ribbon-audio-sfx`, `ribbon-sticker-<id>`), created on first import.
+- **Layout**: tab bar Media/Audio/Testo/Sticker on top of the Library block
+  (`library_ribbon.rs`), then the category chips (Preferiti first). Media →
+  «Media del progetto» is the old pool (with its Project/Library side tabs, so
+  the raw user library stays reachable). The Effects list below is unchanged.
+
+### Done
+
+- **Rule of the first media** (`first_media.rs`): native size capped at 4K
+  (same orientation, even sides), effective orientation with rotation, fps
+  rounded to 24/25/30/50/60 (30 for a photo), ratio preset derived from the
+  size (`Ratio::of`, «Original» if none matches).
+- **Favorites** (`settings.favorites`, keys `media:<path>` / `asset:<id>` /
+  `text:<id>`): star on hover on every item; saved in `settings.json`, so they
+  outlive the app and every project.
+- **«+» on hover** inserts at the playhead; drag inserts at the drop point.
+  Photos 5 s, stickers 3 s, text 3 s. Stickers and text go on a free video
+  track above the Main Track (or a new one) unless the timeline is empty.
+- **Media**: search (pool header), «Importa» button (system file dialog),
+  drop onto the block, Ctrl+I, dashed empty state «Trascina qui video, audio e
+  foto o clicca per importare». Favorite media can be outside the project: they
+  join the pool when inserted or dragged.
+- **Audio**: Musica / Sound effect; a click previews (plays) the sound through
+  the pool preview; Import / drop / Ctrl+I add files to the category shown.
+- **Testo**: «Aggiungi testo», «Text effects» (disabled, «Presto disponibile»),
+  «Tuoi» (templates in `settings.text_templates`; «Salva come template» button
+  under the text properties; right click removes one).
+- **Sticker**: Forme, Emoji, Frecce, Social, Altro; user content only.
+- Strings in `locales/ribbon.yml` (en/it).
+- Tests: `tests/first_media.rs`, `tests/library_ribbon.rs`, two cases in
+  `vv-core/src/tests/edit.rs`. Updated: tests that expected import to create the
+  timeline (`tests/main.rs`, `tests/main_export.rs`), the photo length (now
+  5 s at 30 fps), `tests/pool_view.rs` (new `hover` field).
+
+### Second pass (spec re-check)
+
+- Category chips replaced by a **left sidebar** (Preferiti first; the Media and
+  Sticker lists sit under a collapsible group) in `library_ribbon.rs`.
+- Grid cards: **«Aggiunto»** tag top left (media already in a timeline),
+  duration top right (`PoolEntry::added`, `paint_tile_tags`).
+- Empty state: cyan «+», text «Trascina e rilascia video, foto e file audio qui».
+  «Sound effect» renamed «Effetti sonori».
+- Clippy and `cargo test -p vv-app` pass.
+- Still not matching the spec: tools row (Importa + search + view/sort/filter
+  icons in one line: Importa is on the tab row, search/sort live in the pool
+  header); Audio rows as «Autore · durata» with round «+» (no author field in
+  the library); Audio/Text top segments (they are sidebar entries); Text
+  sidebar order «Aggiungi testo / Tuoi / Preferiti» (kept Preferiti first, the
+  spec contradicts itself); tabs Transitions/Subtitles/Filters.
+
+### Remains / known limits
+
+- **Compile, then `cargo clippy --all-targets -D warnings` and `cargo test`.**
+  Then try by hand: import by button, drag from the file manager and Ctrl+I;
+  drag and «+» into the timeline; a portrait phone video as first media;
+  stars after an app restart; click on a sound.
+- Rotation needs `ffprobe` in `PATH`; without it the file is treated as upright.
+  Later media with a rotation are turned upright too, but only the first one
+  changes the project format.
+- Audio-only first media keeps the old default (25 fps, 1920x1080).
+- The ratio preset is derived, not stored: the Player's Ratio button and the
+  project properties (next phases) own that value.
+- «+» of a video goes to the first free video track at the playhead like a
+  drop does: it overwrites what is under it on the Main Track.
+- The «Tuoi» template keeps the text style only (not the Drop Shadow filter).
+- Text effects, SVG/animated stickers and sticker packs are placeholders.
+- A removed category folder in the raw Library tab moves its assets to the
+  library root (they leave the ribbon).
+- `MediaDrag` payloads of favorites are imported into the pool (a pool step
+  in the undo history) when the drag leaves the block.
+
+## Phase D — Graphic style (CapCut look)
+
+Spec: `docs/design-spec.md` (written from the user's text; values are estimates).
+
+**Rule from now on:** every new piece of UI uses only the tokens in
+`crates/vv-app/src/theme.rs` and follows `docs/design-spec.md`. No hardcoded
+colour, radius, spacing or font size elsewhere. Icons: one open-source set
+(Lucide or Phosphor); never CapCut assets, Pro/Free badges or EditPilot.
+
+### Step 1 — tokens (done, not compiled, waiting for the user's OK)
+
+- `theme.rs` now holds all tokens (surfaces, text, accent, clip colours,
+  status, spacing, radii, font sizes, control heights, menu shadow) and
+  `apply()` sets the whole egui style from them (widgets, selection, windows,
+  menus, text sizes). Accent changed from the logo orange to cyan `#1fc8d6`.
+- Replaced hardcoded values: clip colours, track/ruler backgrounds, selected
+  clip border, playhead (now white), favorite gold, audio-meter colours.
+- Not yet done (Step 2, per group): the many literal radii (2/3/4/6), grey
+  `from_gray` overlays, white/black painter strokes, transition/crossing colours
+  in `timeline_ui.rs`, and the DSP panels (`eq_panel`, `compressor_panel`,
+  `mixer_panel`, `color_window`, `grade_panel`).
+- Font: egui's default sans is used; Inter/Roboto is not bundled yet.
+
+### Step 2 (done in one pass, compiled, tests run, installed)
+
+- Inter Regular bundled (`assets/fonts`, OFL licence alongside), set as the
+  first proportional font in `theme::apply`.
+- Layout: window `BG_WINDOW`, blocks drawn as `BG_PANEL` cards with 6 px
+  corners and an 8 px gap; tab bars restyled through the `egui_tiles` behavior
+  (`workspace.rs`). Top bar: `BG_WINDOW`, Export is the solid cyan primary button.
+- Player: header «Lettore – <timeline>» with the ≡ menu (zoom entries moved
+  there); bottom bar with HH:MM:SS:FF timecode (current cyan / total grey),
+  centred triangle Play/Pause, «Piena» and «Rapporto» menus, fit-to-view and
+  full-screen icons (`transport.rs`). **Piena (1/2, 1/4) and Rapporto
+  (16:9…) options were disabled here; Phase 3 wired them (see below).
+- Home: cyan gradient «Nuovo progetto» banner replaces the button, «Progetti»
+  section title, teal backdrop gradient, cards `size | duration`.
+- Icons are drawn by hand (Lucide-like 1.5 px strokes); no icon font added.
+- Not done: Properties tabs restructure (Phase 3), Home sidebar, export modal
+  content (still the empty placeholder), 300 px context menus, per-literal radii
+  in `timeline_ui.rs` and DSP panels (they follow the global egui style).
+
+## Phase 3 — Player, Properties, Keyframes
+
+Compiled; `cargo clippy --workspace --all-targets -D warnings` clean; all tests
+pass (`timeline_audio::seeking_outside_the_window…` is timing sensitive: it
+fails under load, passes alone). Not tried by hand: all GUI behaviour.
+
+### Done
+
+- **Player**: «Piena» (Piena/1/2/1/4 → `settings.preview_resolution`),
+  «Rapporto» (Original/16:9/9:16/1:1/4:3, active one checked, label fixed) via
+  the new undoable `SetTimelineResolution` (`vv-core`); `Ratio::resolution` keeps
+  the longer side, Original = first video/photo upright. «Dettagli» uses the
+  same `set_project_ratio`. Safe-zones icon = placeholder.
+- **Canvas overlay** (`viewer_overlay.rs`): white 1 px outline, round white
+  handles; dashed cyan guides only while moving a clip whose centre sits exactly
+  on the canvas centre (snap within 6 px). Crop bars, rotation knob and pivot
+  existed already and are unchanged: say if they must be hidden.
+- **Dettagli** (`project_details.rs`): shown with nothing selected; «Modifica»
+  opens Aspect Ratio (works), Frame Rate and colour space (disabled).
+- **Properties tabs** (`properties_tabs.rs`, wired in `properties_panel.rs`):
+  Video (Base / Rimuovi lo sfondo / Maschera / Ritocco), Audio, Velocità,
+  Animazione, Regola. The old Selection tab was removed.
+  - Base: Trasforma (Ridimensiona % slider, «Dimensione uniforme», position,
+    rotation, anchor, flip, 6 alignment icons that move the clip), Ritaglio,
+    Fusione (blend, matte, opacity), Stabilizza and Canvas [placeholder], text
+    editor + «Salva come template» for text clips.
+  - Maschera: the existing masks (rectangle/ellipse/path, feather, invert);
+    Split/Filmstrip/Star/Heart [placeholder].
+  - Audio: volume with keyframes, Fade In/Out in seconds (same value as the
+    timeline dots, `SetClipFade`), Noise Reduction / Voice Changer [placeholder].
+  - Velocità / Normale: 0.1×–100×, resulting duration, Keep pitch, ↺; committed
+    on release (one undo step, `SetClipSpeed` with ripple). Curva [placeholder].
+  - Regola: the existing filters and colour wheels; LUT, Basic, HSL, RGB curves
+    [placeholder]. Animazione In/Out/Combo and text Bubble/Effects/Animation
+    [placeholder]. Chroma Key, Auto Cutout, Enhance [placeholder].
+- **Reset / keyframes**: ↺ icon in every section header and at the end of every
+  parameter row (double click on the slider knob or the label also resets);
+  Alt+click on a label or slider toggles the keyframe at the playhead; ‹ ◇ ›
+  and "edit updates/creates the keyframe" already existed. Keyframe diamonds are
+  drawn on the clip in the timeline (transform keyframes). Number fields take
+  Up/Down arrows while focused.
+- Tests: ratio/resolution (`tests/first_media.rs`), snap (`tests/viewer_overlay.rs`),
+  diamonds (`tests/timeline_ui.rs`), command undo (`vv-core` `tests/workflow.rs`).
+
+### Remains
+
+- Frame Rate change (needs a command that conforms the clips to the new fps)
+  and colour space: disabled in «Dettagli».
+- Overlay and the panel work on the first selected *video* clip; photo/sticker/
+  text clips use the same path but were not checked.
+- Not wired to the engine (placeholders): stabilise, canvas blur/colour, chroma
+  key, auto cutout, enhance, noise reduction, voice changer, speed curve,
+  in/out/combo animations, LUT .cube, basic adjustments, HSL, RGB curves,
+  star/heart/split/filmstrip masks, text bubble/effects/animation, safe zones.
+- Diamonds show transform keyframes only (not gain/text/colour/filters).
+- Easing between keyframes: linear only (as asked).
+
+## Phase 5 — Effects, Filters, Transitions, Compound Clip
+
+Status: **compiled, `cargo clippy --workspace --all-targets -D warnings` clean,
+`cargo test --workspace` passes** (`timeline_audio::seeking_outside_the_window…`
+is the known timing-sensitive one: fails under load, passes alone). Not tried by
+hand: everything GUI (hover loops, drag and drop, context menu, shortcuts).
+
+### Decisions taken (user answers)
+
+- **Q1, engine boundary**: *adding* to `vv-render` is allowed, changing the
+  existing pipeline is not. Done as a separate pass, see below.
+
+### Done
+
+- **Engine (additive)**: `vv-render/src/assets.rs` (manifest + library, built-ins
+  embedded by `build.rs`, user folder `$XDG_DATA_HOME/venturi/assets`),
+  `custom_shader.rs` (WGSL prelude + pipeline cache with error scope) and
+  `Compositor::render_custom_pass`. The existing passes are untouched. Format and
+  shader contract: `docs/ASSETS.md`. 18 assets in `vv-render/assets/`: 6 effects
+  (Pulse, Glitch, Shake, Soft blur, Chromatic aberration, Mirror), 6 filters
+  (Vintage, Noir, Warm, Cool, Vivid, Cinematic), 6 transitions (Dissolve, Dip to
+  black, Wipe, Slide, Zoom, Pixelate).
+- **Model** (`vv-core`): `EffectStack::assets: Vec<AssetFx>` (id, enabled, params)
+  and `Transition::asset: Option<AssetFx>` (kind stays `CrossDissolve` for readers
+  that do not know assets). `set_clip_assets` command. `fx.rs`:
+  `adjacent_neighbor`, `adjacent_pairs`, `asset_crossing`, `apply_asset_transition`,
+  `ungroup_compound_clip`. Adjacency tolerance is 1 frame (`ADJACENT_TOLERANCE`,
+  also in `Track::crossing_at`).
+- **Rendering, preview = export** (`vv-session/src/frame_provider.rs`): one code
+  path for both. An effect on a clip composes that clip alone, runs the passes and
+  puts it back as a texture (it sees transform, filters and masks, not opacity or
+  blend). An effect *element* is an adjustment clip carrying assets: `stack_layers`
+  composes everything below it, runs the passes and replaces the stack; its fades
+  and opacity scale how much of the effect shows. An asset transition merges both
+  sides (each live, held at the edges of its media) into one layer.
+- **Library tabs** (`fx_library.rs`): Effects, Filters, Transitions in the ribbon.
+  Full-width search, sidebar (Preferiti first, then the manifest categories; the
+  old hand-made list stays under «Classici» in Effects), square cells with the
+  label below (truncated), star and «+» on hover. Favorites key `fx:<id>`.
+- **Previews**: 160×90 bundled sample pictures drawn in code, the same shader
+  through the compositor. Cells show a still; on hover a 36-frame loop at 18 fps
+  (transitions go A→B, hold, B→A) is rendered 6 frames per UI frame and cached as
+  textures, so the first hover does not stall.
+- **Use**: drag a cell onto a video clip (the whole selection if the clip is in
+  it); onto free timeline space it becomes an adjustment clip (default 3 s) that
+  processes the tracks below; «+» does the same at the playhead (new track).
+  Transitions: dropping on a clip picks the nearest cut; no adjacent clip there →
+  «Nessuna coppia di clip adiacenti trovata» (toast). «+» uses the selected pair,
+  else the cut nearest to the playhead. Default 0.5 s, clamped to twice the
+  shorter clip (what the existing crossing model can lend).
+- **Properties**: «Effetti e filtri» section in the Regola tab (switch, sliders,
+  double click resets, remove); the transition panel shows the asset name and its
+  parameters. Slider drags are one undo step (the app merges commands while the
+  pointer is down).
+- **Compound Clip**: Alt+G (and the right-click entry) groups the selection with
+  its linked audio; Alt+Shift+G (and right-click) ungroups: each nested layer goes
+  back with its own effects and position, trimmed to what the container showed,
+  link groups and transitions remapped, unused container removed from the pool,
+  one undo step. New actions `MakeCompound` / `UngroupCompound` in the keymap.
+- Tests: `vv-render` (assets, every shader compiles, transitions reach A at 0 and
+  B at 1), `vv-core/tests/fx.rs`, `vv-session` (effect on a clip, element acts only
+  below and only for its length, asset transition, tolerance), `vv-app/tests/fx_library.rs`.
+
+### Remains / known limits
+
+- **Try by hand**: hover loop smoothness, drag onto clip / empty space / non
+  adjacent clips, Alt+G round trip on a real project, export of a clip with an
+  effect, a transition and an element.
+- Asset parameters are constants (no keyframes yet).
+- Assets are read at startup: no hot reload of the user folder.
+- An asset effect on a clip with a matte, or an element with a matte, is ignored.
+- Ungrouping refuses a container with its own effects, fades, speed or freeze
+  (toast) instead of dropping them.
+- A one-frame gap between clips still takes a transition, but that gap frame has
+  no clip and shows nothing.
+- OTIO export writes an asset transition as a plain dissolve; the MCP tools do not
+  know assets.
+- Effects use `fx_time()` from the timeline fps; very long effect elements keep
+  running time-based shaders without looping.
+- The old single-edge transitions and the built-in filters are still reachable
+  (Effects → Classici) and unchanged.
+
+## Phase 6 — Subtitles and Export
+
+Written after a crash that cut the session: the code was re-read and the
+missing pieces rebuilt. **Nothing was compiled** (rule of the phase): expect
+a first round of compiler errors.
+
+### Done
+
+- **Transcription** (`crates/vv-transcribe`, new): whisper.cpp through
+  `whisper-rs`; the model is downloaded on first use into `models/` next to the
+  library root; language automatic or manual; progress and cancel; runs on a
+  worker thread (`subtitles.rs`). `vv-app` now depends on it (Cargo.toml and
+  Cargo.lock edited by hand).
+- **Words are kept apart from the style** (`vv-core/src/captions.rs`,
+  `Project::captions`): choosing a template rebuilds the clips from the saved
+  words, no new transcription, one undo step (`SetCaptions`). Templates are
+  split into «word by word» and «riga». «Aggiungi sottotitoli» is a placeholder.
+- **Subtitles tab** in the library ribbon (`subtitles_ui.rs`, `subtitles.yml`).
+- **Export modal** (`export_modal.rs`, logic in `export_plan.rs`): two columns,
+  cover thumbnail with «✎ Modifica copertina», name/path/browse, Video, Audio and
+  Captions sections (checkbox + collapse arrow), footer with the live estimate
+  `(video + audio Mbps) × s ÷ 8`, progress with frame preview, ETA, cancel
+  (partial files removed) and «Apri cartella». Ctrl+E now opens it (was
+  Ctrl+Shift+E). Match the best video: bitrate by ffprobe on a thread at open,
+  resolution and fps from the media meta.
+- **Engine** (done before the crash, needed by the modal): target bitrate
+  (CBR/VBR), export fps, separate audio file, preview frames, cleanup of
+  partial files.
+- **Cover**: the Main Track pencil and the modal button open the same picker
+  (`cover.rs`), now wired in `main.rs`. Missing locale keys added.
+
+### Remains / known limits
+
+- **Compile and run**; then try: generate, switch template (no re-transcription),
+  export with Match the best video on clips of different bitrates, compare the
+  file with the preview.
+- Only H.264 is offered; HEVC and AV1 are hidden until the engine has them.
+  MOV goes through the same encoder (extension picks the muxer): check it.
+- `export_dialog.rs`, `show_export_dialog` and `tests/export_dialog.rs` are now
+  unused: delete after the first build. The old progress window still serves
+  exports started by MCP.
+- The modal exports the In/Out range when marks are set (the estimate follows).
+- No unit tests for `export_modal.rs` (it needs the GPU/ffprobe); the plan
+  logic is covered in `tests/export_plan.rs`.
+
+## Phase 7 — AI features and final pass
+
+**Nothing was compiled or run** (rule of the phase): the checks below are a
+code read plus three small fixes. Expect a first round of compiler errors
+(`transport.rs`, `app_menu.rs` were touched).
+
+### Done
+
+- **AI features**: checked against the code and the gap analysis. The engine has
+  none of them (no denoiser, voice effect, segmentation, enhancer or video
+  stabilizer; Silero VAD and the optical flow of Smooth Cut are not the same
+  thing), so Auto Cutout, Noise Reduction, Voice Changer, Enhance and Stabilize
+  stay disabled [placeholder] with «Presto disponibile»
+  (`properties_tabs.rs`). Nothing was wired.
+- **Dead controls**: the only clickable one found was the player's safe-zones
+  icon (hover text only). It is now disabled with «Presto disponibile».
+  The other placeholders were already disabled.
+- **Shortcuts**:
+  - defaults are unique (existing test `default_shortcuts_are_unique`);
+  - keys are ignored while a text field has focus, a menu is open or a shortcut
+    is being captured (already there);
+  - new: they are also ignored while the export modal, the cover picker or the
+    unsaved-changes dialog is open (Del/Q/W/Space used to reach the timeline
+    behind them).
+- **Layout menu** (reset, reopen closed blocks, re-dock detached ones), empty
+  states (Home, Media, Timeline) and the undo grouping of properties gestures
+  (`apply_effect_changes`, closed every frame once the pointer is up) were read
+  and look right; not exercised.
+
+### Placeholders left
+
+Stabilize, Canvas (blur/colour), Chroma Key, Auto Cutout, Enhance, Noise
+Reduction, Voice Changer, Speed curve, Animation In/Out/Combo, text
+Bubble/Effects/Animation, LUT/Basic/HSL/RGB curves, masks Split/Filmstrip/Star/
+Heart, Reverse, safe zones, Text effects (library), «Aggiungi sottotitoli»
+(manual), SVG/GIF stickers and sticker packs, Frame Rate and colour space in
+«Dettagli», HEVC/AV1 export.
+
+### Known bugs / limits
+
+- **Not verified (needs a build and a hand run)**: project save → reopen →
+  export of a test project; preview identical to export (one code path in
+  `frame_provider.rs` by design, but never compared on a file); opening old
+  `.vvproj` files; undo/redo of every new action.
+- Space/Enter on a focused egui button both press it and fire the shortcut.
+- If the Home is opened during a held gesture, its undo group closes only on
+  return to the editor.
+- Everything under "Remains / known limits" of phases 1–6 still applies
+  (Wayland window placement, detached-window shortcuts, filmstrip tiling one
+  thumbnail, no reverse playback, asset params not keyframeable, old export
+  dialog files to delete after the first build, timing-sensitive audio test).

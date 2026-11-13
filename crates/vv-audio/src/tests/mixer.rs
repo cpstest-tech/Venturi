@@ -71,6 +71,8 @@ fn audio_track(clips: Vec<Clip>) -> Track {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     }
 }
 

@@ -407,6 +407,7 @@ fn exports_a_transition_as_an_item_that_takes_no_time() {
         direction: PushDirection::Left,
         ease: Ease::InOut,
         curve: 0.5,
+        asset: None,
     });
     project.timelines[timeline_id].tracks[0].clips.push(clip);
 

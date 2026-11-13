@@ -54,10 +54,33 @@ pub enum Action {
     SlipTool,
     OpenCompound,
     ExitCompound,
+    DeleteLeft,
+    DeleteRight,
+    BladeTool,
+    SelectLeftTool,
+    SelectRightTool,
+    Duplicate,
+    ToggleMagnet,
+    ToggleSnapping,
+    TogglePreviewAxis,
+    FitTimeline,
+    MakeCompound,
+    UngroupCompound,
+    GoToStart,
+    GoToEnd,
+    PreviousEditPoint,
+    NextEditPoint,
+    StepBackward10,
+    StepForward10,
+    ShuttleBack,
+    ShuttlePause,
+    ShuttleForward,
+    ExtractAudio,
+    GroupClips,
 }
 
 impl Action {
-    pub const ALL: [Action; 40] = [
+    pub const ALL: [Action; 63] = [
         Action::TogglePlayback,
         Action::FastPlayback,
         Action::StepBackward,
@@ -98,6 +121,29 @@ impl Action {
         Action::SlipTool,
         Action::OpenCompound,
         Action::ExitCompound,
+        Action::DeleteLeft,
+        Action::DeleteRight,
+        Action::BladeTool,
+        Action::SelectLeftTool,
+        Action::SelectRightTool,
+        Action::Duplicate,
+        Action::ToggleMagnet,
+        Action::ToggleSnapping,
+        Action::TogglePreviewAxis,
+        Action::FitTimeline,
+        Action::MakeCompound,
+        Action::UngroupCompound,
+        Action::GoToStart,
+        Action::GoToEnd,
+        Action::PreviousEditPoint,
+        Action::NextEditPoint,
+        Action::StepBackward10,
+        Action::StepForward10,
+        Action::ShuttleBack,
+        Action::ShuttlePause,
+        Action::ShuttleForward,
+        Action::ExtractAudio,
+        Action::GroupClips,
     ];
 
     /// Key in the settings file: must never be changed.
@@ -143,6 +189,29 @@ impl Action {
             Action::SlipTool => "slip_tool",
             Action::OpenCompound => "open_compound",
             Action::ExitCompound => "exit_compound",
+            Action::DeleteLeft => "delete_left",
+            Action::DeleteRight => "delete_right",
+            Action::BladeTool => "blade_tool",
+            Action::SelectLeftTool => "select_left_tool",
+            Action::SelectRightTool => "select_right_tool",
+            Action::Duplicate => "duplicate",
+            Action::ToggleMagnet => "toggle_magnet",
+            Action::ToggleSnapping => "toggle_snapping",
+            Action::TogglePreviewAxis => "toggle_preview_axis",
+            Action::FitTimeline => "fit_timeline",
+            Action::MakeCompound => "make_compound",
+            Action::UngroupCompound => "ungroup_compound",
+            Action::GoToStart => "go_to_start",
+            Action::GoToEnd => "go_to_end",
+            Action::PreviousEditPoint => "previous_edit_point",
+            Action::NextEditPoint => "next_edit_point",
+            Action::StepBackward10 => "step_backward_10",
+            Action::StepForward10 => "step_forward_10",
+            Action::ShuttleBack => "shuttle_back",
+            Action::ShuttlePause => "shuttle_pause",
+            Action::ShuttleForward => "shuttle_forward",
+            Action::ExtractAudio => "extract_audio",
+            Action::GroupClips => "group_clips",
         }
     }
 
@@ -166,7 +235,16 @@ impl Action {
             | Action::ClearInOut
             | Action::FullscreenViewer
             | Action::ViewerZoomFit
-            | Action::ViewerZoomActual => t!("action_category.playback"),
+            | Action::ViewerZoomActual
+            | Action::GoToStart
+            | Action::GoToEnd
+            | Action::PreviousEditPoint
+            | Action::NextEditPoint
+            | Action::StepBackward10
+            | Action::StepForward10
+            | Action::ShuttleBack
+            | Action::ShuttlePause
+            | Action::ShuttleForward => t!("action_category.playback"),
             Action::Undo
             | Action::Redo
             | Action::Copy
@@ -180,7 +258,12 @@ impl Action {
             | Action::RetimeControls
             | Action::SelectAll
             | Action::SelectFromPlayhead
-            | Action::Rename => t!("action_category.edit"),
+            | Action::Rename
+            | Action::DeleteLeft
+            | Action::DeleteRight
+            | Action::Duplicate
+            | Action::ExtractAudio
+            | Action::GroupClips => t!("action_category.edit"),
             Action::NewProject
             | Action::OpenProject
             | Action::SaveProject
@@ -194,7 +277,16 @@ impl Action {
             | Action::SelectTool
             | Action::SlipTool
             | Action::OpenCompound
-            | Action::ExitCompound => {
+            | Action::ExitCompound
+            | Action::BladeTool
+            | Action::SelectLeftTool
+            | Action::SelectRightTool
+            | Action::ToggleMagnet
+            | Action::ToggleSnapping
+            | Action::TogglePreviewAxis
+            | Action::FitTimeline
+            | Action::MakeCompound
+            | Action::UngroupCompound => {
                 t!("action_category.timeline")
             }
         }
@@ -211,7 +303,7 @@ impl Action {
         };
         match self {
             Action::TogglePlayback => vec![plain(Key::Space)],
-            Action::FastPlayback => vec![plain(Key::A)],
+            Action::FastPlayback => vec![],
             Action::StepBackward => vec![plain(Key::ArrowLeft)],
             Action::StepForward => vec![plain(Key::ArrowRight)],
             Action::MarkIn => vec![plain(Key::I)],
@@ -236,7 +328,7 @@ impl Action {
                 ..plain(Key::Z)
             }],
             Action::Undo => vec![ctrl(Key::Z)],
-            Action::Redo => vec![ctrl_shift(Key::Z)],
+            Action::Redo => vec![ctrl_shift(Key::Z), ctrl(Key::Y)],
             Action::Copy => vec![ctrl(Key::C)],
             Action::Cut => vec![ctrl(Key::X)],
             Action::Paste => vec![ctrl(Key::V)],
@@ -247,8 +339,8 @@ impl Action {
             Action::Delete => vec![plain(Key::Delete), plain(Key::Backspace)],
             // ISO key between left Shift and Z ("<" on Italian layouts).
             Action::RippleDelete => vec![plain(Key::IntlBackslash)],
-            Action::Split => vec![plain(Key::T)],
-            Action::ToggleDisabled => vec![plain(Key::D)],
+            Action::Split => vec![ctrl(Key::B)],
+            Action::ToggleDisabled => vec![plain(Key::V)],
             Action::RetimeControls => vec![ctrl(Key::R)],
             Action::SelectAll => vec![ctrl(Key::A)],
             Action::SelectFromPlayhead => vec![Shortcut {
@@ -259,21 +351,66 @@ impl Action {
             Action::NewProject => vec![ctrl(Key::N)],
             Action::OpenProject => vec![ctrl(Key::O)],
             Action::SaveProject => vec![ctrl(Key::S)],
-            Action::SaveProjectAs => vec![ctrl_shift(Key::S)],
+            Action::SaveProjectAs => vec![Shortcut {
+                alt: true,
+                ..Shortcut::ctrl(Key::S)
+            }],
             Action::ImportMedia => vec![ctrl(Key::I)],
-            Action::Export => vec![ctrl_shift(Key::E)],
+            Action::Export => vec![ctrl(Key::E)],
             Action::OpenSettings => vec![ctrl(Key::Comma)],
             // "=" is the unshifted "+" of US layouts.
             Action::ZoomIn => vec![ctrl(Key::Plus), ctrl(Key::Equals)],
             Action::ZoomOut => vec![ctrl(Key::Minus)],
             Action::AddMarker => vec![plain(Key::M)],
-            Action::SelectTool => vec![plain(Key::V)],
-            Action::SlipTool => vec![plain(Key::B)],
+            Action::SelectTool => vec![plain(Key::A)],
+            Action::SlipTool => vec![Shortcut {
+                shift: true,
+                ..plain(Key::A)
+            }],
             Action::OpenCompound => vec![plain(Key::Enter)],
             Action::ExitCompound => vec![Shortcut {
                 alt: true,
                 ..plain(Key::ArrowLeft)
             }],
+            Action::DeleteLeft => vec![plain(Key::Q)],
+            Action::DeleteRight => vec![plain(Key::W)],
+            Action::BladeTool => vec![plain(Key::B)],
+            Action::SelectLeftTool => vec![plain(Key::OpenBracket)],
+            Action::SelectRightTool => vec![plain(Key::CloseBracket)],
+            Action::Duplicate => vec![ctrl(Key::D)],
+            Action::ToggleMagnet => vec![plain(Key::P)],
+            Action::ToggleSnapping => vec![plain(Key::N)],
+            Action::TogglePreviewAxis => vec![plain(Key::S)],
+            Action::MakeCompound => vec![Shortcut {
+                alt: true,
+                ..plain(Key::G)
+            }],
+            Action::UngroupCompound => vec![Shortcut {
+                alt: true,
+                shift: true,
+                ..plain(Key::G)
+            }],
+            Action::FitTimeline => vec![Shortcut {
+                shift: true,
+                ..plain(Key::Z)
+            }],
+            Action::GoToStart => vec![plain(Key::Home)],
+            Action::GoToEnd => vec![plain(Key::End)],
+            Action::PreviousEditPoint => vec![plain(Key::ArrowUp)],
+            Action::NextEditPoint => vec![plain(Key::ArrowDown)],
+            Action::StepBackward10 => vec![Shortcut {
+                shift: true,
+                ..plain(Key::ArrowLeft)
+            }],
+            Action::StepForward10 => vec![Shortcut {
+                shift: true,
+                ..plain(Key::ArrowRight)
+            }],
+            Action::ShuttleBack => vec![plain(Key::J)],
+            Action::ShuttlePause => vec![plain(Key::K)],
+            Action::ShuttleForward => vec![plain(Key::L)],
+            Action::ExtractAudio => vec![ctrl_shift(Key::S)],
+            Action::GroupClips => vec![ctrl(Key::G)],
         }
     }
 
@@ -661,6 +798,11 @@ pub struct Settings {
     /// The project being edited, cleared on a clean exit: still set at
     /// startup, the last run crashed with it open.
     pub open_project: Option<PathBuf>,
+    /// Starred library items, see `library_ribbon::favorite_key`: the user's,
+    /// valid in every project.
+    pub favorites: Vec<String>,
+    /// Text styles saved by the user from the text properties.
+    pub text_templates: Vec<crate::library_ribbon::TextTemplate>,
 }
 
 /// Largest size the editor composes at, as a fraction of the timeline's
@@ -736,6 +878,8 @@ impl Default for Settings {
             projects_dir: None,
             workspace: None,
             open_project: None,
+            favorites: Vec::new(),
+            text_templates: Vec::new(),
         }
     }
 }
@@ -828,6 +972,11 @@ struct SettingsFile {
     workspace: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     open_project: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    favorites: Vec<String>,
+    /// Read one by one: an unreadable template must not lose the settings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    text_templates: Vec<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -1015,6 +1164,12 @@ impl Settings {
         settings.projects_dir = file.projects_dir;
         settings.workspace = file.workspace;
         settings.open_project = file.open_project;
+        settings.favorites = file.favorites;
+        settings.text_templates = file
+            .text_templates
+            .into_iter()
+            .filter_map(|template| serde_json::from_value(template).ok())
+            .collect();
         let defaults = PanelLayout::default();
         settings.panels = PanelLayout {
             media_pool_open: file
@@ -1121,6 +1276,12 @@ impl Settings {
             projects_dir: self.projects_dir.clone(),
             workspace: self.workspace.clone(),
             open_project: self.open_project.clone(),
+            favorites: self.favorites.clone(),
+            text_templates: self
+                .text_templates
+                .iter()
+                .filter_map(|template| serde_json::to_value(template).ok())
+                .collect(),
         };
         let text = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
         if let Some(dir) = path.parent() {

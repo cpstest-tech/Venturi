@@ -323,3 +323,24 @@ fn the_processing_precision_is_an_undoable_step() {
     history.redo(&mut project);
     assert_eq!(project.precision, ProcessingPrecision::Standard);
 }
+
+#[test]
+fn set_cover_is_undoable() {
+    let mut project = Project::default();
+    let timeline = project.timelines.insert(Timeline {
+        name: "t".into(),
+        fps: Rational::new(25, 1),
+        resolution: (1920, 1080),
+        tracks: vec![Track::new_main()],
+        markers: Vec::new(),
+        master: Default::default(),
+    });
+    let mut history = History::default();
+    history.do_command(&mut project, Box::new(SetCover::new(timeline, 40)));
+    history.do_command(&mut project, Box::new(SetCover::new(timeline, 75)));
+    assert_eq!(project.view.covers[&timeline], 75);
+    history.undo(&mut project);
+    assert_eq!(project.view.covers[&timeline], 40);
+    history.undo(&mut project);
+    assert!(project.view.covers.is_empty());
+}

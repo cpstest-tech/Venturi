@@ -96,6 +96,7 @@ fn a_venturi_export_imports_back_unchanged() {
         direction: PushDirection::Up,
         ease: Ease::In,
         curve: 0.25,
+        asset: None,
     });
     let tl = &mut project.timelines[timeline_id];
     tl.tracks[0].clips.push(video);
@@ -115,6 +116,7 @@ fn a_venturi_export_imports_back_unchanged() {
             direction: PushDirection::Right,
             ease: Ease::None,
             curve: 0.5,
+            asset: None,
         },
     });
 

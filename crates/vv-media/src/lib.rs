@@ -18,7 +18,10 @@ pub use audio::{
 };
 pub use cache::{Served, SharedFrameCache, WantedRange};
 pub use decode::{Chroma, ColorMatrix, Decoder, FrameYuv420, yuv420_frame_bytes};
-pub use encode::{AudioCodec, AudioSettings, Encoder, VideoCodec, VideoSettings};
+pub use encode::{
+    AudioCodec, AudioFileEncoder, AudioFileFormat, AudioSettings, Encoder, VideoBitrate,
+    VideoCodec, VideoSettings,
+};
 pub use hw::{HwDevice, HwPriority};
 pub use probe::{
     AUDIO_EXTENSIONS, AUDIO_ONLY_FPS, AudioStreamInfo, IMAGE_EXTENSIONS, IMAGE_FPS,

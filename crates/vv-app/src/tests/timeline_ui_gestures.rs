@@ -38,7 +38,11 @@ impl Harness {
             project,
             history: History::default(),
             timeline_id,
-            state: TimelineState::default(),
+            state: TimelineState {
+                magnet: false,
+                linkage: false,
+                ..TimelineState::default()
+            },
             time: 0.0,
             release_rects: std::collections::HashMap::new(),
             modifiers: egui::Modifiers::NONE,
@@ -200,6 +204,7 @@ fn push(duration: FrameIdx) -> Transition {
         direction: PushDirection::Left,
         ease: Ease::None,
         curve: 0.0,
+        asset: None,
     }
 }
 
@@ -704,4 +709,145 @@ fn a_compound_clip_opens_at_the_frame_under_the_playhead() {
     h.click(center);
     h.click(center);
     assert_eq!(h.entered, Some((nested, ClipId(1), 299)));
+}
+
+#[test]
+fn a_click_in_blade_mode_cuts_the_clip_under_the_pointer() {
+    let mut h = Harness::new(vec![track(TrackKind::Video, vec![solid(1, 0, 100)])]);
+    h.state.tool = TimelineTool::Blade;
+    let rect = h.rect(ClipId(1));
+    h.click(egui::pos2(
+        rect.left() + 40.0 * PX_PER_FRAME,
+        rect.center().y,
+    ));
+    let spans: Vec<_> = h.project.timelines[h.timeline_id].tracks[0]
+        .clips
+        .iter()
+        .map(|c| (c.timeline_start, c.timeline_end()))
+        .collect();
+    assert_eq!(spans, vec![(0, 40), (40, 100)]);
+    assert_eq!(h.history.position(), 1);
+}
+
+#[test]
+fn blade_mode_does_not_drag_clips() {
+    let mut h = Harness::new(vec![track(TrackKind::Video, vec![solid(1, 0, 100)])]);
+    h.state.tool = TimelineTool::Blade;
+    let from = h.rect(ClipId(1)).center();
+    h.drag(from, egui::vec2(50.0 * PX_PER_FRAME, 0.0));
+    assert_eq!(h.clip(0, ClipId(1)).timeline_start, 0);
+    assert_eq!(h.history.position(), 0);
+}
+
+#[test]
+fn select_left_and_right_modes_take_the_clips_on_that_side() {
+    let mut h = Harness::new(vec![track(
+        TrackKind::Video,
+        vec![solid(1, 0, 40), solid(2, 50, 40), solid(3, 100, 40)],
+    )]);
+    h.state.tool = TimelineTool::SelectLeft;
+    let middle = h.rect(ClipId(2)).center();
+    h.click(middle);
+    assert_eq!(
+        h.state.selected,
+        BTreeSet::from([(0, ClipId(1)), (0, ClipId(2))])
+    );
+    h.state.tool = TimelineTool::SelectRight;
+    h.click(middle);
+    assert_eq!(
+        h.state.selected,
+        BTreeSet::from([(0, ClipId(2)), (0, ClipId(3))])
+    );
+    assert_eq!(h.history.position(), 0);
+}
+
+#[test]
+fn trimming_a_main_clip_with_the_magnet_pulls_the_next_one_in_one_undo_step() {
+    let mut h = Harness::new(vec![track(
+        TrackKind::Video,
+        vec![solid(1, 0, 100), solid(2, 110, 100)],
+    )]);
+    h.state.magnet = true;
+    let rect = h.rect(ClipId(1));
+    let from = egui::pos2(rect.right() - 2.0, rect.center().y);
+    h.drag(from, egui::vec2(-25.0 * PX_PER_FRAME, 0.0));
+    assert_eq!(h.clip(0, ClipId(1)).timeline_len, 75);
+    assert_eq!(h.clip(0, ClipId(2)).timeline_start, 75);
+    assert_eq!(h.history.position(), 1);
+    h.history.undo(&mut h.project);
+    assert_eq!(h.clip(0, ClipId(1)).timeline_len, 100);
+    assert_eq!(h.clip(0, ClipId(2)).timeline_start, 110);
+}
+
+#[test]
+fn without_the_magnet_a_trim_leaves_the_hole() {
+    let mut h = Harness::new(vec![track(
+        TrackKind::Video,
+        vec![solid(1, 0, 100), solid(2, 110, 100)],
+    )]);
+    let rect = h.rect(ClipId(1));
+    let from = egui::pos2(rect.right() - 2.0, rect.center().y);
+    h.drag(from, egui::vec2(-25.0 * PX_PER_FRAME, 0.0));
+    assert_eq!(h.clip(0, ClipId(2)).timeline_start, 110);
+}
+
+fn linkage_harness() -> Harness {
+    Harness::new(vec![
+        track(TrackKind::Video, vec![solid(1, 0, 50), solid(2, 100, 50)]),
+        track(TrackKind::Video, vec![solid(3, 110, 20)]),
+    ])
+}
+
+#[test]
+fn with_linkage_the_overlay_follows_the_main_clip_it_starts_over() {
+    let mut h = linkage_harness();
+    h.state.linkage = true;
+    let from = h.rect(ClipId(2)).center();
+    h.drag(from, egui::vec2(30.0 * PX_PER_FRAME, 0.0));
+    assert_eq!(h.clip(0, ClipId(2)).timeline_start, 130);
+    assert_eq!(h.clip(1, ClipId(3)).timeline_start, 140);
+    assert_eq!(h.history.position(), 1);
+}
+
+#[test]
+fn without_linkage_the_overlay_stays() {
+    let mut h = linkage_harness();
+    let from = h.rect(ClipId(2)).center();
+    h.drag(from, egui::vec2(30.0 * PX_PER_FRAME, 0.0));
+    assert_eq!(h.clip(0, ClipId(2)).timeline_start, 130);
+    assert_eq!(h.clip(1, ClipId(3)).timeline_start, 110);
+}
+
+#[test]
+fn the_preview_axis_reports_the_frame_under_the_pointer_only_when_on() {
+    let mut h = Harness::new(vec![track(TrackKind::Video, vec![solid(1, 0, 100)])]);
+    let rect = h.rect(ClipId(1));
+    let over = egui::pos2(rect.left() + 30.0 * PX_PER_FRAME, rect.center().y);
+    h.frame(vec![egui::Event::PointerMoved(over)]);
+    assert_eq!(h.state.hover_frame, None);
+
+    h.state.preview_axis = true;
+    h.frame(vec![egui::Event::PointerMoved(over + egui::vec2(1.0, 0.0))]);
+    assert_eq!(h.state.hover_frame, Some(30));
+    assert_eq!(h.state.playhead, 0, "the playhead does not move");
+}
+
+#[test]
+fn the_context_menu_commands_are_queued_for_the_app() {
+    let mut h = Harness::new(vec![track(TrackKind::Video, vec![solid(1, 0, 100)])]);
+    h.state.commands.push(TimelineCommand::Duplicate);
+    h.frame(Vec::new());
+    assert_eq!(h.state.commands, vec![TimelineCommand::Duplicate]);
+}
+
+#[test]
+fn zoom_fraction_round_trips() {
+    let mut state = TimelineState::default();
+    for fraction in [0.0, 0.25, 0.6, 1.0] {
+        state.set_zoom_fraction(fraction);
+        assert!(
+            (state.zoom_fraction() - fraction).abs() < 1e-4,
+            "{fraction}"
+        );
+    }
 }

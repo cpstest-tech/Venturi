@@ -752,6 +752,7 @@ fn dropping_several_media_appends_them_in_pool_order() {
         items: vec![drag(&app, media_a), drag(&app, media_b)],
     };
 
+    app.timeline_state.magnet = false;
     app.add_media_set_to_timeline_at(&set, 100, timeline_ui::MediaDropTarget::Default);
 
     let clips = &app.session.project.timelines[timeline_id].tracks[0].clips;
@@ -1699,6 +1700,7 @@ fn delete_selected_removes_every_selected_clip() {
     let c = make_timeline_with_clip(&mut app, 0, 20, 10);
     let timeline_id = app.timeline_id.unwrap();
 
+    app.timeline_state.magnet = false;
     app.timeline_state.selected = BTreeSet::from([(0, a), (0, c)]);
     app.delete_selected();
 
@@ -1755,6 +1757,7 @@ fn delete_selected_does_not_shift_other_tracks() {
     make_timeline_with_clip(&mut app, 1, 10, 10);
     let timeline_id = app.timeline_id.unwrap();
 
+    app.timeline_state.magnet = false;
     app.timeline_state.selected = BTreeSet::from([(0, video_b)]);
     app.delete_selected();
 
@@ -1763,6 +1766,187 @@ fn delete_selected_does_not_shift_other_tracks() {
     assert_eq!(tl.tracks[0].clips[0].id, video_a);
     assert_eq!(tl.tracks[1].clips.len(), 2);
     assert_eq!(tl.tracks[1].clips[1].timeline_start, 10);
+}
+
+#[test]
+fn delete_selected_with_the_magnet_closes_the_hole_on_the_main_track_only() {
+    let mut app = VenturiApp::default();
+    make_timeline_with_clip(&mut app, 0, 0, 10);
+    let b = make_timeline_with_clip(&mut app, 0, 10, 10);
+    let c = make_timeline_with_clip(&mut app, 0, 20, 10);
+    let audio = make_timeline_with_clip(&mut app, 1, 20, 10);
+    let timeline_id = app.timeline_id.unwrap();
+    app.timeline_state.linkage = false;
+    let steps = app.session.history.position();
+
+    app.timeline_state.selected = BTreeSet::from([(0, b)]);
+    app.delete_selected();
+
+    let tl = &app.session.project.timelines[timeline_id];
+    assert_eq!(tl.clip(0, c).unwrap().timeline_start, 10);
+    assert_eq!(tl.clip(1, audio).unwrap().timeline_start, 20);
+    assert_eq!(app.session.history.position(), steps + 1);
+
+    app.undo();
+    let tl = &app.session.project.timelines[timeline_id];
+    assert_eq!(tl.clip(0, c).unwrap().timeline_start, 20);
+}
+
+#[test]
+fn delete_left_and_right_of_the_playhead_trim_the_crossing_clips() {
+    let mut app = VenturiApp::default();
+    let a = make_timeline_with_clip(&mut app, 0, 0, 10);
+    let b = make_timeline_with_clip(&mut app, 0, 10, 10);
+    let timeline_id = app.timeline_id.unwrap();
+    let ctx = egui::Context::default();
+    app.timeline_state.magnet = false;
+    app.timeline_state.playhead = 4;
+
+    app.run_timeline_command(&ctx, timeline_ui::TimelineCommand::DeleteLeft);
+    let tl = &app.session.project.timelines[timeline_id];
+    assert_eq!(
+        (
+            tl.clip(0, a).unwrap().timeline_start,
+            tl.clip(0, a).unwrap().timeline_end()
+        ),
+        (4, 10)
+    );
+    assert_eq!(tl.clip(0, b).unwrap().timeline_start, 10);
+
+    app.timeline_state.playhead = 7;
+    app.run_timeline_command(&ctx, timeline_ui::TimelineCommand::DeleteRight);
+    let tl = &app.session.project.timelines[timeline_id];
+    assert_eq!(tl.clip(0, a).unwrap().timeline_end(), 7);
+}
+
+#[test]
+fn delete_left_with_the_magnet_slides_the_main_track_back() {
+    let mut app = VenturiApp::default();
+    let a = make_timeline_with_clip(&mut app, 0, 0, 10);
+    let b = make_timeline_with_clip(&mut app, 0, 10, 10);
+    let timeline_id = app.timeline_id.unwrap();
+    app.timeline_state.playhead = 4;
+
+    app.run_timeline_command(
+        &egui::Context::default(),
+        timeline_ui::TimelineCommand::DeleteLeft,
+    );
+
+    let tl = &app.session.project.timelines[timeline_id];
+    assert_eq!(tl.clip(0, a).unwrap().timeline_start, 0);
+    assert_eq!(tl.clip(0, a).unwrap().timeline_len, 6);
+    assert_eq!(tl.clip(0, b).unwrap().timeline_start, 6);
+}
+
+#[test]
+fn the_arrows_up_and_down_jump_between_cuts() {
+    let mut app = VenturiApp::default();
+    make_timeline_with_clip(&mut app, 0, 10, 10);
+    make_timeline_with_clip(&mut app, 0, 30, 10);
+
+    app.jump_to_edit_point(true);
+    assert_eq!(app.timeline_state.playhead, 10);
+    app.jump_to_edit_point(true);
+    assert_eq!(app.timeline_state.playhead, 20);
+    app.jump_to_edit_point(false);
+    assert_eq!(app.timeline_state.playhead, 10);
+    app.go_to_end();
+    assert_eq!(app.timeline_state.playhead, 40);
+    app.go_to_start();
+    assert_eq!(app.timeline_state.playhead, 0);
+}
+
+#[test]
+fn shift_arrows_move_ten_frames_and_never_before_zero() {
+    let mut app = VenturiApp::default();
+    app.scrub_audio = false;
+    make_timeline_with_clip(&mut app, 0, 0, 100);
+    app.step_playhead_by_ten(true);
+    assert_eq!(app.timeline_state.playhead, 10);
+    app.step_playhead_by_ten(false);
+    app.step_playhead_by_ten(false);
+    assert_eq!(app.timeline_state.playhead, 0);
+}
+
+#[test]
+fn j_walks_backwards_faster_with_every_press_and_stops_at_the_start() {
+    let mut app = VenturiApp::default();
+    make_timeline_with_clip(&mut app, 0, 0, 200);
+    app.timeline_state.playhead = 100;
+
+    app.shuttle_back();
+    assert!(app.drive_reverse_shuttle(0.05));
+    assert_eq!(app.timeline_state.playhead, 99);
+
+    app.shuttle_back();
+    assert!(app.drive_reverse_shuttle(0.05));
+    assert_eq!(app.timeline_state.playhead, 97, "2x");
+
+    app.shuttle_pause();
+    assert!(!app.drive_reverse_shuttle(0.04));
+    assert_eq!(app.timeline_state.playhead, 97);
+
+    app.timeline_state.playhead = 1;
+    app.shuttle_back();
+    assert!(!app.drive_reverse_shuttle(0.2), "reached the start");
+    assert_eq!(app.timeline_state.playhead, 0);
+}
+
+#[test]
+fn mirror_flips_the_selected_picture_and_flips_it_back() {
+    let mut app = VenturiApp::default();
+    let clip = make_timeline_with_clip(&mut app, 0, 0, 10);
+    let timeline_id = app.timeline_id.unwrap();
+    let ctx = egui::Context::default();
+    app.timeline_state.selected = BTreeSet::from([(0, clip)]);
+
+    app.run_timeline_command(&ctx, timeline_ui::TimelineCommand::Mirror);
+    let flip = |app: &VenturiApp| {
+        app.session.project.timelines[timeline_id]
+            .clip(0, clip)
+            .unwrap()
+            .effects
+            .transform
+            .flip
+    };
+    assert_eq!(flip(&app), [true, false]);
+
+    app.run_timeline_command(&ctx, timeline_ui::TimelineCommand::Mirror);
+    assert_eq!(flip(&app), [false, false]);
+}
+
+#[test]
+fn group_links_the_selected_clips_in_one_step() {
+    let mut app = VenturiApp::default();
+    let a = make_timeline_with_clip(&mut app, 0, 0, 10);
+    let b = make_timeline_with_clip(&mut app, 1, 0, 10);
+    let timeline_id = app.timeline_id.unwrap();
+    app.timeline_state.selected = BTreeSet::from([(0, a), (1, b)]);
+    let steps = app.session.history.position();
+
+    app.run_timeline_command(
+        &egui::Context::default(),
+        timeline_ui::TimelineCommand::Group,
+    );
+
+    let tl = &app.session.project.timelines[timeline_id];
+    assert!(tl.clip(0, a).unwrap().linked_group.is_some());
+    assert_eq!(
+        tl.clip(0, a).unwrap().linked_group,
+        tl.clip(1, b).unwrap().linked_group
+    );
+    assert_eq!(app.session.history.position(), steps + 1);
+}
+
+#[test]
+fn the_preview_axis_frame_is_ignored_when_it_is_the_playhead() {
+    let mut app = VenturiApp::default();
+    make_timeline_with_clip(&mut app, 0, 0, 100);
+    assert_eq!(app.preview_axis_frame(), None);
+    app.timeline_state.hover_frame = Some(30);
+    assert_eq!(app.preview_axis_frame(), Some(30));
+    app.timeline_state.playhead = 30;
+    assert_eq!(app.preview_axis_frame(), None);
 }
 
 /// The media clip under the playhead becomes active and the gain set
@@ -1793,9 +1977,7 @@ fn loading_a_media_clip_sets_active_clip_and_gain() {
 
     let mut app = VenturiApp::default();
     app.import_media(path);
-    let timeline_id = app
-        .timeline_id
-        .expect("import should have created the timeline");
+    assert!(app.timeline_id.is_none(), "importing creates no timeline");
     let media_id = app
         .session
         .project
@@ -1806,6 +1988,7 @@ fn loading_a_media_clip_sets_active_clip_and_gain() {
         .expect("imported media expected in the pool");
 
     app.add_media_to_timeline(media_id);
+    let timeline_id = app.timeline_id.unwrap();
     let clip_id = app.session.project.timelines[timeline_id].tracks[0].clips[0].id;
 
     app.timeline_state.selected = BTreeSet::from([(0, clip_id)]);
@@ -3640,11 +3823,6 @@ fn proxy_timeline_ranges_covers_the_whole_clip_once_the_proxy_is_ready() {
     let timeline_id = app.timeline_id.unwrap();
     let clip = app.session.project.timelines[timeline_id].tracks[0].clips[0].clone();
 
-    assert!(
-        app.proxy_timeline_ranges().is_empty(),
-        "the proxy cannot be ready right after the import"
-    );
-
     // Not the file: the worker marks the proxy ready only after renaming it
     // into place.
     let start = std::time::Instant::now();
@@ -4097,6 +4275,7 @@ fn in_out_marks_on_the_preview_trim_the_clip_dropped_on_the_timeline() {
     let (source_in, source_out) = app.browse_marks.resolve(app.browse_total_frames());
     assert_eq!((source_in, source_out), (10, 30));
 
+    app.timeline_state.magnet = false;
     app.add_media_to_timeline_at(
         timeline_ui::MediaDrag {
             media_id,
@@ -4787,17 +4966,7 @@ fn an_audio_only_file_imports_and_drops_as_an_audio_clip() {
     );
     assert!(app.thumbnails.is_empty());
 
-    let timeline_id = app.timeline_id.unwrap();
-    let timeline = &app.session.project.timelines[timeline_id];
-    assert_eq!(timeline.resolution, (1920, 1080), "default timeline");
-    assert!(
-        timeline.tracks.iter().all(|t| t.kind == TrackKind::Audio),
-        "an audio-only import must not create any video track, not even an empty one"
-    );
-    {
-        let timeline = &mut app.session.project.timelines[timeline_id];
-        timeline.tracks.clear();
-    }
+    assert!(app.timeline_id.is_none(), "importing creates no timeline");
 
     let meta = item.meta.clone();
     app.add_media_to_timeline_at(
@@ -4805,7 +4974,9 @@ fn an_audio_only_file_imports_and_drops_as_an_audio_clip() {
         10,
         timeline_ui::MediaDropTarget::Default,
     );
+    let timeline_id = app.timeline_id.unwrap();
     let timeline = &app.session.project.timelines[timeline_id];
+    assert_eq!(timeline.resolution, (1920, 1080), "default timeline");
     assert!(
         timeline.tracks.iter().all(|t| t.kind == TrackKind::Audio),
         "the drop must not have created any video track"
@@ -4868,23 +5039,28 @@ fn an_image_file_imports_and_drops_as_a_five_second_clip_without_audio() {
     assert_eq!(item.meta.duration_frames, vv_core::IMAGE_DURATION_FRAMES);
     assert!(app.proxy_worker.is_none(), "no proxy for an image");
 
-    let timeline_id = app
-        .timeline_id
-        .expect("an image creates the timeline like a video");
     let meta = item.meta.clone();
     app.add_media_to_timeline_at(
         timeline_ui::MediaDrag::whole(media_id, &meta),
         0,
         timeline_ui::MediaDropTarget::Default,
     );
+    let timeline_id = app
+        .timeline_id
+        .expect("a photo creates the timeline like a video");
     let timeline = &app.session.project.timelines[timeline_id];
+    assert_eq!(
+        timeline.fps,
+        vv_core::Rational::new(30, 1),
+        "a photo sets 30 fps"
+    );
     let (_, video) = timeline
         .tracks_of_kind(TrackKind::Video)
         .next()
         .expect("track created");
     assert_eq!(video.clips.len(), 1);
     let clip = &video.clips[0];
-    assert_eq!(clip.timeline_len, 5 * 25, "5 s by default at 25 fps");
+    assert_eq!(clip.timeline_len, 5 * 30, "5 s by default at 30 fps");
     assert!(
         timeline
             .tracks
@@ -5070,7 +5246,7 @@ fn add_media_to_timeline_creates_one_audio_clip_per_audio_stream() {
 }
 
 #[test]
-fn undoing_an_import_removes_its_media_and_the_timeline_it_created() {
+fn undoing_an_import_removes_its_media() {
     let (_dir_a, a) = make_wav("undo-a.wav");
     let (_dir_b, b) = make_wav("undo-b.wav");
     let paths = vec![a, b];
@@ -5078,13 +5254,10 @@ fn undoing_an_import_removes_its_media_and_the_timeline_it_created() {
     app.import_media_files(paths);
     app.wait_for_import();
     let media: Vec<MediaId> = app.session.project.media_pool.keys().collect();
-    let timeline_id = app.timeline_id.expect("created by the import");
     assert_eq!(app.session.history.position(), 1);
 
     app.undo();
     assert!(app.session.project.media_pool.is_empty());
-    assert!(app.session.project.timelines.is_empty());
-    assert_eq!(app.timeline_id, None);
     assert!(app.media_pool_state.selected.is_empty());
     assert_eq!(app.browsing, None);
 
@@ -5093,22 +5266,21 @@ fn undoing_an_import_removes_its_media_and_the_timeline_it_created() {
         app.session.project.media_pool.keys().collect::<Vec<_>>(),
         media
     );
-    assert!(app.session.project.timelines.contains_key(timeline_id));
 }
 
 #[test]
-fn a_single_file_import_and_its_timeline_are_one_undo_step() {
+fn a_single_file_import_is_one_undo_step_and_creates_no_timeline() {
     let mut app = VenturiApp::default();
     let (_dir, wav) = make_wav("undo-single.wav");
     app.import_media(wav);
-    assert!(app.timeline_id.is_some());
+    assert!(app.timeline_id.is_none());
 
     assert_eq!(
         app.session.history.labels().collect::<Vec<_>>(),
         vec![vv_core::CommandLabel::ImportMedia]
     );
     app.undo();
-    assert!(app.session.project.timelines.is_empty());
+    assert!(app.session.project.media_pool.is_empty());
 }
 
 #[test]

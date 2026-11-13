@@ -271,3 +271,151 @@ silence.failed:
 silence.apply:
   en: "Remove"
   it: "Rimuovi"
+
+timeline.main_track:
+  en: "Main Track"
+  it: "Main Track"
+
+timeline.hide_layer:
+  en: "Hide the picture of this track"
+  it: "Nascondi l'immagine di questa track"
+
+timeline.no_visual_layer:
+  en: "Audio tracks have no picture"
+  it: "Le track audio non hanno immagine"
+
+timeline.audio_on_audio_tracks:
+  en: "The sound is on the audio tracks"
+  it: "L'audio è sulle track audio"
+
+timeline.freeze_frame_action:
+  en: "Freeze frame (3 s)"
+  it: "Fermo immagine (3 s)"
+
+timeline.reverse:
+  en: "Reverse"
+  it: "Reverse"
+
+timeline.mirror:
+  en: "Mirror"
+  it: "Mirror"
+
+timeline.extract_audio:
+  en: "Extract audio"
+  it: "Estrai audio"
+
+timeline.copy:
+  en: "Copy"
+  it: "Copia"
+
+timeline.cut:
+  en: "Cut"
+  it: "Taglia"
+
+timeline.paste:
+  en: "Paste"
+  it: "Incolla"
+
+timeline.duplicate:
+  en: "Duplicate"
+  it: "Duplica"
+
+timeline.enable:
+  en: "Enable"
+  it: "Abilita"
+
+timeline.disable:
+  en: "Disable"
+  it: "Disabilita"
+
+timeline.delete:
+  en: "Delete"
+  it: "Elimina"
+
+common.coming_soon:
+  en: "Coming soon"
+  it: "Presto disponibile"
+
+timeline_bar.mode:
+  en: "Mouse mode"
+  it: "Modalità mouse"
+
+timeline_bar.mode_select:
+  en: "Select"
+  it: "Seleziona"
+
+timeline_bar.mode_blade:
+  en: "Split (blade)"
+  it: "Dividi (lametta)"
+
+timeline_bar.mode_select_left:
+  en: "Select to the left"
+  it: "Seleziona verso sinistra"
+
+timeline_bar.mode_select_right:
+  en: "Select to the right"
+  it: "Seleziona verso destra"
+
+timeline_bar.undo:
+  en: "Undo"
+  it: "Annulla"
+
+timeline_bar.redo:
+  en: "Redo"
+  it: "Ripeti"
+
+timeline_bar.split:
+  en: "Split at playhead"
+  it: "Dividi al playhead"
+
+timeline_bar.delete_left:
+  en: "Delete left of the playhead"
+  it: "Elimina a sinistra del playhead"
+
+timeline_bar.delete_right:
+  en: "Delete right of the playhead"
+  it: "Elimina a destra del playhead"
+
+timeline_bar.delete:
+  en: "Delete"
+  it: "Elimina"
+
+timeline_bar.zoom:
+  en: "Zoom"
+  it: "Zoom"
+
+timeline_bar.magnet:
+  en: "Magnet"
+  it: "Magnete"
+
+timeline_bar.magnet_hint:
+  en: "Main Track Magnet: no gaps on the Main Track"
+  it: "Main Track Magnet: nessun buco sulla Main Track"
+
+timeline_bar.snapping:
+  en: "Snapping"
+  it: "Aggancio"
+
+timeline_bar.snapping_hint:
+  en: "Auto Snapping: clips snap to the playhead and to the other clips"
+  it: "Auto Snapping: le clip si agganciano al playhead e alle altre clip"
+
+timeline_bar.linkage:
+  en: "Linkage"
+  it: "Linkage"
+
+timeline_bar.linkage_hint:
+  en: "Linkage: clips on other tracks follow the Main Track clip under them"
+  it: "Linkage: le clip delle altre track seguono la clip della Main Track sotto di loro"
+
+timeline_bar.preview_axis:
+  en: "Axis"
+  it: "Asse"
+
+timeline_bar.preview_axis_hint:
+  en: "Preview Axis: the player follows the mouse without moving the playhead"
+  it: "Preview Axis: il player segue il mouse senza spostare il playhead"
+
+timeline.edit_cover:
+  en: "Edit cover"
+  it: "Modifica copertina"

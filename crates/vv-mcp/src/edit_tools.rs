@@ -937,6 +937,7 @@ pub(crate) fn set_transition(session: &mut Session, args: SetTransitionArgs) -> 
         direction: PushDirection::Right,
         ease: Ease::InOut,
         curve: 0.5,
+        asset: None,
     };
     let mut warnings = Vec::new();
     let mut values = Vec::with_capacity(refs.len());

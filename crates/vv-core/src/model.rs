@@ -1500,6 +1500,45 @@ pub struct Transition {
     pub ease: Ease,
     /// "Transition Curve" in the inspector, 0..1.
     pub curve: f32,
+    /// A shader transition of the asset library: it replaces the built-in
+    /// look of `kind` (kept as a plain dissolve for readers that do not know
+    /// assets).
+    #[serde(default)]
+    pub asset: Option<AssetFx>,
+}
+
+/// An effect, filter or transition of the asset library (`vv_render::assets`)
+/// applied to a clip, an effect element or a crossing. `params` follow the
+/// manifest's order; missing ones take its defaults.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AssetFx {
+    pub id: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub params: Vec<f32>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl AssetFx {
+    pub fn new(id: impl Into<String>, params: Vec<f32>) -> Self {
+        Self {
+            id: id.into(),
+            enabled: true,
+            params,
+        }
+    }
+}
+
+impl Transition {
+    /// Whether both sides are merged into one shader pass (Smooth Cut and
+    /// asset transitions) instead of two layers faded or pushed.
+    pub fn merges_sides(&self) -> bool {
+        self.kind == TransitionKind::SmoothCut || self.asset.is_some()
+    }
 }
 
 impl Transition {
@@ -1597,6 +1636,10 @@ pub struct EffectStack {
     /// Set: the clip is a track matte for the layer below.
     #[serde(default)]
     pub matte: Option<MatteMode>,
+    /// Effects and filters of the asset library, applied after the built-in
+    /// filters, in order. On an adjustment clip they process the tracks below.
+    #[serde(default)]
+    pub assets: Vec<AssetFx>,
 }
 
 /// `EffectStack` as saved, older files included.
@@ -1619,6 +1662,8 @@ struct StoredEffectStack {
     masks: Vec<crate::mask::ClipMask>,
     #[serde(default)]
     matte: Option<MatteMode>,
+    #[serde(default)]
+    assets: Vec<AssetFx>,
 }
 
 impl From<StoredEffectStack> for EffectStack {
@@ -1641,6 +1686,7 @@ impl From<StoredEffectStack> for EffectStack {
             blend_mode: stored.blend_mode,
             masks: stored.masks,
             matte: stored.matte,
+            assets: stored.assets,
         }
     }
 }
@@ -1658,6 +1704,7 @@ impl Default for EffectStack {
             blend_mode: BlendMode::default(),
             masks: Vec::new(),
             matte: None,
+            assets: Vec::new(),
         }
     }
 }
@@ -2651,6 +2698,13 @@ pub struct Track {
     /// Audio only: armed for recording, a take lands on it.
     #[serde(default)]
     pub armed: bool,
+    /// The Main Track: the one the Magnet keeps free of gaps and the
+    /// Linkage anchors the other clips to.
+    #[serde(default)]
+    pub main: bool,
+    /// Holds the generated subtitles: the one track `SetCaptions` replaces.
+    #[serde(default)]
+    pub subtitles: bool,
     /// Transitions straddling two adjacent clips. It never touches
     /// `timeline_start`/`timeline_len` of the clips involved (they stay non-
     /// overlapping, invariant intact): it is the rendering that "lends" for
@@ -2679,8 +2733,17 @@ impl Track {
             solo: false,
             locked: false,
             armed: false,
+            main: false,
+            subtitles: false,
             crossings: Vec::new(),
             mix: ChannelStrip::default(),
+        }
+    }
+
+    pub fn new_main() -> Self {
+        Self {
+            main: true,
+            ..Self::new(TrackKind::Video)
         }
     }
 
@@ -2713,10 +2776,7 @@ impl Track {
             let left = self.clip(c.left_clip)?;
             let right = self.clip(c.right_clip)?;
             // An adjustment half would adjust a stack already holding the other half.
-            if left.timeline_end() != right.timeline_start
-                || left.is_adjustment()
-                || right.is_adjustment()
-            {
+            if !adjacent(left, right) || left.is_adjustment() || right.is_adjustment() {
                 return None;
             }
             c.window(left, right)
@@ -2754,6 +2814,14 @@ impl Track {
     }
 }
 
+/// Frames of gap still counted as a contiguous cut.
+pub const ADJACENT_TOLERANCE: FrameIdx = 1;
+
+/// Whether `right` starts where `left` ends, within `ADJACENT_TOLERANCE`.
+pub fn adjacent(left: &Clip, right: &Clip) -> bool {
+    (0..=ADJACENT_TOLERANCE).contains(&(right.timeline_start - left.timeline_end()))
+}
+
 /// A transition straddling two adjacent clips on the same track:
 /// it "eats" the last `duration/2` frames of `left_clip` and the first
 /// `duration/2` of `right_clip`, showing them overlapped instead of in
@@ -2769,6 +2837,12 @@ pub struct CrossTransition {
 }
 
 impl CrossTransition {
+    /// Longest duration the two clips can lend: each half of the window must
+    /// fit in its clip.
+    pub fn max_duration(left: &Clip, right: &Clip) -> FrameIdx {
+        (2 * left.timeline_len.min(right.timeline_len)).max(1)
+    }
+
     /// How many frames of the window fall before the cut (inside
     /// `left_clip`) and how many after (inside `right_clip`): always halved,
     /// the odd frame, if any, goes to the left side. Dragging the duration
@@ -2937,6 +3011,15 @@ impl Timeline {
             audio_streams: 1,
             file: Default::default(),
         }
+    }
+
+    /// The Main Track: the flagged one, else (older projects) the first
+    /// video track.
+    pub fn main_track_index(&self) -> Option<usize> {
+        self.tracks
+            .iter()
+            .position(|t| t.main && t.kind == TrackKind::Video)
+            .or_else(|| self.first_track_index(TrackKind::Video))
     }
 
     /// Track name as in an NLE: V1, V2… A1, A2…, per kind.
@@ -3115,6 +3198,10 @@ pub struct Project {
     pub precision: ProcessingPrecision,
     #[serde(default)]
     pub view: ProjectView,
+    /// Transcriptions, apart from the clips that show them: a style change
+    /// rebuilds the clips from these without transcribing again.
+    #[serde(default)]
+    pub captions: std::collections::BTreeMap<TimelineId, crate::captions::Captions>,
 }
 
 /// Where the user left the project, to resume from there when it is reopened.
@@ -3123,6 +3210,9 @@ pub struct Project {
 pub struct ProjectView {
     pub active_timeline: Option<TimelineId>,
     pub playheads: std::collections::BTreeMap<TimelineId, FrameIdx>,
+    /// The frame chosen as the cover of each timeline.
+    #[serde(default)]
+    pub covers: std::collections::BTreeMap<TimelineId, FrameIdx>,
 }
 
 impl Project {

@@ -5,106 +5,6 @@ use std::borrow::Cow;
 
 use super::*;
 
-/// Panel tabs: icon and label, the active one underlined.
-pub(crate) fn properties_tab_bar(ui: &mut egui::Ui, current: &mut PropertiesTab) {
-    let tabs = [
-        (PropertiesTab::Video, t!("props.tab_video")),
-        (PropertiesTab::Audio, t!("props.tab_audio")),
-        (PropertiesTab::Selection, t!("props.tab_selection")),
-    ];
-    const TAB_HEIGHT: f32 = 26.0;
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        for (tab, label) in tabs {
-            let active = *current == tab;
-            let galley = ui.painter().layout_no_wrap(
-                label.to_string(),
-                egui::FontId::proportional(13.0),
-                egui::Color32::PLACEHOLDER,
-            );
-            let (rect, response) = ui.allocate_exact_size(
-                egui::vec2(TAB_ICON_WIDTH + galley.size().x + 24.0, TAB_HEIGHT),
-                egui::Sense::click(),
-            );
-            if response.clicked() {
-                *current = tab;
-            }
-            let color = if active {
-                ui.visuals().strong_text_color()
-            } else if response.hovered() {
-                ui.visuals().text_color()
-            } else {
-                ui.visuals().weak_text_color()
-            };
-            let content_left = rect.center().x - (TAB_ICON_WIDTH + galley.size().x) / 2.0;
-            paint_tab_icon(
-                ui.painter(),
-                tab,
-                egui::pos2(content_left + TAB_ICON_WIDTH / 2.0 - 2.0, rect.center().y),
-                color,
-            );
-            let text_pos = egui::pos2(
-                content_left + TAB_ICON_WIDTH,
-                rect.center().y - galley.size().y / 2.0,
-            );
-            ui.painter().galley(text_pos, galley, color);
-            if active {
-                let y = rect.bottom() - 1.0;
-                ui.painter().line_segment(
-                    [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
-                    egui::Stroke::new(2.0, crate::theme::ACCENT),
-                );
-            }
-        }
-    });
-}
-
-const TAB_ICON_WIDTH: f32 = 18.0;
-
-/// Film frame, waveform or list, drawn by hand like the other icons.
-fn paint_tab_icon(
-    painter: &egui::Painter,
-    tab: PropertiesTab,
-    center: egui::Pos2,
-    color: egui::Color32,
-) {
-    let stroke = egui::Stroke::new(1.3, color);
-    match tab {
-        PropertiesTab::Video => {
-            let frame = egui::Rect::from_center_size(center, egui::vec2(12.0, 9.0));
-            painter.rect_stroke(frame, 1.0, stroke, egui::StrokeKind::Inside);
-            for x in [frame.left() + 3.0, frame.right() - 3.0] {
-                painter.line_segment(
-                    [egui::pos2(x, frame.top()), egui::pos2(x, frame.bottom())],
-                    stroke,
-                );
-            }
-        }
-        PropertiesTab::Audio => {
-            for (i, height) in [3.0, 7.0, 10.0, 5.0, 8.0, 3.0].into_iter().enumerate() {
-                let x = center.x - 5.0 + i as f32 * 2.0;
-                painter.line_segment(
-                    [
-                        egui::pos2(x, center.y - height / 2.0),
-                        egui::pos2(x, center.y + height / 2.0),
-                    ],
-                    stroke,
-                );
-            }
-        }
-        PropertiesTab::Selection => {
-            for dy in [-3.5, 0.0, 3.5] {
-                let y = center.y + dy;
-                painter.circle_filled(egui::pos2(center.x - 5.0, y), 1.0, color);
-                painter.line_segment(
-                    [egui::pos2(center.x - 2.5, y), egui::pos2(center.x + 6.0, y)],
-                    stroke,
-                );
-            }
-        }
-    }
-}
-
 /// Section title with a chevron that folds it. With `resettable`, the
 /// context menu resets the whole section. Returns (open, reset).
 pub(crate) fn section_header(ui: &mut egui::Ui, title: &str, resettable: bool) -> (bool, bool) {
@@ -136,6 +36,15 @@ pub(crate) fn section_header(ui: &mut egui::Ui, title: &str, resettable: bool) -
     );
     let mut reset = false;
     if resettable {
+        let icon = egui::Rect::from_center_size(
+            egui::pos2(rect.right() - 12.0, rect.center().y),
+            egui::vec2(18.0, 18.0),
+        );
+        let hit = ui.interact(icon, id.with("reset"), egui::Sense::click());
+        paint_reset_icon(ui.painter(), icon.center(), hit.hovered());
+        if hit.on_hover_text(t!("props.reset_section_hint")).clicked() {
+            reset = true;
+        }
         response.context_menu(|ui| {
             if ui.button(t!("props.reset_section")).clicked() {
                 reset = true;
@@ -144,6 +53,34 @@ pub(crate) fn section_header(ui: &mut egui::Ui, title: &str, resettable: bool) -
         });
     }
     (open, reset)
+}
+
+/// Circular arrow ↺, drawn by hand like the other icons.
+pub(crate) fn paint_reset_icon(painter: &egui::Painter, c: egui::Pos2, hovered: bool) {
+    let color = if hovered {
+        egui::Color32::WHITE
+    } else {
+        crate::theme::TEXT_SECONDARY
+    };
+    let stroke = egui::Stroke::new(crate::theme::ICON_STROKE, color);
+    let r = 5.0;
+    let points: Vec<egui::Pos2> = (0..=10)
+        .map(|i| {
+            let angle = (-60.0_f32 + i as f32 * 31.0).to_radians();
+            c + egui::vec2(angle.cos(), angle.sin()) * r
+        })
+        .collect();
+    let end = points[0];
+    painter.add(egui::Shape::line(points, stroke));
+    painter.line_segment([end, end + egui::vec2(-1.0, -4.0)], stroke);
+    painter.line_segment([end, end + egui::vec2(-4.0, 0.0)], stroke);
+}
+
+/// Small ↺ button at the end of a row.
+pub(crate) fn reset_icon_button(ui: &mut egui::Ui) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::click());
+    paint_reset_icon(ui.painter(), rect.center(), response.hovered());
+    response.on_hover_text(t!("props.reset_icon_hint"))
 }
 
 /// Pointing down when `open`, right otherwise.
@@ -742,6 +679,9 @@ pub(crate) fn param_row(
                     )
                     .on_hover_text(format!("{label}\n{}", t!("props.reset_hint")));
                 response.reset = label_response.double_clicked();
+                if label_response.clicked() && ui.input(|i| i.modifiers.alt) {
+                    response.toggled_keyframe = true;
+                }
                 label_response.context_menu(|ui| {
                     if ui.button(t!("props.reset_param")).clicked() {
                         response.reset = true;
@@ -751,7 +691,18 @@ pub(crate) fn param_row(
             },
         );
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            // Flags set by `slider_field`: double click on the knob, Alt+click.
+            ui.data_mut(|d| d.remove_temp::<(bool, bool)>(egui::Id::new("slider_flags")));
             response.changed = contents(ui);
+            if reset_icon_button(ui).clicked() {
+                response.reset = true;
+            }
+            let flags =
+                ui.data_mut(|d| d.remove_temp::<(bool, bool)>(egui::Id::new("slider_flags")));
+            if let Some((reset, alt)) = flags {
+                response.reset |= reset;
+                response.toggled_keyframe |= alt && keyframe.is_some();
+            }
         });
     });
     response
@@ -918,6 +869,20 @@ pub(crate) fn drag_field(
                 egui::viewport::CursorGrab::None,
             ));
     }
+    if response.has_focus() {
+        let (up, down) = ui.input_mut(|i| {
+            (
+                i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+                i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+            )
+        });
+        let step = speed.max(10f64.powi(-(decimals as i32)));
+        if up != down {
+            let delta = if up { step } else { -step };
+            *value = (*value + delta).clamp(*range.start(), *range.end());
+            changed = true;
+        }
+    }
     changed
 }
 
@@ -931,12 +896,21 @@ pub(crate) fn slider_field(
 ) -> bool {
     // The row has already spent its share on label, keyframe and reset:
     // what is left (minus the numeric field) all goes to the slider.
-    ui.spacing_mut().slider_width = (ui.available_width() - 76.0).clamp(80.0, 260.0);
+    ui.spacing_mut().slider_width = (ui.available_width() - 98.0).clamp(80.0, 260.0);
     let slider = ui.add(
         egui::Slider::new(value, range.clone())
             .show_value(false)
             .trailing_fill(false),
     );
+    let alt_click = slider.clicked() && ui.input(|i| i.modifiers.alt);
+    if slider.double_clicked() || alt_click {
+        ui.data_mut(|d| {
+            d.insert_temp(
+                egui::Id::new("slider_flags"),
+                (slider.double_clicked(), alt_click),
+            )
+        });
+    }
     let mut v = *value as f64;
     let drag_changed = drag_field(
         ui,
@@ -949,7 +923,7 @@ pub(crate) fn slider_field(
     if drag_changed {
         *value = v as f32;
     }
-    slider.changed() || drag_changed
+    (slider.changed() && !alt_click) || drag_changed
 }
 
 /// Id of the currently open dropdown menu, for whoever needs to know there is
@@ -1073,18 +1047,6 @@ where
     }
 
     *value != before
-}
-
-/// The lock holding the two zoom axes together.
-pub(crate) fn link_button(ui: &mut egui::Ui, linked: &mut bool) -> egui::Response {
-    let mut response = ui
-        .selectable_label(*linked, "🔗")
-        .on_hover_text(t!("props.link_zoom"));
-    if response.clicked() {
-        *linked = !*linked;
-        response.mark_changed();
-    }
-    response
 }
 
 /// Keyframe toggle: the same diamond as the keyframe editor, filled when
@@ -1375,75 +1337,6 @@ pub(crate) fn remove_color_keyframe(clip: ClipRef, frame: FrameIdx) -> BoxedComm
 }
 
 impl VenturiApp {
-    /// The "Selection" tab: everything that is selected, video and audio
-    /// together, with the data that used to sit at the top of the parameters
-    /// panel (track, start, duration, current frame).
-    pub(crate) fn show_selection_list(
-        &self,
-        ui: &mut egui::Ui,
-        video_targets: &[PanelTarget],
-        audio_targets: &[PanelTarget],
-    ) {
-        let rows: Vec<(Cow<str>, &PanelTarget)> = video_targets
-            .iter()
-            .map(|t| (t!("props.kind_video"), t))
-            .chain(audio_targets.iter().map(|t| (t!("props.kind_audio"), t)))
-            .collect();
-        ui.label(t!("props.selected_clips", count = rows.len()));
-        ui.add_space(4.0);
-        egui::Grid::new("selection_list")
-            .num_columns(6)
-            .striped(true)
-            .spacing(egui::vec2(10.0, 4.0))
-            .show(ui, |ui| {
-                for header in [
-                    t!("props.col_kind"),
-                    t!("props.col_track"),
-                    t!("props.col_name"),
-                    t!("props.col_start"),
-                    t!("props.col_duration"),
-                    t!("props.col_frame"),
-                ] {
-                    ui.label(egui::RichText::new(header).strong());
-                }
-                ui.end_row();
-                for (kind, target) in rows {
-                    let clip = self.timeline_id.and_then(|tid| {
-                        self.session.project.timelines[tid].clip(target.track_index, target.clip_id)
-                    });
-                    let (name, len) = match clip {
-                        Some(clip) => (
-                            match &clip.source {
-                                vv_core::ClipSource::Media(id) => self
-                                    .session
-                                    .project
-                                    .media_pool
-                                    .get(*id)
-                                    .map(|item| file_label(&item.path))
-                                    .unwrap_or_else(|| "⚠ offline".to_string()),
-                                vv_core::ClipSource::SolidColor => {
-                                    t!("generator.solid_color").into_owned()
-                                }
-                                vv_core::ClipSource::Text => t!("generator.text").into_owned(),
-                                vv_core::ClipSource::Adjustment => {
-                                    t!("generator.adjustment").into_owned()
-                                }
-                            },
-                            clip.timeline_len,
-                        ),
-                        None => ("?".to_string(), 0),
-                    };
-                    ui.label(kind);
-                    ui.label(target.track_index.to_string());
-                    ui.label(name);
-                    ui.label(target.timeline_start.to_string());
-                    ui.label(len.to_string());
-                    ui.label(target.source_frame.to_string());
-                    ui.end_row();
-                }
-            });
-    }
-
     /// The values to show in the properties panel for a target clip,
     /// evaluated at its `source_frame`.
     pub(crate) fn clip_panel_info(&self, target: PanelTarget) -> Option<ClipPanelInfo> {
@@ -1610,7 +1503,14 @@ impl VenturiApp {
         let fps = tl.fps.as_f64().max(1.0);
 
         ui.heading(t!("props.transition"));
-        ui.label(timeline_ui::transition_kind_label(transition.kind));
+        match transition.asset.as_ref().and_then(|fx| {
+            vv_render::assets::library()
+                .get(&fx.id)
+                .map(|a| a.name.get(&rust_i18n::locale()).to_owned())
+        }) {
+            Some(name) => ui.label(name),
+            None => ui.label(timeline_ui::transition_kind_label(transition.kind)),
+        };
         ui.separator();
 
         ui.horizontal(|ui| {
@@ -1633,7 +1533,12 @@ impl VenturiApp {
             ui.label(t!("props.frames"));
         });
 
-        if transition.kind.has_direction() {
+        if transition.duration >= max_duration {
+            ui.small(t!("fx.transition_limit"));
+        }
+        crate::VenturiApp::show_transition_params(ui, &mut transition);
+
+        if transition.kind.has_direction() && transition.asset.is_none() {
             ui.horizontal(|ui| {
                 ui.label(t!("props.direction"));
                 let items: Vec<_> = vv_core::PushDirection::ALL
@@ -1721,13 +1626,16 @@ impl VenturiApp {
                         if let Some(sel) = self.timeline_state.selected_transition {
                             self.show_transition_panel(ui, sel, &mut pending_effects);
                         } else if selected_count > 0 {
-                            properties_tab_bar(ui, &mut self.properties_tab);
+                            properties_tabs::tab_bar(ui, &mut self.clip_tab);
                             ui.separator();
+                            self.properties_tab = if self.clip_tab == properties_tabs::ClipTab::Audio {
+                                PropertiesTab::Audio
+                            } else {
+                                PropertiesTab::Video
+                            };
 
                             // Values from the first clip of the tab, changes to all of them.
-                            if self.properties_tab == PropertiesTab::Selection {
-                                self.show_selection_list(ui, video_targets, audio_targets);
-                            } else {
+                            {
                             let targets = if self.properties_tab == PropertiesTab::Audio {
                                 audio_targets
                             } else {
@@ -1754,10 +1662,25 @@ impl VenturiApp {
                                     if targets.len() > 1 {
                                         ui.small(t!("props.applies_to_all", count = targets.len()));
                                     }
-                                    ui.separator();
+                                    let tab = self.clip_tab;
+                                    let sub = if tab == properties_tabs::ClipTab::Video {
+                                        let items = properties_tabs::VIDEO_SUB_TABS.map(|s| (s, s.label()));
+                                        properties_tabs::segmented(ui, "video_subtab", &items)
+                                    } else {
+                                        properties_tabs::VideoSubTab::Basic
+                                    };
+                                    ui.add_space(6.0);
+                                    let show_base = tab == properties_tabs::ClipTab::Video
+                                        && sub == properties_tabs::VideoSubTab::Basic;
+                                    let show_mask = tab == properties_tabs::ClipTab::Video
+                                        && sub == properties_tabs::VideoSubTab::Mask;
+                                    match tab {
+                                        properties_tabs::ClipTab::Speed => self.show_speed_tab(ui, targets),
+                                        properties_tabs::ClipTab::Animation => properties_tabs::animation_tab(ui),
+                                        _ => {}
+                                    }
 
-                                    let is_text = self.properties_tab == PropertiesTab::Video
-                                        && info.title.is_some();
+                                    let is_text = show_base && info.title.is_some();
                                     if is_text {
                                             let before = info.title.clone().unwrap_or_default();
                                             let mut title = before.clone();
@@ -1811,11 +1734,18 @@ impl VenturiApp {
                                                 pending_effects.extend(toggle_filter_commands(tl, &titles, vv_core::FilterKind::DropShadow, shadow));
                                             }
                                             ui.add_space(6.0);
+                                            if ui.button(t!("ribbon.save_template")).clicked() {
+                                                self.save_text_template(before.clone());
+                                            }
+                                            ui.add_space(6.0);
+                                            properties_tabs::text_placeholders(ui);
                                     }
                                     match self.properties_tab {
-                                        // The Selection tab does not get here:
-                                        // it was served earlier, without a primary clip.
-                                        PropertiesTab::Selection => {}
+                                        PropertiesTab::Video
+                                            if !matches!(
+                                                tab,
+                                                properties_tabs::ClipTab::Video | properties_tabs::ClipTab::Adjust
+                                            ) => {}
                                         PropertiesTab::Video => {
                                             use vv_core::TransformParam as P;
                                             let (source_w, source_h) =
@@ -1858,6 +1788,7 @@ impl VenturiApp {
                                             let mut rows: Vec<(Vec<P>, RowResponse)> = Vec::new();
                                             let mut reset_groups: Vec<(Vec<P>, bool)> = Vec::new();
 
+                                            if show_base {
                                             let (open, reset) = section_header(ui, &t!("props.transform"), true);
                                             if reset {
                                                 reset_groups.push((TRANSFORM_PARAMS.to_vec(), true));
@@ -1865,47 +1796,37 @@ impl VenturiApp {
                                             if open {
 
                                             let zoom_params = vec![P::ZoomX, P::ZoomY];
+                                            let uniform = self.zoom_link;
                                             let row = param_row(
                                                 ui,
-                                                &t!("props.zoom"),
+                                                &t!("props.resize"),
                                                 Some(row_keyframe(&zoom_params)),
                                                 |ui| {
-                                                    let mut changed = axis_field(
-                                                        ui,
-                                                        "X",
-                                                        &mut transform.zoom[0],
-                                                        0.01,
-                                                        3,
-                                                        0.01..=20.0,
-                                                    );
-                                                    let y_changed = axis_field(
-                                                        ui,
-                                                        "Y",
-                                                        &mut transform.zoom[1],
-                                                        0.01,
-                                                        3,
-                                                        0.01..=20.0,
-                                                    );
-                                                    if link_button(ui, &mut self.zoom_link).changed()
-                                                        && self.zoom_link
-                                                    {
-                                                        transform.zoom[1] = transform.zoom[0];
-                                                        changed = true;
-                                                    }
-                                                    if self.zoom_link {
-                                                        // The link works both
-                                                        // ways: whichever was
-                                                        // moved dictates the other.
+                                                    if uniform {
+                                                        let mut percent = transform.zoom[0] * 100.0;
+                                                        let changed =
+                                                            slider_field(ui, &mut percent, 1.0..=1000.0, 1.0, 0);
                                                         if changed {
-                                                            transform.zoom[1] = transform.zoom[0];
-                                                        } else if y_changed {
-                                                            transform.zoom[0] = transform.zoom[1];
+                                                            transform.zoom = [percent / 100.0; 2];
                                                         }
+                                                        changed
+                                                    } else {
+                                                        let x = axis_field(ui, "X", &mut transform.zoom[0], 0.01, 3, 0.01..=20.0);
+                                                        let y = axis_field(ui, "Y", &mut transform.zoom[1], 0.01, 3, 0.01..=20.0);
+                                                        x || y
                                                     }
-                                                    changed || y_changed
                                                 },
                                             );
-                                            rows.push((zoom_params, row));
+                                            rows.push((zoom_params.clone(), row));
+                                            let mut uniform_row = param_row(ui, &t!("props.uniform"), None, |ui| {
+                                                let toggled = ui.checkbox(&mut self.zoom_link, "").changed();
+                                                if toggled && self.zoom_link {
+                                                    transform.zoom[1] = transform.zoom[0];
+                                                }
+                                                toggled && self.zoom_link
+                                            });
+                                            uniform_row.reset = false;
+                                            rows.push((zoom_params, uniform_row));
 
                                             let position_params = vec![P::PositionX, P::PositionY];
                                             let row = param_row(
@@ -2012,6 +1933,7 @@ impl VenturiApp {
                                             if flip_row.reset {
                                                 reset_groups.push((Vec::new(), true));
                                             }
+                                            self.show_align_row(ui, targets, &info, &mut pending_effects);
                                             }
 
                                             ui.add_space(6.0);
@@ -2155,6 +2077,9 @@ impl VenturiApp {
                                             );
                                             rows.push((opacity_params, row));
                                             }
+                                            properties_tabs::stabilize_section(ui);
+                                            properties_tabs::canvas_section(ui);
+                                            }
 
                                             let tl = self.timeline_id.map(|id| &self.session.project.timelines[id]);
                                             for (params, row) in &rows {
@@ -2216,7 +2141,7 @@ impl VenturiApp {
                                             // One row per filter, in the order they were
                                             // dragged onto the clip from the Effects
                                             // panel; empty until there is one.
-                                            if !info.filters.is_empty() {
+                                            if tab == properties_tabs::ClipTab::Adjust && !info.filters.is_empty() {
                                                 ui.add_space(6.0);
                                                 let (open, _) = section_header(ui, &t!("props.filters"), false);
                                                 for filter in info.filters.iter().filter(|_| open) {
@@ -2488,7 +2413,7 @@ impl VenturiApp {
 
                                             if let Some(clip) = self.timeline_id.and_then(|tid| {
                                                 self.session.project.timelines[tid].clip(primary.track_index, primary.clip_id)
-                                            }) {
+                                            }).filter(|_| show_mask) {
                                                 let in_clip = |f: &FrameIdx| (clip.source_in()..clip.source_out()).contains(f);
                                                 let focused = self
                                                     .mask_focus
@@ -2522,7 +2447,7 @@ impl VenturiApp {
                                             // The color applies only to generator
                                             // clips: the other selected video
                                             // clips stay out of it.
-                                            if is_solid_color {
+                                            if is_solid_color && show_base {
                                                 let solid: Vec<&PanelTarget> =
                                                     targets.iter().filter(|t| t.is_solid_color).collect();
                                                 ui.add_space(6.0);
@@ -2560,6 +2485,16 @@ impl VenturiApp {
                                                         });
                                                     }
                                                 }
+                                            }
+                                            if tab == properties_tabs::ClipTab::Adjust {
+                                                self.show_asset_effects_section(ui, &primary, &mut pending_effects);
+                                            }
+                                            match (tab, sub) {
+                                                (properties_tabs::ClipTab::Adjust, _) => properties_tabs::adjust_placeholders(ui),
+                                                (_, properties_tabs::VideoSubTab::Mask) => properties_tabs::mask_shapes_placeholder(ui),
+                                                (_, properties_tabs::VideoSubTab::RemoveBackground) => properties_tabs::remove_background_tab(ui),
+                                                (_, properties_tabs::VideoSubTab::Retouch) => properties_tabs::retouch_tab(ui),
+                                                _ => {}
                                             }
                                         }
                                         PropertiesTab::Audio => {
@@ -2619,6 +2554,8 @@ impl VenturiApp {
                                                     })
                                                     .map(|c| c.timeline_frame_at(source_frame));
                                             }
+                                            self.show_fade_rows(ui, targets, &mut pending_effects);
+                                            properties_tabs::audio_placeholders(ui);
                                         }
                                     }
                                 }
@@ -2632,24 +2569,7 @@ impl VenturiApp {
                             }
                             }
                         } else if let Some(timeline_id) = self.timeline_id {
-                            let tl = &self.session.project.timelines[timeline_id];
-                            ui.heading(t!("props.timeline"));
-                            ui.label(tl.name.clone());
-                            ui.label(format!(
-                                "{}x{} · {:.2} fps",
-                                tl.resolution.0,
-                                tl.resolution.1,
-                                tl.fps.as_f64()
-                            ));
-                            ui.label(t!("props.track_count", count = tl.tracks.len()));
-                            let playhead_secs =
-                                self.timeline_state.playhead as f64 / tl.fps.as_f64().max(1.0);
-                            ui.label(t!(
-                                "props.playhead",
-                                frame = self.timeline_state.playhead,
-                                secs = format!("{playhead_secs:.2}")
-                            ));
-                            ui.small(t!("props.no_clip"));
+                            self.show_project_details(ui, timeline_id);
                         } else {
                             ui.label(t!("props.import_to_start"));
                         }

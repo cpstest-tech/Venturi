@@ -1,0 +1,285 @@
+//! The Subtitles tab of the Library block: Generate, Templates, Add.
+
+use super::*;
+use crate::subtitles::{Message, Section, models_dir};
+use vv_core::captions::{TEMPLATES, TemplateCategory};
+use vv_core::SubtitleTemplate;
+use vv_transcribe::Stage;
+
+const CARD_SIZE: egui::Vec2 = egui::vec2(160.0, 112.0);
+const PREVIEW_SIZE: egui::Vec2 = egui::vec2(160.0, 90.0);
+const SIDEBAR: f32 = 112.0;
+
+fn section_label(section: Section) -> std::borrow::Cow<'static, str> {
+    match section {
+        Section::Generate => t!("subtitles.section_generate"),
+        Section::Templates => t!("subtitles.section_templates"),
+        Section::Add => t!("subtitles.section_add"),
+    }
+}
+
+fn language_label(code: Option<&str>) -> std::borrow::Cow<'static, str> {
+    match code {
+        None => t!("subtitles.language_auto"),
+        Some("it") => t!("subtitles.lang_it"),
+        Some("en") => t!("subtitles.lang_en"),
+        Some("es") => t!("subtitles.lang_es"),
+        Some("fr") => t!("subtitles.lang_fr"),
+        Some("de") => t!("subtitles.lang_de"),
+        Some("pt") => t!("subtitles.lang_pt"),
+        Some("nl") => t!("subtitles.lang_nl"),
+        Some("ru") => t!("subtitles.lang_ru"),
+        Some("pl") => t!("subtitles.lang_pl"),
+        Some("tr") => t!("subtitles.lang_tr"),
+        Some("ja") => t!("subtitles.lang_ja"),
+        Some("zh") => t!("subtitles.lang_zh"),
+        Some(other) => other.to_owned().into(),
+    }
+}
+
+pub(crate) fn template_name(id: &str) -> std::borrow::Cow<'static, str> {
+    match id {
+        "word_pop" => t!("subtitles.tpl_word_pop"),
+        "word_yellow" => t!("subtitles.tpl_word_yellow"),
+        "word_build" => t!("subtitles.tpl_word_build"),
+        "line_classic" => t!("subtitles.tpl_line_classic"),
+        "line_outline" => t!("subtitles.tpl_line_outline"),
+        "line_yellow" => t!("subtitles.tpl_line_yellow"),
+        other => other.to_owned().into(),
+    }
+}
+
+fn primary_button(ui: &mut egui::Ui, text: String, enabled: bool) -> egui::Response {
+    let button = egui::Button::new(
+        egui::RichText::new(text)
+            .color(theme::ON_ACCENT)
+            .size(theme::FONT_BODY),
+    )
+    .fill(theme::ACCENT_FILL)
+    .min_size(egui::vec2(0.0, theme::FIELD_HEIGHT));
+    ui.add_enabled(enabled, button)
+}
+
+impl VenturiApp {
+    pub(crate) fn show_subtitles_tab(&mut self, ui: &mut egui::Ui) {
+        let area = ui.available_rect_before_wrap();
+        let side_rect = area.with_max_x(area.left() + SIDEBAR.min(area.width() * 0.4));
+        let content_rect = area.with_min_x(side_rect.right() + theme::SPACE_2);
+        let mut side_ui = ui.new_child(egui::UiBuilder::new().max_rect(side_rect));
+        for section in [Section::Generate, Section::Templates, Section::Add] {
+            let selected = self.subtitles.section == section;
+            let text = egui::RichText::new(section_label(section)).color(if selected {
+                theme::ACCENT
+            } else {
+                theme::TEXT_PRIMARY
+            });
+            let button = egui::Button::selectable(selected, text);
+            if side_ui
+                .add_sized([side_ui.available_width(), theme::CONTROL_HEIGHT], button)
+                .clicked()
+            {
+                self.subtitles.section = section;
+            }
+        }
+        let mut content = ui.new_child(egui::UiBuilder::new().max_rect(content_rect));
+        match self.subtitles.section {
+            Section::Generate => self.show_generate_section(&mut content),
+            Section::Templates => self.show_templates_section(&mut content),
+            Section::Add => {
+                content
+                    .add_enabled_ui(false, |ui| {
+                        ui.label(t!("subtitles.add_soon"));
+                    })
+                    .response
+                    .on_disabled_hover_text(t!("common.coming_soon"));
+            }
+        }
+        ui.allocate_rect(area, egui::Sense::hover());
+    }
+
+    fn show_generate_section(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(theme::SPACE_1);
+        ui.weak(t!("subtitles.generate_hint"));
+        ui.add_space(theme::SPACE_2);
+        let running = self.subtitles.job.is_some();
+        ui.add_enabled_ui(!running, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(t!("subtitles.language"));
+                egui::ComboBox::from_id_salt("subtitle_language")
+                    .selected_text(language_label(self.subtitles.language))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.subtitles.language,
+                            None,
+                            language_label(None),
+                        );
+                        for code in vv_transcribe::LANGUAGES {
+                            ui.selectable_value(
+                                &mut self.subtitles.language,
+                                Some(code),
+                                language_label(Some(code)),
+                            );
+                        }
+                    });
+            });
+        });
+        ui.add_space(theme::SPACE_2);
+        if let Some((stage, fraction)) = self.transcription_stage() {
+            let label = match stage {
+                Stage::Download => t!("subtitles.stage_download"),
+                Stage::Idle => t!("subtitles.stage_audio"),
+                Stage::Transcribe => t!("subtitles.stage_transcribe"),
+            };
+            ui.label(label);
+            let bar = egui::ProgressBar::new(if stage == Stage::Idle { 0.0 } else { fraction })
+                .show_percentage()
+                .animate(stage == Stage::Idle);
+            ui.add(bar);
+            ui.add_space(theme::SPACE_1);
+            if ui.button(t!("common.cancel")).clicked() {
+                self.cancel_transcription();
+            }
+        } else {
+            let ready = self.timeline_id.is_some();
+            if primary_button(ui, t!("subtitles.generate").into_owned(), ready).clicked() {
+                self.retranscribe_subtitles();
+            }
+            let model_ready = models_dir().is_some_and(|dir| vv_transcribe::model_present(&dir));
+            if !model_ready {
+                ui.add_space(theme::SPACE_1);
+                ui.weak(t!("subtitles.model_download_hint"));
+            }
+        }
+        if let Some(captions) = self
+            .timeline_id
+            .and_then(|id| self.session.project.captions.get(&id))
+        {
+            ui.add_space(theme::SPACE_2);
+            ui.weak(t!(
+                "subtitles.existing",
+                words = captions.words.len(),
+                language = captions.language,
+                template = template_name(&captions.template)
+            ));
+        }
+        match &self.subtitles.message {
+            Some(Message::Error(text)) => {
+                ui.add_space(theme::SPACE_2);
+                ui.colored_label(theme::ERROR, text);
+            }
+            Some(Message::Info(text)) => {
+                ui.add_space(theme::SPACE_2);
+                ui.weak(text);
+            }
+            None => {}
+        }
+    }
+
+    fn show_templates_section(&mut self, ui: &mut egui::Ui) {
+        let resolution = self
+            .timeline_id
+            .and_then(|id| self.session.project.timelines.get(id))
+            .map_or((1920, 1080), |t| t.resolution);
+        let applied = self
+            .timeline_id
+            .and_then(|id| self.session.project.captions.get(&id))
+            .map(|c| c.template.clone());
+        let mut chosen = None;
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                for (category, title) in [
+                    (TemplateCategory::WordByWord, t!("subtitles.category_word")),
+                    (TemplateCategory::Line, t!("subtitles.category_line")),
+                ] {
+                    ui.label(
+                        egui::RichText::new(title)
+                            .size(theme::FONT_SECTION)
+                            .color(theme::TEXT_PRIMARY),
+                    );
+                    ui.add_space(theme::SPACE_1);
+                    ui.horizontal_wrapped(|ui| {
+                        for template in TEMPLATES.iter().filter(|t| t.category == category) {
+                            let selected = self.subtitles.selected.as_deref() == Some(template.id)
+                                || (self.subtitles.selected.is_none()
+                                    && applied.as_deref() == Some(template.id));
+                            if self.template_card(ui, template, resolution, selected) {
+                                chosen = Some(template.id);
+                            }
+                        }
+                    });
+                    ui.add_space(theme::SPACE_2);
+                }
+                let can_generate = self.subtitles.selected.is_some()
+                    && self.timeline_id.is_some()
+                    && self.subtitles.job.is_none();
+                if primary_button(ui, t!("subtitles.generate").into_owned(), can_generate)
+                    .on_disabled_hover_text(t!("subtitles.pick_template"))
+                    .clicked()
+                {
+                    self.generate_subtitles();
+                }
+            });
+        if let Some(id) = chosen {
+            self.choose_subtitle_template(id);
+        }
+    }
+
+    fn template_card(
+        &mut self,
+        ui: &mut egui::Ui,
+        template: &SubtitleTemplate,
+        resolution: (u32, u32),
+        selected: bool,
+    ) -> bool {
+        let key = format!("{}-{}x{}", template.id, resolution.0, resolution.1);
+        if !self.subtitles.previews.contains_key(&key) {
+            let sample = match template.category {
+                TemplateCategory::WordByWord => t!("subtitles.sample_word"),
+                TemplateCategory::Line => t!("subtitles.sample_line"),
+            };
+            let image = library_ribbon::title_preview_image(
+                &template.title(&sample, resolution),
+                resolution,
+            );
+            let texture = ui.ctx().load_texture(
+                format!("subtitle-{key}"),
+                image,
+                egui::TextureOptions::LINEAR,
+            );
+            self.subtitles.previews.insert(key.clone(), texture);
+        }
+        let (rect, response) = ui.allocate_exact_size(CARD_SIZE, egui::Sense::click());
+        let fill = if response.hovered() {
+            theme::BG_RAISED_HOVER
+        } else {
+            theme::BG_RAISED
+        };
+        let painter = ui.painter();
+        painter.rect_filled(rect, theme::RADIUS_CONTROL, fill);
+        if let Some(texture) = self.subtitles.previews.get(&key) {
+            painter.image(
+                texture.id(),
+                egui::Rect::from_min_size(rect.min, PREVIEW_SIZE),
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+        }
+        painter.text(
+            egui::pos2(rect.center().x, rect.bottom() - theme::SPACE_1),
+            egui::Align2::CENTER_BOTTOM,
+            template_name(template.id),
+            egui::FontId::proportional(theme::FONT_SMALL),
+            theme::TEXT_SECONDARY,
+        );
+        if selected {
+            painter.rect_stroke(
+                rect,
+                theme::RADIUS_CONTROL,
+                egui::Stroke::new(2.0, theme::ACCENT),
+                egui::StrokeKind::Inside,
+            );
+        }
+        response.clicked()
+    }
+}

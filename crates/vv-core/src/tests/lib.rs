@@ -530,6 +530,7 @@ fn splitting_either_side_of_a_crossing_removes_it_and_undo_restores_it() {
         direction: PushDirection::Right,
         ease: Ease::None,
         curve: 0.0,
+        asset: None,
     };
 
     for split_the_right_clip in [false, true] {
@@ -635,6 +636,7 @@ fn deleting_a_clip_removes_its_crossings_and_undo_restores_them() {
         direction: PushDirection::Right,
         ease: Ease::None,
         curve: 0.0,
+        asset: None,
     };
     history.do_command(
         &mut project,
@@ -711,6 +713,7 @@ fn moving_a_clip_to_another_track_removes_its_crossings_and_undo_restores_them()
         direction: PushDirection::Right,
         ease: Ease::None,
         curve: 0.0,
+        asset: None,
     };
     history.do_command(
         &mut project,
@@ -2135,6 +2138,7 @@ fn set_clip_transition_is_undoable() {
         direction: PushDirection::Right,
         ease: Ease::None,
         curve: 0.5,
+        asset: None,
     };
     history.do_command(
         &mut project,
@@ -2180,6 +2184,7 @@ fn transition_offset_slides_in_from_the_push_direction_then_settles() {
         direction: PushDirection::Right,
         ease: Ease::None,
         curve: 0.0,
+        asset: None,
     });
     let frame_size = (1920.0, 1080.0);
     let zoom = [1.0, 1.0];
@@ -2225,6 +2230,7 @@ fn cross_transition_window_straddles_the_cut_and_progresses_from_zero_to_one() {
             direction: PushDirection::Right,
             ease: Ease::None,
             curve: 0.0,
+            asset: None,
         },
     };
     // Symmetric window on the cut: 10 frames before, 10 after.

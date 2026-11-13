@@ -1,0 +1,20 @@
+{
+  "kind": "effect",
+  "name": {
+    "en": "Mirror",
+    "it": "Specchio"
+  },
+  "category": "distort",
+  "params": [
+    {
+      "id": "center",
+      "name": {
+        "en": "Center",
+        "it": "Centro"
+      },
+      "min": 0.1,
+      "max": 0.9,
+      "default": 0.5
+    }
+  ]
+}

@@ -144,16 +144,16 @@ the engine (`vv-media`, `vv-render`, `vv-audio`, the export/frame pipeline in
 
 | Spec item | Status | Where |
 |---|---|---|
-| Modal, cover, name with numeric suffix, `~/Videos/Exports`, Browse | modify | `export_dialog.rs` (non-modal window today) |
-| Resolution by short side incl. "match best video" | partial | `custom_size`/`scale_percent` in `ExportSettings` |
-| Bitrate modes (match best, recommended, lower, higher, custom CBR/VBR) | create ⚙ | encoders run **constant quality** (CRF/CQ/QP) in `vv-media/src/encode.rs`; no target bitrate |
-| Codecs H.264 / HEVC / AV1 | create ⚙ | H.264 only (x264, NVENC, VT, Vulkan) |
-| Formats MP4 / MOV | create ⚙ | MP4 muxer only |
-| Frame rate choice / match best | create ⚙ | export runs at the timeline fps |
-| Audio-only / separate audio MP3/WAV/AAC/FLAC | create ⚙ | AAC in MP4 only |
-| Captions SRT/TXT | create | phase 6, no engine |
-| Live estimate of duration and size | partial | exact only once bitrate modes exist |
-| Progress, frame preview, ETA, cancel deletes the partial file, open folder | partial | `ExportProgress`, cancellation exist; check partial-file deletion |
+| Modal, cover, name with numeric suffix, `~/Videos/Exports`, Browse | done | `export_modal.rs` (Ctrl+E, blocks the editor) |
+| Resolution by short side incl. "match best video" | done | `export_plan.rs` |
+| Bitrate modes (match best via ffprobe, recommended, lower, higher, custom CBR/VBR) | done | `VideoSettings::bitrate` in `vv-media/src/encode.rs` |
+| Codecs H.264 / HEVC / AV1 | partial | only H.264 is offered (the others are hidden: `CodecChoice::available`); HEVC/AV1 need new encoders in `vv-media` |
+| Formats MP4 / MOV | done, untested | MOV chosen from the file extension; AV1 in MOV is already marked invalid |
+| Frame rate choice / match best | done | `ExportSettings::fps`, nearest-frame retiming in `vv-session` |
+| Audio-only / separate audio MP3/WAV/AAC/FLAC | done | `AudioFileEncoder` |
+| Captions SRT/TXT | done | `vv_core::captions::clips_to_srt/txt` |
+| Live estimate of duration and size | done | `Estimate` (approximate with VBR) |
+| Progress, frame preview, ETA, cancel deletes the partial files, open folder | done | `ExportProgress::preview`, `export_timeline` cleanup |
 
 ### 10. Save and empty states
 

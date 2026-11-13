@@ -36,9 +36,6 @@ fn export_timeline_produces_a_playable_file_matching_the_timeline() {
 
     let mut app = crate::VenturiApp::default();
     app.import_media(source_path);
-    let timeline_id = app
-        .timeline_id
-        .expect("import should have created the timeline");
     let media_id = app
         .session
         .project
@@ -48,6 +45,7 @@ fn export_timeline_produces_a_playable_file_matching_the_timeline() {
         .map(|(id, _)| id)
         .expect("imported media expected in the pool");
     app.add_media_to_timeline(media_id);
+    let timeline_id = app.timeline_id.unwrap();
 
     let output_path = dir.join("out.mp4");
     let progress = Mutex::new(ExportProgress::default());
@@ -104,8 +102,8 @@ fn export_timeline_produces_a_playable_file_matching_the_timeline() {
 }
 
 /// End-to-end regression for exporting an image (see
-/// `ActiveClipDecoder::open_for`): the default clip (5s = 125
-/// frames at 25fps) covers well past the single real frame
+/// `ActiveClipDecoder::open_for`): the default clip (5s = 150
+/// frames at 30fps) covers well past the single real frame
 /// an image has — before the dedicated support the export would
 /// have errored out (or stopped) as soon as it went past the first
 /// requested position.
@@ -129,9 +127,6 @@ fn export_timeline_covers_a_stretched_image_clip_past_its_only_real_frame() {
 
     let mut app = crate::VenturiApp::default();
     app.import_media(source_path);
-    let timeline_id = app
-        .timeline_id
-        .expect("import should have created the timeline");
     let media_id = app
         .session
         .project
@@ -142,12 +137,13 @@ fn export_timeline_covers_a_stretched_image_clip_past_its_only_real_frame() {
         .expect("imported media expected in the pool");
     assert!(app.session.project.media_pool[media_id].meta.is_image());
     app.add_media_to_timeline(media_id);
+    let timeline_id = app.timeline_id.unwrap();
 
     let output_path = dir.join("out.mp4");
     let progress = Mutex::new(ExportProgress::default());
     let cancel = AtomicBool::new(false);
     let total = app.session.project.timelines[timeline_id].total_frames();
-    assert_eq!(total, 5 * 25, "5 s by default at 25 fps");
+    assert_eq!(total, 5 * 30, "5 s by default at 30 fps");
     let settings = ExportSettings::new(output_path.clone());
     export_timeline(
         &app.session.project,
@@ -232,13 +228,6 @@ fn export_conforms_a_clip_whose_fps_differs_from_the_timeline() {
 
     let mut app = crate::VenturiApp::default();
     app.import_media(mute_25);
-    let timeline_id = app
-        .timeline_id
-        .expect("import should have created the timeline");
-    assert_eq!(
-        app.session.project.timelines[timeline_id].fps,
-        vv_core::Rational::new(25, 1)
-    );
     let first = app
         .session
         .project
@@ -248,6 +237,11 @@ fn export_conforms_a_clip_whose_fps_differs_from_the_timeline() {
         .map(|(id, _)| id)
         .unwrap();
     app.add_media_to_timeline(first);
+    let timeline_id = app.timeline_id.unwrap();
+    assert_eq!(
+        app.session.project.timelines[timeline_id].fps,
+        vv_core::Rational::new(25, 1)
+    );
 
     app.import_media(sine_23976);
     let second = app
@@ -499,7 +493,6 @@ fn export_decoding_on_the_gpu_writes_the_same_frames_as_on_the_cpu() {
     );
     let mut app = crate::VenturiApp::default();
     app.import_media(source_path);
-    let timeline_id = app.timeline_id.unwrap();
     let media_id = app
         .session
         .project
@@ -509,6 +502,7 @@ fn export_decoding_on_the_gpu_writes_the_same_frames_as_on_the_cpu() {
         .map(|(id, _)| id)
         .unwrap();
     app.add_media_to_timeline(media_id);
+    let timeline_id = app.timeline_id.unwrap();
     let total = app.session.project.timelines[timeline_id].total_frames();
 
     let export = |name: &str, hw_decode: Vec<vv_media::HwDevice>| {

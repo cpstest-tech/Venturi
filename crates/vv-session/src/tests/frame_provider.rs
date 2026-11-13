@@ -395,6 +395,8 @@ fn video_track(clips: Vec<Clip>) -> Track {
         crossings: Vec::new(),
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     }
 }
 
@@ -446,10 +448,13 @@ fn crossing_offsets_clear_a_zoomed_clip_fully_off_screen() {
                 direction: PushDirection::Right,
                 ease: Ease::None,
                 curve: 0.0,
+                asset: None,
             },
         }],
         mix: Default::default(),
         armed: Default::default(),
+        main: false,
+        subtitles: false,
     };
     let timeline = Timeline {
         name: "t".into(),
@@ -515,6 +520,7 @@ fn crossing_dissolve_fades_the_right_clip_in_over_the_left_one() {
             direction: PushDirection::Right,
             ease: Ease::None,
             curve: 0.0,
+            asset: None,
         },
     }];
     let timeline = Timeline {
@@ -560,6 +566,7 @@ fn a_smooth_cut_without_a_gpu_dissolves_between_the_held_sides() {
             direction: PushDirection::Right,
             ease: Ease::None,
             curve: 0.0,
+            asset: None,
         },
     }];
     let timeline = Timeline {
@@ -614,6 +621,7 @@ fn video_layer(frame: Arc<FrameYuv420>, opacity: f32) -> OwnedLayer {
         filters: Vec::new(),
         blend: vv_core::BlendMode::Normal,
         masks: Vec::new(),
+        assets: Vec::new(),
     }
 }
 
@@ -762,6 +770,7 @@ fn a_title_layer_shows_the_text_of_its_frame() {
             &clip,
             frame,
             (4, 4),
+            25.0,
             &mut NoMediaProvider,
         )
         .unwrap()
@@ -779,9 +788,16 @@ fn a_title_layer_shows_the_text_of_its_frame() {
         "First".into(),
         vv_core::Interpolation::Hold,
     );
-    let first = clip_layer(&Project::default(), &two, 5, (4, 4), &mut NoMediaProvider)
-        .unwrap()
-        .unwrap();
+    let first = clip_layer(
+        &Project::default(),
+        &two,
+        5,
+        (4, 4),
+        25.0,
+        &mut NoMediaProvider,
+    )
+    .unwrap()
+    .unwrap();
     assert!(matches!(first.content, OwnedContent::Text(t) if t.display_text() == "First"));
 }
 
@@ -809,4 +825,168 @@ fn a_matte_over_an_adjustment_cuts_out_the_adjusted_stack() {
         "left: inside the matte, the darkened blue: {inside:?}"
     );
     assert_eq!(px(3, 1), &[0, 0, 0, 0], "right: outside, nothing");
+}
+
+mod assets {
+    use super::*;
+    use vv_core::{AssetFx, Keyframed, Rgba};
+
+    const RED: Rgba = Rgba {
+        r: 1.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    const BLUE: Rgba = Rgba {
+        r: 0.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    };
+
+    fn colored(id: u64, start: FrameIdx, len: FrameIdx, color: Rgba) -> Clip {
+        let mut clip = solid_clip(id, start, len, [1.0, 1.0]);
+        clip.effects.color = Some(Keyframed::constant(color));
+        clip
+    }
+
+    fn timeline(tracks: Vec<Track>) -> Timeline {
+        Timeline {
+            name: "t".into(),
+            fps: Rational::new(25, 1),
+            resolution: (16, 16),
+            tracks,
+            markers: Vec::new(),
+            master: Default::default(),
+        }
+    }
+
+    fn center_pixel(compositor: &vv_render::Compositor, layers: &[OwnedLayer]) -> [u8; 4] {
+        let layers: Vec<_> = layers.iter().map(OwnedLayer::as_render).collect();
+        let out = compositor.render_layers(&layers, vv_render::OutputFrame::exact(16, 16));
+        let i = (8 * 16 + 8) * 4;
+        [out[i], out[i + 1], out[i + 2], out[i + 3]]
+    }
+
+    fn compose_frame(
+        compositor: &vv_render::Compositor,
+        timeline: &Timeline,
+        frame: FrameIdx,
+    ) -> Vec<OwnedLayer> {
+        let project = Project::default();
+        let mut inner = NoMediaProvider;
+        let mut gpu = GpuCompounds::new(&mut inner, compositor);
+        let mut groups = Vec::new();
+        for (track_index, clip) in timeline.active_video_clips_at(frame) {
+            let layers = track_layers_at(
+                &project,
+                timeline,
+                track_index,
+                clip,
+                frame,
+                timeline.resolution,
+                &mut gpu,
+            )
+            .unwrap();
+            groups.push((clip.effects.matte, layers));
+        }
+        stack_layers(groups, &mut gpu, timeline.resolution)
+    }
+
+    #[test]
+    fn an_asset_effect_on_a_clip_processes_that_clip() {
+        let compositor = vv_render::Compositor::new_headless();
+        let mut clip = colored(1, 0, 50, RED);
+        clip.effects.assets = vec![AssetFx::new("filters/noir", vec![])];
+        let mut track = Track::new(TrackKind::Video);
+        track.clips = vec![clip];
+        let layers = compose_frame(&compositor, &timeline(vec![track]), 10);
+        let [r, g, b, _] = center_pixel(&compositor, &layers);
+        assert!(
+            r.abs_diff(g) < 4 && g.abs_diff(b) < 4,
+            "grey, got {r} {g} {b}"
+        );
+    }
+
+    #[test]
+    fn an_asset_effect_element_processes_the_tracks_below_for_its_length_only() {
+        let compositor = vv_render::Compositor::new_headless();
+        let mut below = Track::new(TrackKind::Video);
+        below.clips = vec![colored(1, 0, 100, RED)];
+        let mut element =
+            Clip::from_source_range(ClipId(2), ClipSource::Adjustment, 0, 50, 0, Rational::one());
+        element.effects.assets = vec![AssetFx::new("filters/noir", vec![])];
+        let mut above = Track::new(TrackKind::Video);
+        above.clips = vec![element];
+        let timeline = timeline(vec![below, above]);
+
+        let inside = compose_frame(&compositor, &timeline, 10);
+        let [r, g, b, _] = center_pixel(&compositor, &inside);
+        assert!(
+            r.abs_diff(g) < 4 && g.abs_diff(b) < 4,
+            "grey, got {r} {g} {b}"
+        );
+
+        let outside = compose_frame(&compositor, &timeline, 70);
+        let [r, g, b, _] = center_pixel(&compositor, &outside);
+        assert!(
+            r > 240 && g < 15 && b < 15,
+            "untouched red, got {r} {g} {b}"
+        );
+    }
+
+    #[test]
+    fn an_asset_transition_merges_both_sides_into_one_layer() {
+        let compositor = vv_render::Compositor::new_headless();
+        let mut track = Track::new(TrackKind::Video);
+        track.clips = vec![colored(1, 0, 100, RED), colored(2, 100, 100, BLUE)];
+        track.crossings = vec![CrossTransition {
+            left_clip: ClipId(1),
+            right_clip: ClipId(2),
+            transition: Transition {
+                kind: TransitionKind::CrossDissolve,
+                duration: 20,
+                direction: PushDirection::Right,
+                ease: Ease::None,
+                curve: 0.0,
+                asset: Some(AssetFx::new("transitions/dissolve", vec![])),
+            },
+        }];
+        let timeline = timeline(vec![track]);
+
+        let halfway = compose_frame(&compositor, &timeline, 100);
+        assert_eq!(halfway.len(), 1);
+        let [r, _, b, _] = center_pixel(&compositor, &halfway);
+        assert!(
+            (120..=135).contains(&r) && (120..=135).contains(&b),
+            "{r} {b}"
+        );
+
+        let before = compose_frame(&compositor, &timeline, 50);
+        let [r, _, b, _] = center_pixel(&compositor, &before);
+        assert!(r > 240 && b < 15);
+    }
+
+    #[test]
+    fn a_transition_tolerates_one_frame_of_gap_but_not_two() {
+        let make = |gap: FrameIdx| {
+            let mut track = Track::new(TrackKind::Video);
+            track.clips = vec![colored(1, 0, 100, RED), colored(2, 100 + gap, 100, BLUE)];
+            track.crossings = vec![CrossTransition {
+                left_clip: ClipId(1),
+                right_clip: ClipId(2),
+                transition: Transition {
+                    kind: TransitionKind::CrossDissolve,
+                    duration: 20,
+                    direction: PushDirection::Right,
+                    ease: Ease::None,
+                    curve: 0.0,
+                    asset: None,
+                },
+            }];
+            track
+        };
+        assert!(make(1).crossing_at(95).is_some());
+        assert!(make(2).crossing_at(95).is_none());
+    }
 }

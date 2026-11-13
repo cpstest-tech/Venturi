@@ -185,6 +185,16 @@ pub struct VideoSettings {
     pub preset: String,
     /// CRF for x264, CQ for NVENC: lower = higher quality.
     pub quality: u8,
+    /// A target bitrate instead of the constant `quality`.
+    pub bitrate: Option<VideoBitrate>,
+}
+
+/// A bitrate target of the video encoder.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VideoBitrate {
+    pub kbps: u32,
+    /// Constant (CBR) instead of variable (VBR).
+    pub constant: bool,
 }
 
 impl VideoSettings {
@@ -193,6 +203,7 @@ impl VideoSettings {
             codec,
             preset: codec.default_preset().into(),
             quality: codec.default_quality(),
+            bitrate: None,
         }
     }
 }
@@ -308,87 +319,16 @@ impl Encoder {
         let video_stream_index = video_ost.index();
         video_ost.set_parameters(&video_encoder);
 
-        // --- audio: AAC (optional) ---
         let audio_state = match audio {
-            Some((sample_rate, channels, settings)) => {
-                let audio_codec =
-                    encoder::find_by_name(settings.codec.ffmpeg_name()).ok_or_else(|| {
-                        crate::MediaError::NoStream(format!(
-                            "encoder {} not available",
-                            settings.codec.ffmpeg_name()
-                        ))
-                    })?;
-                let audio_ost = octx.add_stream(audio_codec)?;
-                let audio_stream_index = audio_ost.index();
-
-                let input_layout = if channels >= 2 {
-                    ChannelLayout::STEREO
-                } else {
-                    ChannelLayout::MONO
-                };
-
-                let mut audio_ctx = codec::context::Context::new_with_codec(audio_codec)
-                    .encoder()
-                    .audio()?;
-                audio_ctx.set_rate(sample_rate as i32);
-                audio_ctx.set_bit_rate(settings.bitrate_kbps as usize * 1000);
-                audio_ctx.set_channel_layout(input_layout);
-                audio_ctx.set_format(
-                    audio_codec
-                        .audio()?
-                        .formats()
-                        .and_then(|mut formats| formats.next())
-                        .ok_or_else(|| {
-                            crate::MediaError::NoStream(
-                                "no sample format supported by the AAC encoder".into(),
-                            )
-                        })?,
-                );
-                let audio_time_base = ffmpeg::Rational::new(1, sample_rate as i32);
-                audio_ctx.set_time_base(audio_time_base);
-                if global_header {
-                    audio_ctx.set_flags(codec::Flags::GLOBAL_HEADER);
-                }
-                let mut audio_opts = Dictionary::new();
-                if settings.codec == AudioCodec::Aac {
-                    let coder = if settings.fast_coder {
-                        "fast"
-                    } else {
-                        "twoloop"
-                    };
-                    audio_opts.set("aac_coder", coder);
-                }
-                let audio_encoder = audio_ctx.open_as_with(audio_codec, audio_opts)?;
-                let mut audio_ost = audio_ost;
-                audio_ost.set_parameters(&audio_encoder);
-
-                let out_format = audio_encoder.format();
-                let out_layout = audio_encoder.channel_layout();
-                let resampler = Resampler::get(
-                    Sample::F32(SampleType::Packed),
-                    input_layout,
-                    sample_rate,
-                    out_format,
-                    out_layout,
-                    sample_rate,
-                )?;
-                let frame_size = (audio_encoder.frame_size() as usize).max(1);
-
-                Some(AudioState {
-                    encoder: audio_encoder,
-                    resampler,
-                    input_layout,
-                    stream_index: audio_stream_index,
-                    time_base: audio_time_base,
-                    // Updated after `write_header`.
-                    ost_time_base: audio_time_base,
-                    frame_size,
-                    channels,
-                    rate: sample_rate,
-                    pending: Vec::new(),
-                    next_pts: 0,
-                })
-            }
+            Some((sample_rate, channels, settings)) => Some(open_audio_stream(
+                &mut octx,
+                settings.codec.ffmpeg_name(),
+                sample_rate,
+                channels,
+                settings.bitrate_kbps,
+                (settings.codec == AudioCodec::Aac).then_some(settings.fast_coder),
+                global_header,
+            )?),
             None => None,
         };
 
@@ -508,6 +448,114 @@ impl Encoder {
     }
 }
 
+/// The formats of a separate audio file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AudioFileFormat {
+    Mp3,
+    Wav,
+    Aac,
+    Flac,
+}
+
+impl AudioFileFormat {
+    pub const ALL: [Self; 4] = [Self::Mp3, Self::Wav, Self::Aac, Self::Flac];
+
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::Mp3 => "mp3",
+            Self::Wav => "wav",
+            Self::Aac => "aac",
+            Self::Flac => "flac",
+        }
+    }
+
+    fn ffmpeg_name(self) -> &'static str {
+        match self {
+            Self::Mp3 => "libmp3lame",
+            Self::Wav => "pcm_s16le",
+            Self::Aac => "aac",
+            Self::Flac => "flac",
+        }
+    }
+
+    /// Lossless formats ignore the bitrate.
+    pub fn uses_bitrate(self) -> bool {
+        matches!(self, Self::Mp3 | Self::Aac)
+    }
+
+    pub fn is_available(self) -> bool {
+        crate::probe::ensure_init();
+        encoder::find_by_name(self.ffmpeg_name()).is_some()
+    }
+}
+
+/// Mixed PCM into an audio-only file.
+pub struct AudioFileEncoder {
+    octx: format::context::Output,
+    audio: AudioState,
+}
+
+impl AudioFileEncoder {
+    /// The container comes from the extension of `path`.
+    pub fn new(
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+        format: AudioFileFormat,
+        bitrate_kbps: u32,
+    ) -> Result<Self, crate::MediaError> {
+        crate::probe::ensure_init();
+        let mut octx = format::output(path)?;
+        let global_header = octx.format().flags().contains(format::Flags::GLOBAL_HEADER);
+        let audio = open_audio_stream(
+            &mut octx,
+            format.ffmpeg_name(),
+            sample_rate,
+            channels,
+            bitrate_kbps,
+            (format == AudioFileFormat::Aac).then_some(true),
+            global_header,
+        )?;
+        octx.write_header()?;
+        let mut audio = audio;
+        audio.ost_time_base = octx.stream(audio.stream_index).unwrap().time_base();
+        Ok(Self { octx, audio })
+    }
+
+    pub fn write_samples(&mut self, samples: &[f32]) -> Result<(), crate::MediaError> {
+        let Self { octx, audio } = self;
+        let mut pending = std::mem::take(&mut audio.pending);
+        pending.extend_from_slice(samples);
+        let frame_len = audio.frame_size * audio.channels as usize;
+        let mut chunks = pending.chunks_exact(frame_len);
+        for chunk in &mut chunks {
+            write_audio_chunk(octx, audio, chunk)?;
+        }
+        audio.pending = chunks.remainder().to_vec();
+        Ok(())
+    }
+
+    pub fn finish(mut self) -> Result<(), crate::MediaError> {
+        let audio = &mut self.audio;
+        if !audio.pending.is_empty() {
+            let frame_len = audio.frame_size * audio.channels as usize;
+            audio.pending.resize(frame_len, 0.0);
+            let chunk = std::mem::take(&mut audio.pending);
+            write_audio_chunk(&mut self.octx, audio, &chunk)?;
+        }
+        audio.encoder.send_eof()?;
+        drain_packets(
+            &mut self.octx,
+            &mut audio.encoder,
+            audio.stream_index,
+            audio.time_base,
+            audio.ost_time_base,
+        )?;
+        self.octx.write_trailer()?;
+        Ok(())
+    }
+}
+
 fn write_audio_chunk(
     octx: &mut format::context::Output,
     audio: &mut AudioState,
@@ -541,6 +589,91 @@ fn write_audio_chunk(
         audio.time_base,
         audio.ost_time_base,
     )
+}
+
+/// Adds an audio stream to `octx` and opens its encoder. `aac_fast`: the
+/// native AAC encoder's coder, `None` for the other encoders.
+fn open_audio_stream(
+    octx: &mut format::context::Output,
+    codec_name: &str,
+    sample_rate: u32,
+    channels: u16,
+    bitrate_kbps: u32,
+    aac_fast: Option<bool>,
+    global_header: bool,
+) -> Result<AudioState, crate::MediaError> {
+    let audio_codec = encoder::find_by_name(codec_name).ok_or_else(|| {
+        crate::MediaError::NoStream(format!("encoder {codec_name} not available"))
+    })?;
+    let audio_ost = octx.add_stream(audio_codec)?;
+    let audio_stream_index = audio_ost.index();
+
+    let input_layout = if channels >= 2 {
+        ChannelLayout::STEREO
+    } else {
+        ChannelLayout::MONO
+    };
+
+    let mut audio_ctx = codec::context::Context::new_with_codec(audio_codec)
+        .encoder()
+        .audio()?;
+    audio_ctx.set_rate(sample_rate as i32);
+    audio_ctx.set_bit_rate(bitrate_kbps as usize * 1000);
+    audio_ctx.set_channel_layout(input_layout);
+    audio_ctx.set_format(
+        audio_codec
+            .audio()?
+            .formats()
+            .and_then(|mut formats| formats.next())
+            .ok_or_else(|| {
+                crate::MediaError::NoStream(
+                    "no sample format supported by the audio encoder".into(),
+                )
+            })?,
+    );
+    let audio_time_base = ffmpeg::Rational::new(1, sample_rate as i32);
+    audio_ctx.set_time_base(audio_time_base);
+    if global_header {
+        audio_ctx.set_flags(codec::Flags::GLOBAL_HEADER);
+    }
+    let mut audio_opts = Dictionary::new();
+    if let Some(fast) = aac_fast {
+        audio_opts.set("aac_coder", if fast { "fast" } else { "twoloop" });
+    }
+    let audio_encoder = audio_ctx.open_as_with(audio_codec, audio_opts)?;
+    let mut audio_ost = audio_ost;
+    audio_ost.set_parameters(&audio_encoder);
+
+    let out_format = audio_encoder.format();
+    let out_layout = audio_encoder.channel_layout();
+    let resampler = Resampler::get(
+        Sample::F32(SampleType::Packed),
+        input_layout,
+        sample_rate,
+        out_format,
+        out_layout,
+        sample_rate,
+    )?;
+    // PCM has no fixed frame size.
+    let frame_size = match audio_encoder.frame_size() as usize {
+        0 => 4096,
+        size => size,
+    };
+
+    Ok(AudioState {
+        encoder: audio_encoder,
+        resampler,
+        input_layout,
+        stream_index: audio_stream_index,
+        time_base: audio_time_base,
+        // Updated after `write_header`.
+        ost_time_base: audio_time_base,
+        frame_size,
+        channels,
+        rate: sample_rate,
+        pending: Vec::new(),
+        next_pts: 0,
+    })
 }
 
 /// The video encoder of `settings`, opened, and the NV12 staging frame if
@@ -581,25 +714,51 @@ fn open_video_encoder(
     }
     let quality = settings.quality.to_string();
     let mut nv12 = None;
-    match settings.codec {
-        VideoCodec::X264 => opts.set("crf", &quality),
-        VideoCodec::Nvenc => {
+    if let Some(target) = settings.bitrate {
+        let bits = i64::from(target.kbps) * 1000;
+        ctx.set_bit_rate(bits as usize);
+        // One second of buffer; a CBR stream may not exceed its rate.
+        let max_rate = if target.constant { bits } else { bits * 3 / 2 };
+        // SAFETY: a context not opened yet.
+        unsafe {
+            let raw = ctx.as_mut_ptr();
+            (*raw).rc_max_rate = max_rate;
+            (*raw).rc_buffer_size = max_rate.min(i64::from(i32::MAX)) as i32;
+        }
+    }
+    match (settings.codec, settings.bitrate) {
+        (VideoCodec::X264, None) => opts.set("crf", &quality),
+        (VideoCodec::X264, Some(target)) => {
+            if target.constant {
+                opts.set("nal-hrd", "cbr");
+            }
+        }
+        (VideoCodec::Nvenc, None) => {
             // Without bit_rate at 0, NVENC ignores `cq` and stays on the
             // context's default bitrate.
             ctx.set_bit_rate(0);
             opts.set("rc", "vbr");
             opts.set("cq", &quality);
         }
-        VideoCodec::VideoToolbox => {
+        (VideoCodec::Nvenc, Some(target)) => {
+            opts.set("rc", if target.constant { "cbr" } else { "vbr" });
+        }
+        (VideoCodec::VideoToolbox, None) => {
             // `-q:v`: constant quality, Apple Silicon only.
             flags |= codec::Flags::QSCALE;
             ctx.set_global_quality(settings.quality as i32 * ffmpeg::ffi::FF_QP2LAMBDA);
         }
-        VideoCodec::Vulkan => {
+        (VideoCodec::VideoToolbox, Some(_)) => {}
+        (VideoCodec::Vulkan, bitrate) => {
             // SAFETY: a context not opened yet.
             unsafe { attach_vulkan_frames(ctx.as_mut_ptr())? };
-            opts.set("rc_mode", "cqp");
-            opts.set("qp", &quality);
+            match bitrate {
+                None => {
+                    opts.set("rc_mode", "cqp");
+                    opts.set("qp", &quality);
+                }
+                Some(target) => opts.set("rc_mode", if target.constant { "cbr" } else { "vbr" }),
+            }
             nv12 = Some(ffmpeg::frame::Video::new(Pixel::NV12, width, height));
         }
     }

@@ -410,6 +410,7 @@ impl Importer<'_> {
                     direction: PushDirection::Left,
                     ease: resolve_ease(effect),
                     curve: resolve_curve(effect, duration),
+                    asset: None,
                 }
             }
         };

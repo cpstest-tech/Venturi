@@ -27,6 +27,7 @@ vv-render = { path = "../vv-render" }
 vv-mcp = { path = "../vv-mcp" }
 vv-plugin = { path = "../vv-plugin" }
 vv-session = { path = "../vv-session" }
+vv-transcribe = { path = "../vv-transcribe" }
 
 
 [target.'cfg(target_os = "linux")'.dependencies]

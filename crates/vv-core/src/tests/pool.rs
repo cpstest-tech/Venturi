@@ -46,6 +46,7 @@ fn project_with_timeline_item() -> (Project, MediaId) {
             direction: PushDirection::Right,
             ease: Ease::None,
             curve: 0.0,
+            asset: None,
         },
     }];
     let timeline = project.timelines.insert(Timeline {

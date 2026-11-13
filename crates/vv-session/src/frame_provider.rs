@@ -49,6 +49,20 @@ pub trait FrameProvider {
         None
     }
 
+    /// `a` composed and run through `passes` in order, as a GPU texture of
+    /// `timeline_size`; `b` is the incoming side of a transition (empty for
+    /// effects). `None` from the default implementation: the caller keeps
+    /// `a` as it is.
+    fn asset_texture(
+        &mut self,
+        _passes: &[AssetPass],
+        _a: &[OwnedLayer],
+        _b: &[OwnedLayer],
+        _timeline_size: (u32, u32),
+    ) -> Option<vv_render::PooledTexture> {
+        None
+    }
+
     /// `fill` cut out by `matte` (see `stack_layers`), as a GPU texture of
     /// `timeline_size`. `None` from the default implementation: the caller
     /// shows `fill` as it is.
@@ -122,6 +136,45 @@ pub struct OwnedLayer {
     pub blend: vv_core::BlendMode,
     /// Only the active masks of `EffectStack::masks` (`ClipMask::is_active`).
     pub masks: Vec<vv_core::MaskValue>,
+    /// Asset effects to run over what this layer adjusts. Only set on an
+    /// adjustment layer: `stack_layers` applies them to the stack below.
+    pub assets: Vec<AssetPass>,
+}
+
+/// One asset shader pass, ready for the compositor.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssetPass {
+    pub id: String,
+    pub params: [f32; vv_render::assets::MAX_PARAMS],
+    pub progress: f32,
+    pub time: f32,
+    pub amount: f32,
+}
+
+/// The enabled asset effects of `clip` as passes at timeline `frame`.
+/// `amount` scales how much of the effect shows (fades of an effect element).
+fn asset_passes(clip: &Clip, frame: FrameIdx, fps: f64, amount: f32) -> Vec<AssetPass> {
+    if clip.effects.assets.is_empty() {
+        return Vec::new();
+    }
+    let library = vv_render::assets::library();
+    let local = (frame - clip.timeline_start) as f32;
+    let progress = (local / clip.timeline_len.max(1) as f32).clamp(0.0, 1.0);
+    clip.effects
+        .assets
+        .iter()
+        .filter(|fx| fx.enabled)
+        .filter_map(|fx| {
+            let asset = library.get(&fx.id)?;
+            Some(AssetPass {
+                id: fx.id.clone(),
+                params: asset.shader_params(&fx.params),
+                progress,
+                time: local / fps.max(1.0) as f32,
+                amount,
+            })
+        })
+        .collect()
 }
 
 pub enum OwnedContent {
@@ -194,6 +247,7 @@ impl OwnedLayer {
             && self.filters == other.filters
             && self.blend == other.blend
             && self.masks == other.masks
+            && self.assets == other.assets
     }
 }
 
@@ -289,6 +343,48 @@ impl FrameProvider for GpuCompounds<'_> {
         ))
     }
 
+    fn asset_texture(
+        &mut self,
+        passes: &[AssetPass],
+        a: &[OwnedLayer],
+        b: &[OwnedLayer],
+        (width, height): (u32, u32),
+    ) -> Option<vv_render::PooledTexture> {
+        let output = vv_render::OutputFrame::exact(width, height).reduced(self.preview_divisor);
+        let compose = |layers: &[OwnedLayer]| {
+            let layers: Vec<_> = layers.iter().map(OwnedLayer::as_render).collect();
+            self.compositor
+                .render_layers_to_owned_texture_transparent(&layers, output)
+        };
+        let library = vv_render::assets::library();
+        let mut current = compose(a);
+        let incoming = (!b.is_empty()).then(|| compose(b));
+        for pass in passes {
+            let Some(asset) = library.get(&pass.id) else {
+                continue;
+            };
+            let custom = vv_render::CustomPass {
+                key: &pass.id,
+                source: &asset.shader,
+                params: pass.params,
+                progress: pass.progress,
+                time: pass.time,
+                amount: pass.amount,
+            };
+            let second: &vv_render::wgpu::Texture = match &incoming {
+                Some(texture) => texture,
+                None => &current,
+            };
+            if let Some(next) = self
+                .compositor
+                .render_custom_pass(&custom, &current, second)
+            {
+                current = next;
+            }
+        }
+        Some(current)
+    }
+
     fn matte_texture(
         &mut self,
         fill: &[OwnedLayer],
@@ -347,6 +443,24 @@ pub fn stack_layers(
 ) -> Vec<OwnedLayer> {
     let mut stack: Vec<Vec<OwnedLayer>> = Vec::new();
     for (matte, layers) in groups {
+        if matte.is_none() && layers.iter().any(|l| !l.assets.is_empty()) {
+            let passes: Vec<AssetPass> = layers.iter().flat_map(|l| l.assets.clone()).collect();
+            let below: Vec<OwnedLayer> = stack.drain(..).flatten().chain(layers).collect();
+            // Alone it adjusts nothing.
+            if below.len() > 1
+                && let Some(texture) = provider.asset_texture(&passes, &below, &[], timeline_size)
+            {
+                stack.push(vec![texture_layer(
+                    texture,
+                    timeline_size,
+                    1.0,
+                    Default::default(),
+                )]);
+            } else {
+                stack.push(below);
+            }
+            continue;
+        }
         let Some(mode) = matte else {
             stack.push(layers);
             continue;
@@ -372,6 +486,7 @@ pub fn stack_layers(
                     filters: Vec::new(),
                     blend: vv_core::BlendMode::Normal,
                     masks: Vec::new(),
+                    assets: Vec::new(),
                 }]),
                 None => stack.push(adjusted),
             }
@@ -402,9 +517,59 @@ pub fn stack_layers(
             filters: Vec::new(),
             blend,
             masks: Vec::new(),
+            assets: Vec::new(),
         }]);
     }
     stack.into_iter().flatten().collect()
+}
+
+fn texture_layer(
+    texture: vv_render::PooledTexture,
+    size: (u32, u32),
+    opacity: f32,
+    blend: vv_core::BlendMode,
+) -> OwnedLayer {
+    OwnedLayer {
+        content: OwnedContent::Texture {
+            texture,
+            source_size: size,
+        },
+        transform: Transform::default(),
+        opacity,
+        filters: Vec::new(),
+        blend,
+        masks: Vec::new(),
+        assets: Vec::new(),
+    }
+}
+
+/// `layer` run through the asset effects of its clip. An adjustment layer
+/// only carries them (`stack_layers` applies them to what is below); any
+/// other is composed alone, processed and put back as a texture, so the
+/// effect sees its transform, filters and masks but not its opacity and blend.
+fn with_assets(
+    mut layer: OwnedLayer,
+    passes: Vec<AssetPass>,
+    provider: &mut dyn FrameProvider,
+    timeline_size: (u32, u32),
+) -> OwnedLayer {
+    if passes.is_empty() {
+        return layer;
+    }
+    if matches!(layer.content, OwnedContent::Adjustment) {
+        layer.assets = passes;
+        return layer;
+    }
+    let opacity = std::mem::replace(&mut layer.opacity, 1.0);
+    let blend = std::mem::take(&mut layer.blend);
+    match provider.asset_texture(&passes, std::slice::from_ref(&layer), &[], timeline_size) {
+        Some(texture) => texture_layer(texture, timeline_size, opacity, blend),
+        None => {
+            layer.opacity = opacity;
+            layer.blend = blend;
+            layer
+        }
+    }
 }
 
 /// The layer of `clip` at timeline frame `frame`, shared by preview
@@ -414,6 +579,7 @@ pub fn clip_layer(
     clip: &Clip,
     frame: FrameIdx,
     timeline_size: (u32, u32),
+    fps: f64,
     provider: &mut dyn FrameProvider,
 ) -> Result<Option<OwnedLayer>, ExportError> {
     let source_frame = clip.source_frame_at(frame);
@@ -427,7 +593,7 @@ pub fn clip_layer(
     transform.position[1] += push[1];
     let opacity = clip.fade_multiplier_at(frame) * clip.transition_opacity_at(frame);
     let content = clip_content(project, clip, frame, provider)?;
-    Ok(build_layer(
+    let layer = build_layer(
         project,
         clip,
         source_frame,
@@ -435,7 +601,13 @@ pub fn clip_layer(
         opacity,
         content,
         timeline_size,
-    ))
+    );
+    let amount = clip.fade_multiplier_at(frame)
+        * (clip.effects.transform.value_at(source_frame).opacity / 100.0).clamp(0.0, 1.0);
+    Ok(layer.map(|layer| {
+        let passes = asset_passes(clip, frame, fps, amount);
+        with_assets(layer, passes, provider, timeline_size)
+    }))
 }
 
 /// What a clip shows at `timeline_frame`: nothing if it is not a Media clip,
@@ -527,6 +699,7 @@ fn build_layer(
         filters,
         blend,
         masks,
+        assets: Vec::new(),
     })
 }
 
@@ -557,6 +730,7 @@ fn crossing_side_layer(
     clip: &Clip,
     frame: FrameIdx,
     timeline_size: (u32, u32),
+    fps: f64,
     provider: &mut dyn FrameProvider,
     extra_offset: [f32; 2],
     extra_opacity: f32,
@@ -572,7 +746,7 @@ fn crossing_side_layer(
         held_timeline_frame(project, clip, frame),
         provider,
     )?;
-    Ok(build_layer(
+    let layer = build_layer(
         project,
         clip,
         source_frame,
@@ -580,7 +754,11 @@ fn crossing_side_layer(
         opacity,
         content,
         timeline_size,
-    ))
+    );
+    Ok(layer.map(|layer| {
+        let passes = asset_passes(clip, frame, fps, 1.0);
+        with_assets(layer, passes, provider, timeline_size)
+    }))
 }
 
 /// The layers of an active crossing transition at `frame`: tail of `left`,
@@ -593,9 +771,25 @@ fn crossing_layers(
     crossing: &vv_core::CrossTransition,
     frame: FrameIdx,
     timeline_size: (u32, u32),
+    fps: f64,
     provider: &mut dyn FrameProvider,
 ) -> Result<Vec<OwnedLayer>, ExportError> {
     let progress = crossing.eased_progress_at(frame, left, right);
+    if let Some(fx) = crossing.transition.asset.as_ref().filter(|fx| fx.enabled)
+        && let Some(layers) = asset_transition_layers(
+            project,
+            (left, right),
+            crossing,
+            fx,
+            frame,
+            progress,
+            timeline_size,
+            fps,
+            provider,
+        )?
+    {
+        return Ok(layers);
+    }
     if crossing.transition.kind == vv_core::TransitionKind::SmoothCut {
         return smooth_cut_layers(
             project,
@@ -604,6 +798,7 @@ fn crossing_layers(
             crossing,
             progress,
             timeline_size,
+            fps,
             provider,
         );
     }
@@ -631,6 +826,7 @@ fn crossing_layers(
         left,
         frame,
         timeline_size,
+        fps,
         provider,
         left_offset,
         left_opacity,
@@ -640,11 +836,75 @@ fn crossing_layers(
         right,
         frame,
         timeline_size,
+        fps,
         provider,
         right_offset,
         right_opacity,
     )?);
     Ok(layers)
+}
+
+/// An asset transition: both sides live (held at the edges of their media),
+/// merged by its shader into one layer. `None` when the asset is unknown or
+/// its shader is broken: the caller falls back on a plain dissolve. Nothing
+/// until both sides are available.
+fn asset_transition_layers(
+    project: &Project,
+    (left, right): (&Clip, &Clip),
+    crossing: &vv_core::CrossTransition,
+    fx: &vv_core::AssetFx,
+    frame: FrameIdx,
+    progress: f32,
+    timeline_size: (u32, u32),
+    fps: f64,
+    provider: &mut dyn FrameProvider,
+) -> Result<Option<Vec<OwnedLayer>>, ExportError> {
+    let library = vv_render::assets::library();
+    let Some(asset) = library.get(&fx.id) else {
+        return Ok(None);
+    };
+    let window = crossing.window(left, right);
+    let (Some(from), Some(to)) = (
+        crossing_side_layer(
+            project,
+            left,
+            frame,
+            timeline_size,
+            fps,
+            provider,
+            [0.0; 2],
+            1.0,
+        )?,
+        crossing_side_layer(
+            project,
+            right,
+            frame,
+            timeline_size,
+            fps,
+            provider,
+            [0.0; 2],
+            1.0,
+        )?,
+    ) else {
+        return Ok(Some(Vec::new()));
+    };
+    let pass = AssetPass {
+        id: fx.id.clone(),
+        params: asset.shader_params(&fx.params),
+        progress,
+        time: (frame - window.start) as f32 / fps.max(1.0) as f32,
+        amount: 1.0,
+    };
+    let blend = from.blend;
+    let Some(texture) = provider.asset_texture(&[pass], &[from], &[to], timeline_size) else {
+        return Ok(None);
+    };
+    Ok(Some(vec![texture_layer(
+        texture,
+        timeline_size,
+        1.0,
+        blend,
+    )]))
 }
 
 /// A Smooth Cut morphs the last frame before its window into the first
@@ -657,11 +917,21 @@ fn smooth_cut_layers(
     crossing: &vv_core::CrossTransition,
     progress: f32,
     timeline_size: (u32, u32),
+    fps: f64,
     provider: &mut dyn FrameProvider,
 ) -> Result<Vec<OwnedLayer>, ExportError> {
     let window = crossing.window(left, right);
     let side = |clip: &Clip, frame: FrameIdx, provider: &mut dyn FrameProvider| {
-        crossing_side_layer(project, clip, frame, timeline_size, provider, [0.0; 2], 1.0)
+        crossing_side_layer(
+            project,
+            clip,
+            frame,
+            timeline_size,
+            fps,
+            provider,
+            [0.0; 2],
+            1.0,
+        )
     };
     let (Some(from), Some(mut to)) = (
         side(left, window.start, provider)?,
@@ -680,6 +950,7 @@ fn smooth_cut_layers(
             filters: Vec::new(),
             blend: from.blend,
             masks: Vec::new(),
+            assets: Vec::new(),
         }]);
     }
     to.opacity *= progress;
@@ -703,6 +974,7 @@ pub fn track_layers_at(
     provider: &mut dyn FrameProvider,
 ) -> Result<Vec<OwnedLayer>, ExportError> {
     let track = &timeline.tracks[track_index];
+    let fps = timeline.fps.as_f64();
     if let Some((left, right, crossing)) = track.crossing_at(frame)
         && (left.id == clip.id || right.id == clip.id)
     {
@@ -713,12 +985,15 @@ pub fn track_layers_at(
             crossing,
             frame,
             timeline_size,
+            fps,
             provider,
         );
     }
-    Ok(clip_layer(project, clip, frame, timeline_size, provider)?
-        .into_iter()
-        .collect())
+    Ok(
+        clip_layer(project, clip, frame, timeline_size, fps, provider)?
+            .into_iter()
+            .collect(),
+    )
 }
 
 #[cfg(test)]

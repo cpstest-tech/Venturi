@@ -73,6 +73,7 @@ impl Pool {
             self.items
                 .iter()
                 .map(|(id, folder)| PoolEntry {
+                    added: false,
                     id: id.clone(),
                     name: id.clone(),
                     folder: folder.clone(),
@@ -91,6 +92,7 @@ impl Pool {
                     thumb: Thumb::None,
                     proxy: None,
                     renamable: true,
+                    hover: None,
                 })
                 .collect(),
         );
