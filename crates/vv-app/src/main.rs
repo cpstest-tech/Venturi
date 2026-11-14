@@ -57,8 +57,9 @@ mod speed_dialog;
 mod subtitles;
 mod subtitles_ui;
 mod text_anim_panel;
-mod text_templates;
+mod text_prewarm;
 mod text_style_panel;
+mod text_templates;
 mod theme;
 mod thumbnail_worker;
 mod timeline_audio;
@@ -4865,6 +4866,21 @@ impl VenturiApp {
             }
             layers
         };
+
+        if self.browsing.is_none()
+            && let Some(id) = self.timeline_id
+        {
+            let timeline = &self.session.project.timelines[id];
+            let output = if let Some(layers) = &layers
+                && !layers.is_empty()
+            {
+                self.viewer_output(layers)
+            } else {
+                vv_render::OutputFrame::exact(timeline.resolution.0, timeline.resolution.1)
+                    .reduced(self.settings.preview_resolution.divisor())
+            };
+            text_prewarm::prepare(timeline, self.timeline_state.playhead, output);
+        }
 
         if media_offline {
             self.last_viewer_frame_kind = Some(ViewerFrameKind::Offline);

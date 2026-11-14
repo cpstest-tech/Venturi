@@ -1,5 +1,5 @@
 // Transform (crop, zoom, rotation, position) and YUV420->RGB conversion
-// in a fullscreen triangle, without a vertex buffer.
+// without a vertex buffer; text uses a quad bounded to its coverage.
 
 struct TransformUniform {
     // left, top, right, bottom in normalized [0,1] coordinates on the source.
@@ -89,9 +89,30 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     let x = f32((vertex_index << 1u) & 2u);
     let y = f32(vertex_index & 2u);
 
+    var uv = vec2<f32>(x, y);
+    if (transform.color.w > 1.5 && transform.color.w < 2.5) {
+        // Bound text passes to their coverage, including the clip transform.
+        let rect = clamp(transform.planes, vec4<f32>(0.0), vec4<f32>(1.0));
+        let corners = array<vec2<f32>, 6>(
+            vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
+            vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
+        );
+        let source = mix(rect.xy, rect.zw, corners[vertex_index]);
+        let flip = select(vec2<f32>(1.0), vec2<f32>(-1.0), transform.anchor_flip.zw > vec2<f32>(0.5));
+        let anchor = transform.anchor_flip.xy;
+        let zoom = max(abs(transform.zoom_pos.xy), vec2<f32>(0.0001));
+        let aspect = max(transform.color.z, 0.0001);
+        var q = ((source - vec2<f32>(0.5)) * flip / transform.fit_rot.xy - anchor) * zoom;
+        q.x = q.x * aspect;
+        let cs = cos(transform.fit_rot.z);
+        let sn = sin(transform.fit_rot.z);
+        q = vec2<f32>(q.x * cs - q.y * sn, q.x * sn + q.y * cs);
+        q.x = q.x / aspect;
+        uv = q + anchor + transform.zoom_pos.zw + vec2<f32>(0.5);
+    }
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
-    out.uv = vec2<f32>(x, y);
+    out.clip_position = vec4<f32>(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 0.0, 1.0);
+    out.uv = uv;
     return out;
 }
 

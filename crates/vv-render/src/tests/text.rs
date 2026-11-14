@@ -1,5 +1,104 @@
 use super::*;
 
+#[test]
+fn prewarm_queue_deduplicates_animation_frames_and_bounds_pending_work() {
+    let mut queue = PrewarmQueue::default();
+    let title = TitleParams {
+        anim_state: Some(vv_core::AnimState::default()),
+        ..Default::default()
+    };
+    for frame in 0..100 {
+        let mut animated = title.clone();
+        animated.anim_state.as_mut().unwrap().t_loop = frame as f32;
+        queue.push((animated, (2160, 3840), (2160, 3840)));
+    }
+    assert_eq!(queue.pending.len(), 1);
+    queue.active = queue.pending.pop_front();
+    queue.push((title.clone(), (2160, 3840), (2160, 3840)));
+    assert!(queue.pending.is_empty());
+    for width in 1..100 {
+        queue.push((title.clone(), (2160, 3840), (width, 100)));
+    }
+    assert_eq!(queue.pending.len(), CACHE_LEN);
+    assert_eq!(queue.pending.back().unwrap().2, (99, 100));
+}
+
+#[test]
+fn background_prewarm_populates_the_caches_used_by_playback() {
+    let size = (320, 180);
+    let mut title = TitleParams {
+        content: vv_core::Keyframed::constant("Background prewarm test".into()),
+        ..Default::default()
+    };
+    for animated in [false, true] {
+        if animated {
+            title.anim.enter = vv_core::text_anim_presets::in_preset("fade");
+            title = title.animated(0.0, 3.0);
+        }
+        prewarm(&title, size, size);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let ready = if animated {
+                crate::text_anim_render::cache()
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|(key, cell)| {
+                        key.0.display_text() == title.display_text() && cell.get().is_some()
+                    })
+            } else {
+                render_cache()
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|(key, _)| key.0 == title)
+            };
+            if ready {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "prewarm worker did not finish"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        if animated {
+            let before = crate::text_anim_render::build(&title, size, size);
+            let later = title.clone().animated(0.5, 3.0);
+            let after = crate::text_anim_render::build(&later, size, size);
+            assert!(Arc::ptr_eq(&before, &after));
+        } else {
+            let before = render_cache()
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|(key, _)| key.0 == title)
+                .unwrap()
+                .1
+                .clone();
+            assert!(Arc::ptr_eq(&before, &render_title(&title, size, size)));
+        }
+    }
+}
+
+#[test]
+fn animation_frames_do_not_evict_prepared_still_titles() {
+    let mut title = TitleParams::default();
+    title.anim.enter = vv_core::text_anim_presets::in_preset("fade");
+    let still = render_title(&title, (320, 180), (320, 180));
+    for frame in 0..CACHE_LEN * 2 {
+        render_title(
+            &title.clone().animated(frame as f32 / 100.0, 3.0),
+            (320, 180),
+            (320, 180),
+        );
+    }
+    assert!(Arc::ptr_eq(
+        &still,
+        &render_title(&title, (320, 180), (320, 180))
+    ));
+}
+
 fn covered_bounds(mask: &TextMask) -> Option<(u32, u32, u32, u32)> {
     let mut bounds: Option<(u32, u32, u32, u32)> = None;
     for y in 0..mask.height {

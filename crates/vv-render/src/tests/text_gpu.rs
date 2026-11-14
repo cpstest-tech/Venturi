@@ -149,7 +149,10 @@ fn layers_kept_smaller_land_where_the_full_size_ones_would() {
         ..styled(200.0)
     };
     let (mean, max, shows) = difference(&compositor, &title, (1920, 1080));
-    assert!(shows && mean < 0.1 && max <= 12, "mean {mean:.3}, max {max}");
+    assert!(
+        shows && mean < 0.1 && max <= 12,
+        "mean {mean:.3}, max {max}"
+    );
 }
 
 #[test]
@@ -168,4 +171,70 @@ fn a_title_with_nothing_showing_still_clears_the_frame() {
         OutputFrame::exact(64, 36),
     );
     assert!(out.chunks(4).all(|px| px == [0, 0, 0, 255]));
+}
+
+#[test]
+fn an_invisible_filtered_title_clears_recycled_targets() {
+    let compositor = Compositor::new_headless();
+    let output = OutputFrame::exact(320, 180);
+    let mut title = styled(44.0);
+    title.anim.enter = presets::in_preset("fade");
+    let filters = [vv_core::FilterValue {
+        radius: 5.0,
+        ..vv_core::FilterValue::new(vv_core::FilterKind::GaussianBlur)
+    }];
+    for visible in [true, false, true, false] {
+        let title = title.clone().animated(if visible { 1.0 } else { 0.0 }, 3.0);
+        let mut layer = Layer::new(LayerContent::Text(&title), Default::default());
+        layer.filters = &filters;
+        let rgba = compositor.render_layers_rgba_transparent(&[layer], output);
+        assert_eq!(rgba.iter().any(|&v| v > 0), visible);
+    }
+}
+
+#[test]
+fn bounded_text_passes_match_a_full_frame_texture_under_clip_transforms() {
+    let compositor = Compositor::new_headless();
+    let size = (640, 360);
+    let output = OutputFrame::exact(size.0, size.1);
+    let title = styled(44.0);
+    for rotation in [0.0, 37.0, -110.0] {
+        for flip in [[false, false], [true, false], [false, true], [true, true]] {
+            let transform = vv_core::Transform {
+                rotation,
+                flip,
+                zoom: [1.3, 0.8],
+                position: [80.0, -35.0],
+                anchor: [23.0, -17.0],
+                crop: [20.0, 10.0, 25.0, 15.0],
+                ..Default::default()
+            };
+            for blend in [vv_core::BlendMode::Normal, vv_core::BlendMode::Screen] {
+                let mut base = Layer::new(LayerContent::Text(&title), Default::default());
+                base.blend = blend;
+                let texture =
+                    compositor.render_layers_to_owned_texture_transparent(&[base], output);
+                let render = |content| {
+                    let mut layer = Layer::new(content, transform);
+                    layer.blend = blend;
+                    compositor.render_layers_rgba_transparent(&[layer], output)
+                };
+                let direct = render(LayerContent::Text(&title));
+                let reference = render(LayerContent::Texture {
+                    texture: &texture,
+                    source_size: size,
+                });
+                let mean = direct
+                    .iter()
+                    .zip(&reference)
+                    .map(|(a, b)| f64::from(a.abs_diff(*b)))
+                    .sum::<f64>()
+                    / direct.len() as f64;
+                assert!(
+                    mean < 0.25,
+                    "rotation {rotation}, flip {flip:?}, blend {blend:?}: {mean}"
+                );
+            }
+        }
+    }
 }

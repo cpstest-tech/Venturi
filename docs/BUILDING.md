@@ -151,6 +151,26 @@ Consequences to keep in mind:
   `crates/<crate>/tests/`, next to `src/`);
 - tools that walk `src/` must expect the `tests/` subdirectory.
 
+### Text rendering benchmark
+
+Run the bundled templates at 2160×3840 and 60 fps on the selected graphics adapter:
+
+```sh
+cargo run -p vv-render --release --example text_bench -- 4kv
+cargo run -p vv-render --release --example text_bench -- 4kv --warm
+cargo run -p vv-render --release --example text_bench -- 4kv outline_hollow --warm
+```
+
+The CPU columns measure title preparation; total time also waits for GPU
+completion. `--warm` prepares both still masks and animated sprites before
+measurement, but leaves their first GPU upload in the measured frames. These
+are isolated titles without video underneath. Check the printed adapter name:
+software rendering is not representative of GPU playback.
+
+`4k` selects 3840×2160, `vertical` selects 1080×1920, and the default is
+1920×1080. `--snapshots` writes three PPM frames per template to
+`/tmp/venturi-<template>-<index>.ppm` instead of timing playback.
+
 ## Lint
 
 ```sh

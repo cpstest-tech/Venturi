@@ -19,7 +19,9 @@ fn main() {
         Some("4kv") => (2160, 3840),
         _ => (1920, 1080),
     };
-    let only = args.get(2);
+    let only = args.get(2).filter(|arg| !arg.starts_with("--"));
+    let warm = args.iter().any(|arg| arg == "--warm");
+    let snapshots = args.iter().any(|arg| arg == "--snapshots");
     let fps = 60.0;
     let compositor = Compositor::new_headless();
     let output = OutputFrame::exact(size.0, size.1);
@@ -39,6 +41,37 @@ fn main() {
             continue;
         }
         let clips = def.clips(size);
+        if snapshots {
+            for (index, share) in [0.1, 0.5, 0.9].into_iter().enumerate() {
+                let t = def.duration * share;
+                let titles: Vec<_> = clips
+                    .iter()
+                    .filter(|c| t >= c.start_secs && t < c.start_secs + c.length_secs)
+                    .map(|c| c.title.clone().animated(t - c.start_secs, c.length_secs))
+                    .collect();
+                let layers: Vec<_> = titles
+                    .iter()
+                    .map(|t| Layer::new(LayerContent::Text(t), Default::default()))
+                    .collect();
+                let pixels = compositor.render_layers_rgba_transparent(&layers, output);
+                let mut ppm = format!("P6\n{} {}\n255\n", size.0, size.1).into_bytes();
+                for pixel in pixels.as_chunks::<4>().0 {
+                    ppm.extend_from_slice(&pixel[..3]);
+                }
+                std::fs::write(format!("/tmp/venturi-{}-{index}.ppm", def.id), ppm).unwrap();
+            }
+            continue;
+        }
+        if warm {
+            for clip in &clips {
+                vv_render::text::render_title(&clip.title, size, size);
+                vv_render::text::render_title(
+                    &clip.title.clone().animated(0.0, clip.length_secs),
+                    size,
+                    size,
+                );
+            }
+        }
         let frames = (def.duration * fps) as usize;
         let (mut cpu, mut total) = (Vec::new(), Vec::new());
         for f in 0..frames {

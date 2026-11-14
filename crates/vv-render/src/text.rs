@@ -11,7 +11,8 @@ use cosmic_text::{
     UnderlineStyle, Weight,
 };
 use rayon::prelude::*;
-use std::sync::{Arc, Mutex, OnceLock, mpsc};
+use std::collections::VecDeque;
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use vv_core::{BackgroundShape, HAnchor, Rgba, TextAlign, TextFill, TitleParams, VAnchor};
 
 /// Text coverage (0 = transparent).
@@ -166,6 +167,11 @@ pub(crate) fn render_cache() -> &'static RenderCache {
     CACHE.get_or_init(|| Mutex::new(Vec::new()))
 }
 
+fn animated_render_cache() -> &'static RenderCache {
+    static CACHE: OnceLock<RenderCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(Vec::new()))
+}
+
 const CACHE_LEN: usize = 16;
 
 fn state() -> &'static Mutex<TextState> {
@@ -262,8 +268,14 @@ pub fn render_title(
     output_size: (u32, u32),
 ) -> Arc<TitleRender> {
     let key: CacheKey = (params.clone(), timeline_size, output_size);
+    // Per-frame animation entries must not evict prewarmed still titles.
+    let renders = if params.anim_state.is_some() {
+        animated_render_cache()
+    } else {
+        render_cache()
+    };
     {
-        let mut cache = render_cache().lock().unwrap_or_else(|e| e.into_inner());
+        let mut cache = renders.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(pos) = cache.iter().position(|(k, _)| *k == key) {
             let entry = cache.remove(pos);
             let render = entry.1.clone();
@@ -276,7 +288,7 @@ pub fn render_title(
     } else {
         rasterize(params, timeline_size, output_size)
     });
-    let mut cache = render_cache().lock().unwrap_or_else(|e| e.into_inner());
+    let mut cache = renders.lock().unwrap_or_else(|e| e.into_inner());
     if cache.len() >= CACHE_LEN {
         cache.remove(0);
     }
@@ -286,10 +298,44 @@ pub fn render_title(
 
 type Prewarm = (TitleParams, (u32, u32), (u32, u32));
 
+#[derive(Default)]
+struct PrewarmQueue {
+    pending: VecDeque<Prewarm>,
+    active: Option<Prewarm>,
+}
+
+impl PrewarmQueue {
+    fn push(&mut self, mut request: Prewarm) {
+        if request.0.anim_state.is_some() {
+            request.0.anim_state = Some(Default::default());
+        }
+        if self.active.as_ref() == Some(&request) || self.pending.contains(&request) {
+            return;
+        }
+        if self.pending.len() >= CACHE_LEN {
+            self.pending.pop_front();
+        }
+        self.pending.push_back(request);
+    }
+}
+
 /// Prepares in the background what the first frame of a title costs more
 /// than the others for (glyphs, outlines, glows), so that frame is as cheap
 /// when playback reaches it. `params` as `render_title` will get them.
 pub fn prewarm(params: &TitleParams, timeline_size: (u32, u32), output_size: (u32, u32)) {
+    prewarm_one(params, timeline_size, output_size);
+    if !params.anim.is_empty() {
+        let mut other = params.clone();
+        other.anim_state = if params.anim_state.is_some() {
+            None
+        } else {
+            Some(Default::default())
+        };
+        prewarm_one(&other, timeline_size, output_size);
+    }
+}
+
+fn prewarm_one(params: &TitleParams, timeline_size: (u32, u32), output_size: (u32, u32)) {
     let ready = if params.anim_state.is_some() {
         crate::text_anim_render::has_sprites(params, timeline_size, output_size)
     } else {
@@ -301,26 +347,43 @@ pub fn prewarm(params: &TitleParams, timeline_size: (u32, u32), output_size: (u3
     if ready {
         return;
     }
-    static WORKER: OnceLock<mpsc::Sender<Prewarm>> = OnceLock::new();
+    static WORKER: OnceLock<Arc<(Mutex<PrewarmQueue>, Condvar)>> = OnceLock::new();
     let worker = WORKER.get_or_init(|| {
-        let (tx, rx) = mpsc::channel::<Prewarm>();
+        let queue = Arc::new((Mutex::new(PrewarmQueue::default()), Condvar::new()));
+        let worker_queue = queue.clone();
         let spawned = std::thread::Builder::new()
             .name("vv-text-prewarm".into())
             .spawn(move || {
-                for (params, timeline_size, output_size) in rx {
+                let (lock, ready) = &*worker_queue;
+                loop {
+                    let (params, timeline_size, output_size) = {
+                        let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
+                        while queue.pending.is_empty() {
+                            queue = ready.wait(queue).unwrap_or_else(|e| e.into_inner());
+                        }
+                        let request = queue.pending.pop_front().unwrap();
+                        queue.active = Some(request.clone());
+                        request
+                    };
                     if params.anim_state.is_some() {
                         crate::text_anim_render::build(&params, timeline_size, output_size);
                     } else {
                         render_title(&params, timeline_size, output_size);
                     }
+                    lock.lock().unwrap_or_else(|e| e.into_inner()).active = None;
                 }
             });
         if let Err(e) = spawned {
             eprintln!("vv-render: no text prewarm thread: {e}");
         }
-        tx
+        queue
     });
-    let _ = worker.send((params.clone(), timeline_size, output_size));
+    worker.0.lock().unwrap_or_else(|e| e.into_inner()).push((
+        params.clone(),
+        timeline_size,
+        output_size,
+    ));
+    worker.1.notify_one();
 }
 
 pub(crate) fn text_attrs(params: &TitleParams) -> (Attrs<'_>, Align) {
@@ -523,7 +586,10 @@ fn rasterize(
                 1 => layer.mask,
                 step => text_fx::enlarged(&layer.mask, step, text_size),
             };
-            (PlacedMask::place(&mask, origin, (width, height)), layer.color)
+            (
+                PlacedMask::place(&mask, origin, (width, height)),
+                layer.color,
+            )
         })
         .collect();
     layers.extend(placed);
@@ -673,7 +739,13 @@ pub(crate) fn style_layers(
     }
     let under: Vec<Under> = (style.shadows.iter().map(Under::Shadow))
         .chain(style.glows.iter().map(Under::Glow))
-        .chain(style.extrude.iter().filter(|e| e.depth > 0.0).map(Under::Extrude))
+        .chain(
+            style
+                .extrude
+                .iter()
+                .filter(|e| e.depth > 0.0)
+                .map(Under::Extrude),
+        )
         .collect();
     let mut layers: Vec<StyledLayer> = under
         .par_iter()

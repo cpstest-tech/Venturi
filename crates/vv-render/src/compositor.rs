@@ -1017,7 +1017,7 @@ impl Compositor {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 4,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -1998,11 +1998,16 @@ impl Compositor {
                 wgpu::LoadOp::Load
             };
             *first = false;
-            self.pass(
+            self.pass_vertices(
                 &mut rec.encoder,
                 target_view,
                 load,
                 Some((bind_group, pipeline)),
+                if matches!(content, LayerContent::Text(_)) {
+                    6
+                } else {
+                    3
+                },
             );
         }
     }
@@ -2125,12 +2130,20 @@ impl Compositor {
         let mut current = self.scratch_texture(size.0, size.1);
         let current_view = current.create_view(&wgpu::TextureViewDescriptor::default());
         let mut load = wgpu::LoadOp::Clear(TRANSPARENT);
+        if groups.is_empty() {
+            self.pass(&mut rec.encoder, &current_view, load, None);
+        }
         for group in &groups {
-            self.pass(
+            self.pass_vertices(
                 &mut rec.encoder,
                 &current_view,
                 load,
                 Some((group, &self.work.normal)),
+                if matches!(content, LayerContent::Text(_)) {
+                    6
+                } else {
+                    3
+                },
             );
             load = wgpu::LoadOp::Load;
         }
@@ -2874,6 +2887,17 @@ impl Compositor {
         load: wgpu::LoadOp<wgpu::Color>,
         bind_group: Option<(&wgpu::BindGroup, &wgpu::RenderPipeline)>,
     ) {
+        self.pass_vertices(encoder, output_view, load, bind_group, 3);
+    }
+
+    fn pass_vertices(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        output_view: &wgpu::TextureView,
+        load: wgpu::LoadOp<wgpu::Color>,
+        bind_group: Option<(&wgpu::BindGroup, &wgpu::RenderPipeline)>,
+        vertices: u32,
+    ) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("vv-render transform pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -2893,7 +2917,7 @@ impl Compositor {
         if let Some((bind_group, pipeline)) = bind_group {
             pass.set_pipeline(pipeline);
             pass.set_bind_group(0, bind_group, &[]);
-            pass.draw(0..3, 0..1);
+            pass.draw(0..vertices, 0..1);
         }
     }
 }
