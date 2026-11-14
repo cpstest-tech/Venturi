@@ -253,7 +253,11 @@ impl Sticker {
     }
 
     fn halo(&self) -> bool {
-        !matches!(self.source, Source::Noto { .. })
+        match &self.source {
+            Source::Noto { .. } => false,
+            Source::Anim(index) => !sticker_anim::DEFS[*index].colored(),
+            _ => true,
+        }
     }
 
     fn url(&self, size: Size) -> Option<String> {
@@ -312,9 +316,10 @@ pub(crate) fn is_tintable_path(path: &Path) -> bool {
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
-    ["shape-", "lucide-", "phosphor-", "anim-"]
-        .iter()
-        .any(|prefix| stem.starts_with(prefix))
+    !stem.starts_with("anim-pastel-")
+        && ["shape-", "lucide-", "phosphor-", "anim-"]
+            .iter()
+            .any(|prefix| stem.starts_with(prefix))
 }
 
 pub(crate) fn find(id: &str) -> Option<&'static Sticker> {
@@ -539,7 +544,7 @@ fn render_loop(
         .min(frames.max(1));
     let render = |i: usize| {
         let svg = sticker_anim::frame(def, icon, i as f32 / frames as f32);
-        render_rgba(&svg, ANIMATED_SIZE, true)
+        render_rgba(&svg, ANIMATED_SIZE, !def.colored())
     };
     let mut out: Vec<Result<Vec<u8>, String>> = Vec::with_capacity(frames);
     std::thread::scope(|scope| {
@@ -646,7 +651,7 @@ fn produce(dir: &Path, sticker: &Sticker, size: Size) -> Result<(), String> {
             rasterize(
                 &sticker_anim::frame(def, icon.as_deref(), def.still),
                 size.pixels(),
-                true,
+                sticker.halo(),
             )?
         }
         _ => rasterize(&svg_text(dir, sticker)?, size.pixels(), sticker.halo())?,

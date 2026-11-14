@@ -81,3 +81,14 @@ fn loops_close_on_themselves() {
         );
     }
 }
+
+#[test]
+fn pastel_stickers_keep_their_own_colors() {
+    let pastel: Vec<_> = DEFS.iter().filter(|d| d.colored()).collect();
+    assert_eq!(pastel.len(), 6);
+    for def in pastel {
+        assert!(!crate::stickers::is_tintable_path(std::path::Path::new(
+            &format!("anim-{}.webm", def.slug)
+        )));
+    }
+}

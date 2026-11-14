@@ -8,6 +8,7 @@ play badge on their tile; searching "animated" lists them.
 |---|---|---|
 | Shapes | drawn in code (`stickers.rs`, SVG in a 100x100 box, white) | none needed |
 | Animated shapes, arrows, annotations, icons | drawn in code (`sticker_anim.rs`), white | none needed |
+| Pastel arrows (`pastel-*`) | drawn in code, own colors with a white edge, not tintable | none needed |
 | Emoji | [Noto Emoji 3D](https://github.com/googlefonts/noto-emoji) PNGs; the animated ones from Noto Emoji Animation (WebP) | Apache 2.0, CC BY 4.0 |
 | Arrows, Social, Icons | [Phosphor](https://github.com/phosphor-icons/core) (fill weight) and [Lucide](https://github.com/lucide-icons/lucide) | MIT, ISC |
 | Yours | files imported by the user (PNG, WebP, GIF, SVG, WebM) | the user's |

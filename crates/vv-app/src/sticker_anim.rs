@@ -46,6 +46,13 @@ pub(crate) enum Motion {
     Float,
 }
 
+impl AnimDef {
+    /// Drawn in its own colors instead of white.
+    pub(crate) fn colored(&self) -> bool {
+        self.slug.starts_with("pastel-")
+    }
+}
+
 const WHITE: &str = "#ffffff";
 
 fn ease_in_out(x: f32) -> f32 {
@@ -225,7 +232,7 @@ fn drawn_arrow(curve: impl Fn(f32) -> Point + Copy, t: f32) -> String {
     let head_in = ((progress - 0.82) / 0.18).clamp(0.0, 1.0);
     let mut body = polyline(&points, 8.0, opacity);
     if head_in > 0.0 {
-        body += &arrow_head(tip, angle, 20.0 * head_in, opacity);
+        body += &arrow_head(tip, angle, 17.0 * head_in, opacity);
     }
     svg(&body)
 }
@@ -496,6 +503,216 @@ fn loop_arrow(t: f32) -> String {
     drawn_arrow(curve, t)
 }
 
+struct Pal {
+    fill: &'static str,
+    edge: &'static str,
+}
+
+enum Shape {
+    Line(Vec<Point>),
+    Ring(Point, f32),
+    Dot(Point, f32),
+}
+
+const OUTLINE: f32 = 3.5;
+const PASTEL_WIDTH: f32 = 7.0;
+
+fn layer(shapes: &[Shape], color: &str, extra: f32) -> String {
+    shapes
+        .iter()
+        .map(|shape| match shape {
+            Shape::Line(points) => {
+                let list: Vec<String> = points
+                    .iter()
+                    .map(|(x, y)| format!("{x:.2},{y:.2}"))
+                    .collect();
+                format!(
+                    r#"<polyline points="{}" fill="none" stroke="{color}" stroke-width="{:.2}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+                    list.join(" "),
+                    PASTEL_WIDTH + extra
+                )
+            }
+            Shape::Ring((x, y), r) => format!(
+                r#"<circle cx="{x:.2}" cy="{y:.2}" r="{r:.2}" fill="none" stroke="{color}" stroke-width="{:.2}"/>"#,
+                PASTEL_WIDTH * 0.75 + extra
+            ),
+            Shape::Dot((x, y), r) => format!(
+                r#"<circle cx="{x:.2}" cy="{y:.2}" r="{:.2}" fill="{color}"/>"#,
+                r + extra / 2.0
+            ),
+        })
+        .collect()
+}
+
+/// White sticker edge, a darker rim and the pastel fill.
+fn pastel(shapes: &[Shape], pal: &Pal, opacity: f32) -> String {
+    pastel_moved(shapes, pal, opacity, "")
+}
+
+fn pastel_moved(shapes: &[Shape], pal: &Pal, opacity: f32, motion: &str) -> String {
+    svg(&format!(
+        r##"<g opacity="{opacity:.3}" transform="translate(50 50) scale(0.84) translate(-50 -50)"><g transform="{motion}">{}{}{}</g></g>"##,
+        layer(shapes, "#ffffff", OUTLINE * 2.0 + 2.0),
+        layer(shapes, pal.edge, 2.2),
+        layer(shapes, pal.fill, 0.0)
+    ))
+}
+
+fn span(t: f32, from: f32, to: f32) -> f32 {
+    ease_in_out((t - from) / (to - from))
+}
+
+fn fade_out(t: f32) -> f32 {
+    if t < 0.88 {
+        1.0
+    } else {
+        1.0 - (t - 0.88) / 0.12
+    }
+}
+
+fn heading(curve: impl Fn(f32) -> Point, u: f32) -> f32 {
+    let tip = curve(u);
+    let before = curve((u - 0.02).max(0.0));
+    (tip.1 - before.1).atan2(tip.0 - before.0)
+}
+
+fn chevron(tip: Point, angle: f32, size: f32) -> Shape {
+    let arm = |side: f32| {
+        (
+            tip.0 - size * (angle + side).cos(),
+            tip.1 - size * (angle + side).sin(),
+        )
+    };
+    Shape::Line(vec![arm(0.6), tip, arm(-0.6)])
+}
+
+/// The curve drawn up to `progress`, with the head fading in at the end.
+fn stroke_arrow(curve: impl Fn(f32) -> Point + Copy, progress: f32) -> Vec<Shape> {
+    let progress = progress.max(0.02);
+    let mut shapes = vec![Shape::Line(sample(curve, progress))];
+    let head_in = ((progress - 0.8) / 0.2).clamp(0.0, 1.0);
+    if head_in > 0.0 {
+        shapes.push(chevron(
+            curve(progress),
+            heading(curve, progress),
+            17.0 * head_in,
+        ));
+    }
+    shapes
+}
+
+fn pop_in(t: f32, from: f32, to: f32) -> f32 {
+    ease_out_back((t - from) / (to - from))
+}
+
+fn ring_arrow(t: f32) -> String {
+    let center = (21.0, 75.0);
+    let p = [(33.0, 66.0), (42.0, 18.0), (78.0, 4.0), (90.0, 46.0)];
+    let curve = move |u| bezier(p, u);
+    let mut shapes = vec![Shape::Ring(center, 13.0 * pop_in(t, 0.0, 0.2).max(0.01))];
+    shapes.extend(stroke_arrow(curve, span(t, 0.18, 0.7)));
+    pastel(
+        &shapes,
+        &Pal {
+            fill: "#ffb7cd",
+            edge: "#f07ca3",
+        },
+        fade_out(t),
+    )
+}
+
+fn dot_arrow(t: f32) -> String {
+    let p = [(12.0, 20.0), (60.0, 0.0), (10.0, 96.0), (88.0, 78.0)];
+    let curve = move |u| bezier(p, u);
+    let mut shapes = vec![Shape::Dot(p[0], 9.0 * pop_in(t, 0.0, 0.15).max(0.01))];
+    shapes.extend(stroke_arrow(curve, span(t, 0.12, 0.68)));
+    pastel(
+        &shapes,
+        &Pal {
+            fill: "#a9e8cf",
+            edge: "#4fba92",
+        },
+        fade_out(t),
+    )
+}
+
+fn straight_pastel(t: f32) -> String {
+    let (from, to) = ((12.0, 80.0), (82.0, 22.0));
+    let nudge = 5.0 * (PI * span(t, 0.62, 0.8)).sin();
+    let curve = move |u| lerp(from, to, u);
+    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    let len = dx.hypot(dy);
+    pastel_moved(
+        &stroke_arrow(curve, span(t, 0.0, 0.5)),
+        &Pal {
+            fill: "#d3bdf8",
+            edge: "#9a78dc",
+        },
+        fade_out(t),
+        &format!("translate({:.2} {:.2})", nudge * dx / len, nudge * dy / len),
+    )
+}
+
+fn loop_pastel(t: f32) -> String {
+    let curve = |u: f32| {
+        let a = TAU * u;
+        (
+            14.0 + 66.0 * u + 20.0 * a.sin(),
+            60.0 - 30.0 * u + 20.0 * a.cos(),
+        )
+    };
+    pastel(
+        &stroke_arrow(curve, span(t, 0.0, 0.62)),
+        &Pal {
+            fill: "#ffe39a",
+            edge: "#e9ae3c",
+        },
+        fade_out(t),
+    )
+}
+
+fn swoosh(t: f32) -> String {
+    let p = [(10.0, 30.0), (30.0, 100.0), (60.0, -10.0), (90.0, 66.0)];
+    let curve = move |u| bezier(p, u);
+    let wiggle = 3.0 * (TAU * 2.0 * span(t, 0.6, 0.85)).sin() * bump(t, 0.6, 0.85);
+    pastel_moved(
+        &stroke_arrow(curve, span(t, 0.0, 0.55)),
+        &Pal {
+            fill: "#aadcff",
+            edge: "#5aa6e6",
+        },
+        fade_out(t),
+        &format!("rotate({wiggle:.2} 50 50)"),
+    )
+}
+
+fn dotted_arrow(t: f32) -> String {
+    let p = [(12.0, 84.0), (6.0, 28.0), (60.0, 6.0), (86.0, 36.0)];
+    let curve = move |u| bezier(p, u);
+    const DOTS: usize = 9;
+    let grown = span(t, 0.05, 0.65);
+    let mut shapes = vec![Shape::Ring(p[0], 11.0 * pop_in(t, 0.0, 0.15).max(0.01))];
+    for i in 1..DOTS - 1 {
+        let u = i as f32 / DOTS as f32;
+        let size = ((grown - u * 0.9) / 0.1).clamp(0.0, 1.0);
+        if size > 0.0 {
+            shapes.push(Shape::Dot(curve(u), 4.4 * ease_out_back(size)));
+        }
+    }
+    if grown > 0.9 {
+        let head = (grown - 0.9) / 0.1;
+        shapes.push(chevron(curve(1.0), heading(curve, 1.0), 15.0 * head));
+    }
+    pastel(
+        &shapes,
+        &Pal {
+            fill: "#ffc7a6",
+            edge: "#ef8f5e",
+        },
+        fade_out(t),
+    )
+}
+
 const RIGHT: f32 = 0.0;
 const DOWN: f32 = 90.0;
 const LEFT: f32 = 180.0;
@@ -528,6 +745,54 @@ macro_rules! icon {
 }
 
 pub(crate) const DEFS: &[AnimDef] = &[
+    draw!(
+        "pastel-ring-arrow",
+        "Pastel ring arrow",
+        Arrows,
+        2.2,
+        0.75,
+        ring_arrow
+    ),
+    draw!(
+        "pastel-dot-arrow",
+        "Pastel curved arrow",
+        Arrows,
+        2.4,
+        0.75,
+        dot_arrow
+    ),
+    draw!(
+        "pastel-straight-arrow",
+        "Pastel straight arrow",
+        Arrows,
+        1.8,
+        0.75,
+        straight_pastel
+    ),
+    draw!(
+        "pastel-loop-arrow",
+        "Pastel loop arrow",
+        Arrows,
+        2.4,
+        0.75,
+        loop_pastel
+    ),
+    draw!(
+        "pastel-swoosh-arrow",
+        "Pastel swoosh arrow",
+        Arrows,
+        2.4,
+        0.75,
+        swoosh
+    ),
+    draw!(
+        "pastel-dotted-arrow",
+        "Pastel dotted arrow",
+        Arrows,
+        2.4,
+        0.75,
+        dotted_arrow
+    ),
     draw!(
         "arrow-right-bounce",
         "Arrow right bounce",
