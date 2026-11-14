@@ -8,6 +8,25 @@ use super::*;
 /// Section title with a chevron that folds it. With `resettable`, the
 /// context menu resets the whole section. Returns (open, reset).
 pub(crate) fn section_header(ui: &mut egui::Ui, title: &str, resettable: bool) -> (bool, bool) {
+    let header = keyed_section_header(ui, title, resettable, None);
+    (header.open, header.reset)
+}
+
+/// What happened on a section header during this UI frame.
+pub(crate) struct SectionHeader {
+    pub(crate) open: bool,
+    pub(crate) reset: bool,
+    pub(crate) toggled_keyframe: bool,
+}
+
+/// `section_header` with a diamond that keys every parameter of the
+/// section at once; `all_keyed` fills it.
+pub(crate) fn keyed_section_header(
+    ui: &mut egui::Ui,
+    title: &str,
+    resettable: bool,
+    all_keyed: Option<bool>,
+) -> SectionHeader {
     let id = egui::Id::new(("properties_section", title));
     let mut open = ui.data_mut(|d| *d.get_persisted_mut_or(id, true));
     let (rect, response) =
@@ -52,7 +71,37 @@ pub(crate) fn section_header(ui: &mut egui::Ui, title: &str, resettable: bool) -
             }
         });
     }
-    (open, reset)
+    let mut toggled_keyframe = false;
+    if let Some(all_keyed) = all_keyed {
+        let right = if resettable { rect.right() - 32.0 } else { rect.right() - 12.0 };
+        let icon = egui::Rect::from_center_size(
+            egui::pos2(right, rect.center().y),
+            KEYFRAME_TOGGLE_SIZE,
+        );
+        let hit = ui.interact(icon, id.with("keyframe"), egui::Sense::click());
+        let visuals = ui.style().interact(&hit);
+        if hit.hovered() {
+            ui.painter().rect_filled(icon, 3.0, visuals.weak_bg_fill);
+        }
+        crate::keyframe_editor::paint_keyframe_diamond(
+            ui.painter(),
+            icon.center(),
+            5.0,
+            all_keyed,
+            visuals.fg_stroke.color,
+        );
+        let tooltip = if all_keyed {
+            t!("props.remove_section_keyframes")
+        } else {
+            t!("props.add_section_keyframes")
+        };
+        toggled_keyframe = hit.on_hover_text(tooltip).clicked();
+    }
+    SectionHeader {
+        open,
+        reset,
+        toggled_keyframe,
+    }
 }
 
 /// Circular arrow ↺, drawn by hand like the other icons.
@@ -1895,9 +1944,17 @@ impl VenturiApp {
                                             // clears them, keyframes included.
                                             let mut rows: Vec<(Vec<P>, RowResponse)> = Vec::new();
                                             let mut reset_groups: Vec<(Vec<P>, bool)> = Vec::new();
+                                            let mut keyed_sections: Vec<&[P]> = Vec::new();
+                                            let all_keyed = |params: &[P]| {
+                                                Some(params.iter().all(|p| info.params[p.index()].on_keyframe))
+                                            };
 
                                             if show_base {
-                                            let (open, reset) = section_header(ui, &t!("props.transform"), true);
+                                            let header = keyed_section_header(ui, &t!("props.transform"), true, all_keyed(&TRANSFORM_PARAMS));
+                                            let (open, reset) = (header.open, header.reset);
+                                            if header.toggled_keyframe {
+                                                keyed_sections.push(&TRANSFORM_PARAMS);
+                                            }
                                             if reset {
                                                 reset_groups.push((TRANSFORM_PARAMS.to_vec(), true));
                                             }
@@ -2045,7 +2102,11 @@ impl VenturiApp {
                                             }
 
                                             ui.add_space(6.0);
-                                            let (open, reset) = section_header(ui, &t!("props.cropping"), true);
+                                            let header = keyed_section_header(ui, &t!("props.cropping"), true, all_keyed(&CROP_PARAMS));
+                                            let (open, reset) = (header.open, header.reset);
+                                            if header.toggled_keyframe {
+                                                keyed_sections.push(&CROP_PARAMS);
+                                            }
                                             if reset {
                                                 reset_groups.push((CROP_PARAMS.to_vec(), false));
                                             }
@@ -2106,7 +2167,11 @@ impl VenturiApp {
                                             let mut blend_changed = false;
                                             let mut matte = info.matte;
                                             let mut matte_changed = false;
-                                            let (open, reset) = section_header(ui, &t!("props.composite"), true);
+                                            let header = keyed_section_header(ui, &t!("props.composite"), true, all_keyed(&[P::Opacity]));
+                                            let (open, reset) = (header.open, header.reset);
+                                            if header.toggled_keyframe {
+                                                keyed_sections.push(&[P::Opacity]);
+                                            }
                                             if reset {
                                                 reset_groups.push((vec![P::Opacity], false));
                                                 blend_mode = vv_core::BlendMode::Normal;
@@ -2235,6 +2300,27 @@ impl VenturiApp {
                                                                 .clip(primary.track_index, primary.clip_id)
                                                         })
                                                         .map(|c| c.timeline_frame_at(source_frame));
+                                                }
+                                            }
+
+                                            // Fully keyed sections lose their keyframes; otherwise the
+                                            // missing ones are added, pinning the current values.
+                                            for params in keyed_sections {
+                                                let remove = all_keyed(params) == Some(true);
+                                                for t in targets {
+                                                    let Some(effects) = target_effects(tl, t) else {
+                                                        continue;
+                                                    };
+                                                    let clip = (t.timeline, t.track_index, t.clip_id);
+                                                    for &p in params {
+                                                        let track = effects.transform.track(p);
+                                                        let keyed = track.keyframe_at(t.source_frame).is_some();
+                                                        if remove && keyed {
+                                                            pending_effects.push(remove_transform_keyframe(clip, t.source_frame, p));
+                                                        } else if !remove && !keyed {
+                                                            pending_effects.push(upsert_transform_keyframe(clip, t.source_frame, p, track.value_at(t.source_frame)));
+                                                        }
+                                                    }
                                                 }
                                             }
 

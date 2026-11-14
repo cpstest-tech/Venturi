@@ -277,6 +277,14 @@ props.add_keyframe:
   en: "Add a keyframe here"
   it: "Aggiungi un keyframe qui"
 
+props.add_section_keyframes:
+  en: "Add a keyframe here on every parameter of the section"
+  it: "Aggiungi qui un keyframe a tutti i parametri della sezione"
+
+props.remove_section_keyframes:
+  en: "Remove the keyframes here from every parameter of the section"
+  it: "Rimuovi qui i keyframe da tutti i parametri della sezione"
+
 props.kind_video:
   en: "Video"
   it: "Video"
