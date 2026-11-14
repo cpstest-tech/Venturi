@@ -2312,6 +2312,8 @@ pub enum KeyframeValue {
     Mask(usize, MaskParam, f32),
     /// Of a text clip.
     Text(String),
+    /// Offset of the text's gradient fill.
+    GradientOffset(f32),
 }
 
 /// Inserts or replaces a keyframe of an animatable parameter.
@@ -2396,6 +2398,7 @@ pub enum KeyframeTarget {
     Grade(GradeParam),
     Mask(usize, MaskParam),
     Text,
+    GradientOffset,
 }
 
 impl KeyframeValue {
@@ -2412,6 +2415,7 @@ impl KeyframeValue {
             Self::Grade(param, _) => KeyframeTarget::Grade(param),
             Self::Mask(index, param, _) => KeyframeTarget::Mask(index, param),
             Self::Text(_) => KeyframeTarget::Text,
+            Self::GradientOffset(_) => KeyframeTarget::GradientOffset,
         }
     }
 }
@@ -2483,6 +2487,16 @@ fn take_keyframe(
             .as_mut()
             .and_then(|t| t.content.remove_at(frame))
             .map(|(v, i)| (KeyframeValue::Text(v), i)),
+        KeyframeTarget::GradientOffset => gradient_offset_mut(effects)
+            .and_then(|k| k.remove_at(frame))
+            .map(|(v, i)| (KeyframeValue::GradientOffset(v), i)),
+    }
+}
+
+fn gradient_offset_mut(effects: &mut EffectStack) -> Option<&mut Keyframed<f32>> {
+    match &mut effects.title.as_mut()?.style.fill {
+        crate::TextFill::Gradient(g) => Some(&mut g.offset),
+        crate::TextFill::Solid => None,
     }
 }
 
@@ -2545,6 +2559,11 @@ fn put_keyframe(
                 title.content.upsert(frame, v, interpolation);
             }
         }
+        KeyframeValue::GradientOffset(v) => {
+            if let Some(track) = gradient_offset_mut(effects) {
+                track.upsert(frame, v, interpolation);
+            }
+        }
     }
 }
 
@@ -2586,6 +2605,9 @@ fn set_keyframe_interpolation(
             .title
             .as_mut()
             .and_then(|t| t.content.set_interpolation(frame, interpolation)),
+        KeyframeTarget::GradientOffset => {
+            gradient_offset_mut(effects).and_then(|k| k.set_interpolation(frame, interpolation))
+        }
     }
 }
 

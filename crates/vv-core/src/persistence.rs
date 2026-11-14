@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Bumped whenever a file needs a step in `migrate` to load right.
-pub const CURRENT_FORMAT_VERSION: u32 = 1;
+pub const CURRENT_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersistenceError {
@@ -104,7 +104,7 @@ pub fn project_from_str(contents: &str) -> Result<Project, PersistenceError> {
 
 /// Brings a project read from format `from` up to the current one.
 fn migrate(project: &mut Project, from: u32) {
-    // 0 → 1 only introduced the version: serde defaults fill older files.
+    // 0 → 1 introduced the version, 1 → 2 the text style: serde defaults fill older files.
     debug_assert!(from <= CURRENT_FORMAT_VERSION);
     project.set_format_version(CURRENT_FORMAT_VERSION);
 }

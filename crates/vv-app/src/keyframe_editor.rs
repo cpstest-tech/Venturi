@@ -168,6 +168,11 @@ fn rows(effects: &EffectStack) -> Vec<KeyframeTarget> {
     {
         rows.push(KeyframeTarget::Text);
     }
+    if let Some(vv_core::TextFill::Gradient(g)) = effects.title.as_ref().map(|t| &t.style.fill)
+        && !g.offset.is_constant()
+    {
+        rows.push(KeyframeTarget::GradientOffset);
+    }
     rows
 }
 
@@ -242,11 +247,21 @@ fn frames_of(effects: &EffectStack, target: KeyframeTarget) -> Vec<FrameIdx> {
             .as_ref()
             .map(|t| t.content.keyframes().iter().map(|k| k.0).collect())
             .unwrap_or_default(),
+        KeyframeTarget::GradientOffset => gradient_offset(effects)
+            .map(|k| k.keyframes().iter().map(|k| k.0).collect())
+            .unwrap_or_default(),
     }
 }
 
 /// Value and interpolation of a scalar keyframe; `None` for the color, the
 /// blur direction and the text, which have no curve to draw.
+fn gradient_offset(effects: &EffectStack) -> Option<&vv_core::Keyframed<f32>> {
+    match &effects.title.as_ref()?.style.fill {
+        vv_core::TextFill::Gradient(g) => Some(&g.offset),
+        vv_core::TextFill::Solid => None,
+    }
+}
+
 fn scalar_at(
     effects: &EffectStack,
     target: KeyframeTarget,
@@ -263,6 +278,7 @@ fn scalar_at(
         KeyframeTarget::FilterGrow(kind) => filter(effects, kind)?.grow.keyframe_at(frame),
         KeyframeTarget::Grade(param) => grade_track(effects, param)?.keyframe_at(frame),
         KeyframeTarget::Mask(index, param) => mask_track(effects, index, param)?.keyframe_at(frame),
+        KeyframeTarget::GradientOffset => gradient_offset(effects)?.keyframe_at(frame),
         KeyframeTarget::Color | KeyframeTarget::FilterDirection(_) | KeyframeTarget::Text => None,
     }
 }
@@ -291,6 +307,9 @@ fn scalar_keyframes(
             .map(|k| k.keyframes().to_vec())
             .unwrap_or_default(),
         KeyframeTarget::Mask(index, param) => mask_track(effects, index, param)
+            .map(|k| k.keyframes().to_vec())
+            .unwrap_or_default(),
+        KeyframeTarget::GradientOffset => gradient_offset(effects)
             .map(|k| k.keyframes().to_vec())
             .unwrap_or_default(),
         KeyframeTarget::Color | KeyframeTarget::FilterDirection(_) | KeyframeTarget::Text => {
@@ -330,6 +349,7 @@ fn scalar_value_at(effects: &EffectStack, target: KeyframeTarget, frame: FrameId
         KeyframeTarget::Mask(index, param) => {
             Some(mask_track(effects, index, param)?.value_at(frame))
         }
+        KeyframeTarget::GradientOffset => Some(gradient_offset(effects)?.value_at(frame)),
         KeyframeTarget::Color | KeyframeTarget::FilterDirection(_) | KeyframeTarget::Text => None,
     }
 }
@@ -338,6 +358,7 @@ fn target_label(target: KeyframeTarget) -> String {
     use TransformParam as P;
     match target {
         KeyframeTarget::Text => t!("props.text").to_string(),
+        KeyframeTarget::GradientOffset => t!("style.gradient_offset").to_string(),
         KeyframeTarget::TransformParam(p) => match p {
             P::ZoomX => format!("{} X", t!("props.zoom")),
             P::ZoomY => format!("{} Y", t!("props.zoom")),
@@ -1085,6 +1106,7 @@ fn keyframe_value(target: KeyframeTarget, value: f32) -> vv_core::KeyframeValue 
         KeyframeTarget::FilterGrow(kind) => vv_core::KeyframeValue::FilterGrow(kind, value),
         KeyframeTarget::Grade(param) => vv_core::KeyframeValue::Grade(param, value),
         KeyframeTarget::Mask(index, param) => vv_core::KeyframeValue::Mask(index, param, value),
+        KeyframeTarget::GradientOffset => vv_core::KeyframeValue::GradientOffset(value),
         // Without a curve one does not get here: they are edited from the Properties panel.
         KeyframeTarget::Color | KeyframeTarget::FilterDirection(_) | KeyframeTarget::Text => {
             vv_core::KeyframeValue::Gain(value)

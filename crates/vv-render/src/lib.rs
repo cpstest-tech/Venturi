@@ -10,6 +10,7 @@ mod custom_shader_tests;
 pub mod scopes;
 mod smooth_cut;
 pub mod text;
+mod text_fx;
 
 pub use compositor::{
     Compositor, Layer, LayerContent, OutputFrame, PooledTexture, YuvChroma, YuvFrame,

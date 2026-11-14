@@ -1,0 +1,134 @@
+_version: 2
+
+style.fill:
+  en: "Fill"
+  it: "Riempimento"
+
+style.stroke:
+  en: "Stroke"
+  it: "Contorno"
+
+style.shadow:
+  en: "Shadow"
+  it: "Ombra"
+
+style.glow:
+  en: "Glow"
+  it: "Bagliore"
+
+style.type:
+  en: "Type"
+  it: "Tipo"
+
+style.fill_solid:
+  en: "Solid"
+  it: "Pieno"
+
+style.fill_linear:
+  en: "Linear gradient"
+  it: "Gradiente lineare"
+
+style.fill_radial:
+  en: "Radial gradient"
+  it: "Gradiente radiale"
+
+style.add_stop:
+  en: "Add stop"
+  it: "Aggiungi stop"
+
+style.remove_stop:
+  en: "Remove stop"
+  it: "Rimuovi stop"
+
+style.remove:
+  en: "Remove"
+  it: "Rimuovi"
+
+style.angle:
+  en: "Angle"
+  it: "Angolo"
+
+style.gradient_offset:
+  en: "Gradient offset"
+  it: "Scorrimento gradiente"
+
+style.gradient:
+  en: "Gradient"
+  it: "Gradiente"
+
+style.width:
+  en: "Width"
+  it: "Spessore"
+
+style.join:
+  en: "Join"
+  it: "Giunzione"
+
+style.join_round:
+  en: "Round"
+  it: "Arrotondata"
+
+style.join_miter:
+  en: "Miter"
+  it: "Spigolo"
+
+style.join_bevel:
+  en: "Bevel"
+  it: "Smussata"
+
+style.add_stroke:
+  en: "Add stroke"
+  it: "Aggiungi contorno"
+
+style.add_shadow:
+  en: "Add shadow"
+  it: "Aggiungi ombra"
+
+style.add_hard_shadow:
+  en: "Add hard shadow"
+  it: "Aggiungi ombra dura"
+
+style.add_glow:
+  en: "Add glow"
+  it: "Aggiungi bagliore"
+
+style.offset:
+  en: "Offset"
+  it: "Spostamento"
+
+style.blur:
+  en: "Blur"
+  it: "Sfocatura"
+
+style.radius:
+  en: "Radius"
+  it: "Raggio"
+
+style.intensity:
+  en: "Intensity"
+  it: "Intensità"
+
+style.extrude:
+  en: "3D extrusion"
+  it: "Estrusione 3D"
+
+style.depth:
+  en: "Depth"
+  it: "Profondità"
+
+style.shape:
+  en: "Shape"
+  it: "Forma"
+
+style.shape_rect:
+  en: "Rounded rectangle"
+  it: "Rettangolo arrotondato"
+
+style.shape_pill:
+  en: "Pill"
+  it: "Pillola"
+
+style.padding:
+  en: "Padding"
+  it: "Margine"
+

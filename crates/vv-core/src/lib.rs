@@ -11,6 +11,7 @@ pub mod otio;
 pub mod persistence;
 pub mod pool;
 mod stable_hash;
+pub mod text_style;
 pub mod workflow;
 
 pub use captions::{CaptionWord, Captions, SetCaptions, SubtitleTemplate};
@@ -44,6 +45,7 @@ pub use pool::{
     AddEntities, DeleteFolder, MoveFolder, RenameFolder, RenameTimeline, SetMediaFolder,
 };
 pub use stable_hash::{StableHasher, stable_hash};
+pub use text_style::*;
 
 #[cfg(test)]
 #[path = "tests/test_support.rs"]

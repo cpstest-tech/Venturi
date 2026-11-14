@@ -142,15 +142,17 @@ pub(crate) fn title_editor(
     ui: &mut egui::Ui,
     title: &mut vv_core::TitleParams,
     text_key: RowKeyframe,
+    offset_key: RowKeyframe,
     timeline_size: (u32, u32),
     fonts: &mut FontCatalog,
-) -> (bool, RowResponse) {
+) -> (bool, RowResponse, RowResponse) {
     use vv_core::{FontCase, HAnchor, TextAlign, VAnchor};
     let defaults = vv_core::TitleParams::default();
     let before = title.clone();
     let (frame_w, frame_h) = (timeline_size.0 as f32, timeline_size.1 as f32);
 
     let mut text_row = RowResponse::default();
+    let mut offset_row = RowResponse::default();
     let (open, _) = section_header(ui, &t!("props.text"), false);
     if open {
         // No label, unlike `param_row`: the section is already named, and
@@ -389,6 +391,14 @@ pub(crate) fn title_editor(
             title.position = defaults.position;
         }
 
+        crate::text_style_panel::style_sections(
+            ui,
+            title,
+            offset_key,
+            timeline_size,
+            &mut offset_row,
+        );
+
         ui.add_space(8.0);
         let bg = &mut title.background;
         if title_section_header(ui, &t!("props.background"), &mut bg.enabled) {
@@ -444,10 +454,11 @@ pub(crate) fn title_editor(
             if row.reset {
                 bg.opacity = d.opacity;
             }
+            crate::text_style_panel::background_extras(ui, title);
         }
     }
 
-    (*title != before, text_row)
+    (*title != before, text_row, offset_row)
 }
 
 /// Plain title of a group of rows inside a section: it does not fold.
@@ -544,8 +555,28 @@ pub(crate) fn apply_title_edit(
         height,
         corner_radius,
         center,
-        opacity
+        opacity,
+        shape,
+        gradient,
+        padding,
+        rotation
     );
+    copy_changed!(style: strokes, shadows, glows, extrude);
+    if before.style.fill != after.style.fill {
+        out.style.fill = match (&target.style.fill, &after.style.fill) {
+            (vv_core::TextFill::Gradient(t), vv_core::TextFill::Gradient(a)) => {
+                let mut g = a.clone();
+                // Keyframes are edited through the offset row, not here.
+                g.offset = if t.offset.is_constant() {
+                    vv_core::Keyframed::constant(a.offset.default)
+                } else {
+                    t.offset.clone()
+                };
+                vv_core::TextFill::Gradient(g)
+            }
+            (_, a) => a.clone(),
+        };
+    }
     // An animated text changes by keyframe, not here.
     if before.content != after.content && target.content.is_constant() {
         out.content = after.content.clone();
@@ -1395,6 +1426,10 @@ impl VenturiApp {
             text_key: clip.effects.title.as_ref().map_or(RowKeyframe::NONE, |t| {
                 RowKeyframe::of(&t.content, frame, in_clip)
             }),
+            offset_key: match clip.effects.title.as_ref().map(|t| &t.style.fill) {
+                Some(vv_core::TextFill::Gradient(g)) => RowKeyframe::of(&g.offset, frame, in_clip),
+                _ => RowKeyframe::NONE,
+            },
             filters: clip
                 .effects
                 .filters
@@ -1684,8 +1719,8 @@ impl VenturiApp {
                                     if is_text {
                                             let before = info.title.clone().unwrap_or_default();
                                             let mut title = before.clone();
-                                            let (changed, text_row) = title_editor(ui, &mut title, info.text_key, timeline_size, &mut self.fonts);
-                                            if changed || text_row.toggled_keyframe {
+                                            let (changed, text_row, offset_row) = title_editor(ui, &mut title, info.text_key, info.offset_key, timeline_size, &mut self.fonts);
+                                            if changed || text_row.toggled_keyframe || offset_row.toggled_keyframe {
                                                 let tl = self.timeline_id.map(|id| &self.session.project.timelines[id]);
                                                 for t in targets.iter().filter(|t| t.is_text) {
                                                     let Some(current) = tl
@@ -1700,6 +1735,21 @@ impl VenturiApp {
                                                     let edited = apply_title_edit(current, &before, &title);
                                                     if edited != *current {
                                                         pending_effects.push(set_title(clip_ref, edited));
+                                                    }
+                                                    let offset_now = match &title.style.fill {
+                                                        vv_core::TextFill::Gradient(g) => Some(g.offset.default),
+                                                        vv_core::TextFill::Solid => None,
+                                                    };
+                                                    if let (Some(value), vv_core::TextFill::Gradient(cur)) = (offset_now, &current.style.fill) {
+                                                        if offset_row.toggled_keyframe {
+                                                            if cur.offset.keyframe_at(t.source_frame).is_some() {
+                                                                pending_effects.push(remove_keyframe(clip_ref, t.source_frame, vv_core::KeyframeTarget::GradientOffset));
+                                                            } else {
+                                                                pending_effects.push(upsert_keyframe(clip_ref, t.source_frame, vv_core::KeyframeValue::GradientOffset(cur.offset.value_at(t.source_frame))));
+                                                            }
+                                                        } else if !cur.offset.is_constant() && cur.offset.value_at(t.source_frame) != value {
+                                                            pending_effects.push(upsert_keyframe(clip_ref, t.source_frame, vv_core::KeyframeValue::GradientOffset(value)));
+                                                        }
                                                     }
                                                     let text = &title.content.default;
                                                     if text_row.toggled_keyframe {

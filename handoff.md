@@ -591,3 +591,71 @@ Heart, Reverse, safe zones, Text effects (library), «Aggiungi sottotitoli»
   (Wayland window placement, detached-window shortcuts, filmstrip tiling one
   thumbnail, no reverse playback, asset params not keyframeable, old export
   dialog files to delete after the first build, timing-sensitive audio test).
+
+## Phase 8 — Text style model
+
+Branch `feat/text-style-model`. A text clip is still a normal clip (keyframes,
+transform, ratio); only `TitleParams` grew.
+
+### Done
+
+- **Model** (`vv-core/src/text_style.rs`, `TitleParams::style`):
+  - Fill: solid (the old `color`), linear or radial gradient with N stops and
+    angle; the gradient `offset` is a `Keyframed<f32>` (new
+    `KeyframeValue/Target::GradientOffset`, shown in the keyframe editor).
+  - Stacked strokes (colour, width, join round/miter/bevel), stacked shadows
+    (offset, blur, colour, opacity; blur 0 = hard shadow), stacked glows
+    (radius, intensity, colour), 3D extrusion (depth, angle, colour).
+  - Background (`TitleBackground`): shape rounded rect / pill, colour or
+    gradient, padding (in font sizes, was a constant 0.2), border (already
+    there), rotation. Typography was already complete (family, weight,
+    tracking, line spacing, case, align).
+- **Schema**: `CURRENT_FORMAT_VERSION` 1 → 2. Every new field has a serde
+  default, so no migration step is needed: old files load as plain text
+  (tests in `vv-core/src/tests/persistence.rs`: title without `style`, a
+  format-1 project, a styled round trip). The old title shadow still migrates
+  to the Drop Shadow filter.
+- **Rendering** (`vv-render/src/text.rs`, new `text_fx.rs`): the style is baked
+  into the existing stack of solid-colour coverage masks, so the compositor,
+  decoder and encoder are untouched and preview = export. Layer order, bottom
+  up: background, shadows, glows, extrusion, strokes (widest first), fill.
+  A gradient is N stacked layers (layer k fades in between stop k-1 and k:
+  exact in the interior, edges are antialiased per layer). Only
+  `text.rs` and the new file changed in `vv-render`, plus `register_font`.
+- **Fonts** (`crates/vv-app/assets/fonts`, one `OFL-<family>.txt` each,
+  registered at startup by `fonts.rs`): Anton, Bebas Neue, Bangers, Bungee,
+  Fredoka, Montserrat, Poppins (Regular/Bold/Black), Playfair Display,
+  Abril Fatface, Pacifico, Lobster, Caveat, Shrikhand, Monoton, Righteous,
+  Rubik Mono One, Press Start 2P, Space Grotesk, Archivo Black.
+  **Permanent Marker is not included**: upstream it is Apache 2.0, not OFL.
+  Fredoka, Montserrat, Playfair, Caveat and Space Grotesk are variable fonts
+  (weight works, tested on Montserrat). A one-weight font asked for a weight
+  it does not have (e.g. 700 on Anton) falls back to another font: the panel
+  already resets the weight when the family changes.
+- **Panel** (`text_style_panel.rs`, called from `title_editor`): live preview
+  (the same render as the library cards), then Fill / Stroke / Shadow / Glow /
+  3D sections (add/remove items, reset per section) and the extra Background
+  rows (shape, gradient, padding, rotation). It uses the existing row widgets,
+  so tokens come from `theme.rs`. Editing one field only touches that field on
+  the other selected titles (`apply_title_edit`), and never drops the offset
+  keyframes. Strings in `locales/style.yml`.
+- **Tests**: `vv-render/src/tests/text.rs::styles` renders and checks every
+  effect (set `VV_TEXT_SHEET_DIR=<dir>` to also dump a PPM per case, for a
+  visual check); `vv-app/src/tests/fonts.rs` (families + licences);
+  command undo and `apply_title_edit` cases.
+
+### Remains / known limits
+
+- Not tried by hand: the panel, live preview and an export of a styled title.
+- Library «Text effects» still empty: no ready-made social presets yet (the
+  model can now express them; «Salva come template» keeps the whole style).
+- The old Drop Shadow filter (Text properties) and the new Shadow section are
+  independent; both can be on.
+- Gradient stop alpha is honoured only per layer (no alpha interpolation
+  between stops). Gradient offset wraps (a seam shows unless the first and
+  last stop match). Background gradient offset is not animatable.
+- Masks are full frame: a title with many layers costs memory at 4K (cache is
+  6 titles). `grow`/`blur` work on the title's bounding box only.
+- OTIO export ignores the style (Resolve text has no equivalent).
+- Not run clean: `cargo clippy` flags dead code in `export_dialog.rs` /
+  `export_modal.rs` and `vv-transcribe` (existing, untouched).

@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use crate::grade::{GradePreset, GradeTracks, GradeValue};
 use crate::stable_hash::StableHasher;
+use crate::text_style::{BackgroundShape, Gradient, TextStyle};
 
 pub use crate::id_map::{FolderId, Id, IdMap, MediaId, TimelineId};
 
@@ -896,6 +897,8 @@ pub struct TitleParams {
     pub position: [f32; 2],
     #[serde(default)]
     pub background: TitleBackground,
+    #[serde(default)]
+    pub style: TextStyle,
 }
 
 /// The shadow titles had before the Drop Shadow filter, which replaces it
@@ -976,6 +979,8 @@ struct StoredTitle {
     shadow: StoredTitleShadow,
     #[serde(default)]
     background: TitleBackground,
+    #[serde(default)]
+    style: TextStyle,
 }
 
 impl StoredTitle {
@@ -996,6 +1001,7 @@ impl StoredTitle {
             anchor: self.anchor,
             position: self.position,
             background: self.background,
+            style: self.style,
         };
         (title, self.shadow)
     }
@@ -1018,6 +1024,21 @@ pub struct TitleBackground {
     pub center: [f32; 2],
     /// 0-100.
     pub opacity: f32,
+    #[serde(default)]
+    pub shape: BackgroundShape,
+    /// Replaces `color` when set.
+    #[serde(default)]
+    pub gradient: Option<Gradient>,
+    /// Around the text, in font sizes (when `width`/`height` are 0).
+    #[serde(default = "default_background_padding")]
+    pub padding: f32,
+    /// Degrees, counter-clockwise.
+    #[serde(default)]
+    pub rotation: f32,
+}
+
+fn default_background_padding() -> f32 {
+    0.2
 }
 
 impl Default for TitleBackground {
@@ -1032,6 +1053,10 @@ impl Default for TitleBackground {
             corner_radius: 0.1,
             center: [0.0, 0.0],
             opacity: 100.0,
+            shape: BackgroundShape::RoundedRect,
+            gradient: None,
+            padding: default_background_padding(),
+            rotation: 0.0,
         }
     }
 }
@@ -1054,15 +1079,23 @@ impl Default for TitleParams {
             anchor: (HAnchor::Center, VAnchor::Middle),
             position: [0.0, 0.0],
             background: TitleBackground::default(),
+            style: TextStyle::default(),
         }
     }
 }
 
 impl TitleParams {
-    /// The title as shown at source frame `frame`: its text no longer animated.
+    /// The title as shown at source frame `frame`: its text and gradient
+    /// offset no longer animated.
     pub fn at(&self, frame: FrameIdx) -> Self {
+        let mut background = self.background.clone();
+        if let Some(g) = &mut background.gradient {
+            *g = g.at(frame);
+        }
         Self {
             content: Keyframed::constant(self.content.value_at(frame)),
+            style: self.style.at(frame),
+            background,
             ..self.clone()
         }
     }

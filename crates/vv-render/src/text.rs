@@ -3,14 +3,16 @@
 //! mask per element is enough, which the compositor colors and stacks
 //! (`LayerContent::Text`).
 
+use crate::text_fx;
 use cosmic_text::{
     Align, Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, Style, SwashCache,
     UnderlineStyle, Weight,
 };
 use std::sync::{Arc, Mutex, OnceLock};
-use vv_core::{HAnchor, Rgba, TextAlign, TitleParams, VAnchor};
+use vv_core::{BackgroundShape, HAnchor, Rgba, TextAlign, TextFill, TitleParams, VAnchor};
 
 /// Text coverage (0 = transparent), as large as the output frame.
+#[derive(Clone)]
 pub struct TextMask {
     pub width: u32,
     pub height: u32,
@@ -45,7 +47,7 @@ struct TextState {
     cache: Vec<(CacheKey, Arc<TitleRender>)>,
 }
 
-const CACHE_LEN: usize = 16;
+const CACHE_LEN: usize = 6;
 
 fn state() -> &'static Mutex<TextState> {
     static STATE: OnceLock<Mutex<TextState>> = OnceLock::new();
@@ -66,6 +68,11 @@ fn lock() -> std::sync::MutexGuard<'static, TextState> {
 /// avoids a stall on the first title.
 pub fn warm_up() {
     let _ = state();
+}
+
+/// Adds a font file (TTF/OTF bytes) to the families titles can use.
+pub fn register_font(data: Vec<u8>) {
+    lock().font_system.db_mut().load_font_data(data);
 }
 
 pub fn font_families() -> Vec<String> {
@@ -153,9 +160,6 @@ pub fn render_title(
     mask
 }
 
-/// Space the background leaves around the text, in font sizes.
-const BACKGROUND_PADDING: f32 = 0.2;
-
 fn text_attrs(params: &TitleParams) -> (Attrs<'_>, Align) {
     let family = if params.font_family.is_empty() {
         Family::SansSerif
@@ -227,7 +231,7 @@ pub fn title_metrics(params: &TitleParams) -> vv_core::TitleMetrics {
     let block = shape_block(font_system, &mut buffer, params, &attrs, align);
     vv_core::TitleMetrics {
         block,
-        padding: font_size * BACKGROUND_PADDING,
+        padding: font_size * params.background.padding,
     }
 }
 
@@ -304,10 +308,15 @@ fn rasterize(
         data,
     };
     let mut layers = Vec::new();
+    let style = &params.style;
+    let block_center = (
+        origin_x as f32 + block_w / 2.0,
+        origin_y as f32 + block_h / 2.0,
+    );
 
     let bg = &params.background;
     if bg.enabled {
-        let padding = font_size * BACKGROUND_PADDING;
+        let padding = font_size * bg.padding;
         let box_w = if bg.width > 0.0 {
             bg.width * width as f32
         } else {
@@ -319,20 +328,91 @@ fn rasterize(
             block_h + padding * 2.0
         };
         let center = (
-            origin_x as f32 + block_w / 2.0 + scale_px(bg.center[0]),
-            origin_y as f32 + block_h / 2.0 - scale_px(bg.center[1]),
+            block_center.0 + scale_px(bg.center[0]),
+            block_center.1 - scale_px(bg.center[1]),
         );
-        let radius = bg.corner_radius.clamp(0.0, 0.5) * box_w.min(box_h);
+        let radius = match bg.shape {
+            BackgroundShape::Pill => box_w.min(box_h) / 2.0,
+            BackgroundShape::RoundedRect => bg.corner_radius.clamp(0.0, 0.5) * box_w.min(box_h),
+        };
         let outline = scale_px(bg.outline_width).max(0.0);
-        let (fill, ring) =
-            rounded_rect_masks(width, height, center, (box_w, box_h), radius, outline);
-        layers.push((fill, with_opacity(bg.color, bg.opacity)));
+        let (fill, ring) = rounded_rect_masks(
+            width,
+            height,
+            center,
+            (box_w, box_h),
+            radius,
+            outline,
+            bg.rotation.to_radians(),
+        );
+        let opacity = (bg.opacity / 100.0).clamp(0.0, 1.0);
+        match &bg.gradient {
+            Some(g) => layers.extend(text_fx::gradient_layers(
+                &fill,
+                g,
+                center,
+                (box_w, box_h),
+                -bg.rotation,
+                opacity,
+            )),
+            None => layers.push((fill, with_opacity(bg.color, bg.opacity))),
+        }
         if let Some(ring) = ring {
             layers.push((ring, with_opacity(bg.outline_color, bg.opacity)));
         }
     }
 
-    layers.push((text, params.color));
+    // Widest stroke first: the narrower ones sit on top of it.
+    let mut strokes: Vec<_> = style.strokes.iter().filter(|s| s.width > 0.0).collect();
+    strokes.sort_by(|a, b| b.width.total_cmp(&a.width));
+    let stroke_masks: Vec<_> = strokes
+        .iter()
+        .map(|s| (text_fx::grow(&text, scale_px(s.width), s.join), s.color))
+        .collect();
+    // Shadow, glow and extrusion follow the outermost outline.
+    let silhouette = stroke_masks.first().map_or(&text, |(m, _)| m);
+
+    for shadow in &style.shadows {
+        let moved = text_fx::shifted(
+            silhouette,
+            scale_px(shadow.offset[0]).round() as i32,
+            (-scale_px(shadow.offset[1])).round() as i32,
+        );
+        let mask = text_fx::blur(&moved, scale_px(shadow.blur) / 2.0);
+        layers.push((mask, with_opacity(shadow.color, shadow.opacity)));
+    }
+    for glow in &style.glows {
+        let radius = scale_px(glow.radius).max(0.0);
+        let core = text_fx::grow(silhouette, radius * 0.35, vv_core::StrokeJoin::Round);
+        let halo = text_fx::blur(&core, radius * 0.65);
+        layers.push((text_fx::scaled(&halo, glow.intensity.max(0.0)), glow.color));
+    }
+    if let Some(ex) = &style.extrude
+        && ex.depth > 0.0
+    {
+        let mask = text_fx::extruded(silhouette, scale_px(ex.depth), ex.angle);
+        layers.push((mask, ex.color));
+    }
+    layers.extend(stroke_masks);
+
+    match &style.fill {
+        TextFill::Solid => layers.push((text, params.color)),
+        TextFill::Gradient(g) => {
+            let gradient = text_fx::gradient_layers(
+                &text,
+                g,
+                block_center,
+                (block_w, block_h),
+                0.0,
+                params.color.a,
+            );
+            if gradient.is_empty() {
+                layers.push((text, params.color));
+            } else {
+                layers.extend(gradient);
+            }
+        }
+    }
     TitleRender { layers }
 }
 
@@ -345,20 +425,29 @@ fn rounded_rect_masks(
     size: (f32, f32),
     radius: f32,
     outline: f32,
+    rotation: f32,
 ) -> (TextMask, Option<TextMask>) {
     let len = (width * height) as usize;
     let mut fill = vec![0u8; len];
     let mut ring = (outline > 0.0).then(|| vec![0u8; len]);
     let half = (size.0 / 2.0, size.1 / 2.0);
-    let x_range = ((center.0 - half.0 - 1.0).floor().max(0.0) as u32)
-        ..((center.0 + half.0 + 1.0).ceil().clamp(0.0, width as f32) as u32);
-    let y_range = ((center.1 - half.1 - 1.0).floor().max(0.0) as u32)
-        ..((center.1 + half.1 + 1.0).ceil().clamp(0.0, height as f32) as u32);
+    let reach = if rotation == 0.0 {
+        half
+    } else {
+        let r = half.0.hypot(half.1);
+        (r, r)
+    };
+    let (sin, cos) = (-rotation).sin_cos();
+    let x_range = ((center.0 - reach.0 - 1.0).floor().max(0.0) as u32)
+        ..((center.0 + reach.0 + 1.0).ceil().clamp(0.0, width as f32) as u32);
+    let y_range = ((center.1 - reach.1 - 1.0).floor().max(0.0) as u32)
+        ..((center.1 + reach.1 + 1.0).ceil().clamp(0.0, height as f32) as u32);
     let coverage = |d: f32| (0.5 - d).clamp(0.0, 1.0);
     for y in y_range {
-        let py = (y as f32 + 0.5 - center.1).abs() - (half.1 - radius);
         for x in x_range.clone() {
-            let px = (x as f32 + 0.5 - center.0).abs() - (half.0 - radius);
+            let (dx, dy) = (x as f32 + 0.5 - center.0, y as f32 + 0.5 - center.1);
+            let px = (dx * cos - dy * sin).abs() - (half.0 - radius);
+            let py = (dx * sin + dy * cos).abs() - (half.1 - radius);
             let d = if px > 0.0 && py > 0.0 {
                 (px * px + py * py).sqrt() - radius
             } else {

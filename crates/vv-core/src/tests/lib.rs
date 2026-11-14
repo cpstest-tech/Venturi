@@ -2622,3 +2622,55 @@ fn splitting_a_title_keeps_the_text_of_each_half() {
     assert_eq!(text(&clips[1], clips[1].source_in()), "Two");
     assert_eq!(text(&clips[1], clips[1].source_out() - 1), "Two");
 }
+
+#[test]
+fn gradient_offset_keyframes_are_undoable() {
+    let (mut project, timeline) = make_project_with_two_tracks();
+    let mut clip = make_clip(&mut project, 0, 20);
+    let id = clip.id;
+    let mut title = TitleParams::default();
+    title.style.fill = TextFill::Gradient(Gradient::two_stops(
+        GradientKind::Linear,
+        Rgba::WHITE,
+        Rgba::BLACK,
+    ));
+    clip.effects.title = Some(title);
+    let mut history = History::default();
+    history.do_command(
+        &mut project,
+        Box::new(command::InsertClip {
+            timeline,
+            track_index: 0,
+            clip,
+        }),
+    );
+    let offset = |project: &Project| match &project.timelines[timeline]
+        .clip(0, id)
+        .unwrap()
+        .effects
+        .title
+        .as_ref()
+        .unwrap()
+        .style
+        .fill
+    {
+        TextFill::Gradient(g) => g.offset.clone(),
+        TextFill::Solid => unreachable!(),
+    };
+    for (frame, value) in [(0, 0.0), (10, 1.0)] {
+        history.do_command(
+            &mut project,
+            Box::new(command::UpsertKeyframe::new(
+                timeline,
+                0,
+                id,
+                frame,
+                command::KeyframeValue::GradientOffset(value),
+                Interpolation::Linear,
+            )),
+        );
+    }
+    assert_eq!(offset(&project).value_at(5), 0.5);
+    history.undo(&mut project);
+    assert_eq!(offset(&project).keyframes().len(), 1);
+}

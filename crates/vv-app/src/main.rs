@@ -10,12 +10,13 @@ mod app_menu;
 mod autosave;
 mod color_window;
 mod compressor_panel;
-mod eq_panel;
 mod cover;
+mod eq_panel;
 mod export_dialog;
 mod export_modal;
 mod export_plan;
 mod first_media;
+mod fonts;
 mod forced_relink_dialog;
 mod fx_library;
 mod grade_panel;
@@ -55,6 +56,7 @@ mod slip_viewer;
 mod speed_dialog;
 mod subtitles;
 mod subtitles_ui;
+mod text_style_panel;
 mod theme;
 mod thumbnail_worker;
 mod timeline_audio;
@@ -225,6 +227,7 @@ struct ClipPanelInfo {
     /// Taken `at` the panel's frame.
     title: Option<vv_core::TitleParams>,
     text_key: properties_panel::RowKeyframe,
+    offset_key: properties_panel::RowKeyframe,
     /// Empty until a filter is dragged onto the clip from the Effects
     /// panel; then one per filter, in order of application.
     filters: Vec<FilterPanelInfo>,
@@ -5107,7 +5110,10 @@ fn main() -> eframe::Result<()> {
         // SAFETY: no other thread started yet.
         unsafe { hw_decode::enable_intel_experimental_decode() };
     }
-    std::thread::spawn(vv_render::text::warm_up);
+    std::thread::spawn(|| {
+        vv_render::text::warm_up();
+        fonts::register_bundled();
+    });
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Venturi")

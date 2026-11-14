@@ -5825,3 +5825,32 @@ fn a_crash_marker_survives_a_quit_when_no_scan_is_running() {
     assert!(kept);
     assert!(removed);
 }
+
+#[test]
+fn a_style_edit_keeps_the_gradient_offset_keyframes_of_other_titles() {
+    use vv_core::{Gradient, GradientKind, Interpolation, Rgba, TextFill, TextStroke};
+    let gradient = |offset: vv_core::Keyframed<f32>| {
+        TextFill::Gradient(Gradient {
+            offset,
+            ..Gradient::two_stops(GradientKind::Linear, Rgba::WHITE, Rgba::BLACK)
+        })
+    };
+    let mut before = vv_core::TitleParams::default();
+    before.style.fill = gradient(vv_core::Keyframed::constant(0.0));
+    let mut after = before.clone();
+    after.style.strokes.push(TextStroke::default());
+    if let TextFill::Gradient(g) = &mut after.style.fill {
+        g.angle = 45.0;
+    }
+    let mut offset = vv_core::Keyframed::constant(0.0);
+    offset.upsert(0, 0.0, Interpolation::Linear);
+    offset.upsert(10, 1.0, Interpolation::Linear);
+    let mut animated = before.clone();
+    animated.style.fill = gradient(offset.clone());
+    let merged = apply_title_edit(&animated, &before, &after);
+    assert_eq!(merged.style.strokes.len(), 1);
+    let TextFill::Gradient(g) = merged.style.fill else {
+        panic!("not a gradient")
+    };
+    assert_eq!((g.angle, g.offset), (45.0, offset));
+}

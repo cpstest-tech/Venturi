@@ -253,7 +253,7 @@ fn the_old_title_shadow_loads_as_a_drop_shadow_filter() {
         )
     };
     let saved = ron::to_string(&stack).unwrap();
-    assert!(!saved.contains("shadow"));
+    assert!(!saved.contains("shadow:"));
 
     let loaded: EffectStack =
         ron::from_str(&saved.replacen("background:", &old_shadow(true), 1)).unwrap();
@@ -350,4 +350,85 @@ fn saving_replaces_the_file_and_leaves_no_temporary_behind() {
 
     assert!(load_project(&path).is_ok());
     assert!(!temp_path(&path).exists());
+}
+
+fn styled_title() -> TitleParams {
+    use crate::*;
+    let red = Rgba {
+        r: 1.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    let mut gradient = Gradient::two_stops(GradientKind::Radial, red, Rgba::WHITE);
+    gradient.offset.upsert(0, 0.0, Interpolation::Linear);
+    gradient.offset.upsert(30, 1.0, Interpolation::Linear);
+    let mut title = TitleParams::default();
+    title.style = TextStyle {
+        fill: TextFill::Gradient(gradient.clone()),
+        strokes: vec![
+            TextStroke::default(),
+            TextStroke {
+                join: StrokeJoin::Miter,
+                ..Default::default()
+            },
+        ],
+        shadows: vec![
+            TextShadow::default(),
+            TextShadow {
+                blur: 0.0,
+                ..Default::default()
+            },
+        ],
+        glows: vec![TextGlow::default()],
+        extrude: Some(TextExtrude::default()),
+    };
+    title.background = TitleBackground {
+        enabled: true,
+        shape: BackgroundShape::Pill,
+        gradient: Some(gradient),
+        padding: 0.5,
+        rotation: 8.0,
+        ..Default::default()
+    };
+    title
+}
+
+#[test]
+fn a_styled_title_survives_save_and_load() {
+    let title = styled_title();
+    let back: TitleParams = ron::from_str(&ron::to_string(&title).unwrap()).unwrap();
+    assert_eq!(back, title);
+    let json: TitleParams = serde_json::from_str(&serde_json::to_string(&title).unwrap()).unwrap();
+    assert_eq!(json, title);
+}
+
+#[test]
+fn a_title_saved_before_the_text_style_loads_as_plain_text() {
+    let mut json = serde_json::to_value(styled_title()).unwrap();
+    let object = json.as_object_mut().unwrap();
+    object.remove("style");
+    let bg = object["background"].as_object_mut().unwrap();
+    for key in ["shape", "gradient", "padding", "rotation"] {
+        bg.remove(key);
+    }
+    let old: TitleParams = serde_json::from_value(json).unwrap();
+    assert_eq!(old.style, crate::TextStyle::default());
+    assert_eq!(old.background.padding, 0.2);
+    assert_eq!(old.background.shape, crate::BackgroundShape::RoundedRect);
+    assert!(old.background.gradient.is_none());
+}
+
+#[test]
+fn a_project_saved_in_format_1_opens_in_the_current_one() {
+    let text = ron::to_string(&Project::default()).unwrap();
+    let old = text.replace(
+        &format!("format_version:{CURRENT_FORMAT_VERSION}"),
+        "format_version:1",
+    );
+    assert_ne!(old, text);
+    assert_eq!(
+        project_from_str(&old).unwrap().format_version(),
+        CURRENT_FORMAT_VERSION
+    );
 }
