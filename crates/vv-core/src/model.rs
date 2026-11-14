@@ -1103,9 +1103,7 @@ impl TitleParams {
     /// The title (already taken `at` a frame) with its animations placed
     /// `secs` into a clip lasting `len_secs`.
     pub fn animated(mut self, secs: f32, len_secs: f32) -> Self {
-        self.anim_state = self
-            .anim
-            .state_at(&self.display_text(), secs, len_secs);
+        self.anim_state = self.anim.state_at(&self.display_text(), secs, len_secs);
         self
     }
 
@@ -2154,6 +2152,11 @@ impl Clip {
         self.source_out() - self.source_in()
     }
 
+    /// An effect or filter element: an adjustment clip carrying asset effects.
+    pub fn is_effect_element(&self) -> bool {
+        matches!(self.source, ClipSource::Adjustment) && !self.effects.assets.is_empty()
+    }
+
     pub fn timeline_end(&self) -> FrameIdx {
         self.timeline_start + self.timeline_len
     }
@@ -2762,6 +2765,10 @@ pub struct Track {
     /// Holds the generated subtitles: the one track `SetCaptions` replaces.
     #[serde(default)]
     pub subtitles: bool,
+    /// Video only: holds effect and filter elements, which process every
+    /// track below for their length.
+    #[serde(default)]
+    pub effects: bool,
     /// Transitions straddling two adjacent clips. It never touches
     /// `timeline_start`/`timeline_len` of the clips involved (they stay non-
     /// overlapping, invariant intact): it is the rendering that "lends" for
@@ -2792,9 +2799,24 @@ impl Track {
             armed: false,
             main: false,
             subtitles: false,
+            effects: false,
             crossings: Vec::new(),
             mix: ChannelStrip::default(),
         }
+    }
+
+    pub fn new_effects() -> Self {
+        Self {
+            effects: true,
+            ..Self::new(TrackKind::Video)
+        }
+    }
+
+    /// Whether `[start, start + len)` holds no clip.
+    pub fn is_free(&self, start: FrameIdx, len: FrameIdx) -> bool {
+        self.clips
+            .iter()
+            .all(|c| c.timeline_end() <= start || c.timeline_start >= start + len)
     }
 
     pub fn new_main() -> Self {

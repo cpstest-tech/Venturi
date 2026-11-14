@@ -21,11 +21,10 @@ the magnet packs clips to the start by default.
   text line truncates.
 - **Multifunction ribbon** (Library block): tabs Media, Audio, Text, Sticker,
   **Effects, Curves, Mixer, Color**. Effects shows the effects/presets list
-  inline. Curves, Mixer and Color are still floating windows: selecting the
-  tab opens the window and the tab holds an open/close button. The five
-  toolbar toggles and the pool/effects column splitter were removed
-  (`media_pool_open`, `effects_open`, `media_pool_fraction` remain in the
-  settings file, unused).
+  inline. Curves, Mixer and Color open inside the block (see "Fixes after
+  the hand test"). The five toolbar toggles and the pool/effects column
+  splitter were removed (`media_pool_open`, `effects_open`,
+  `media_pool_fraction` remain in the settings file, unused).
 - **Text previews**: cards in Add text, Yours and Favorites show the title as
   the compositor draws it (`vv_render::text::render_title`, project
   proportions, dark frame), cached per template and refreshed when the
@@ -795,3 +794,74 @@ gone.
   Word-by-word reveal is supported by the format but no bundled template sets
   it.
 - Names are not translated (brand-style names); categories are.
+
+## Fixes after the hand test
+
+Branch `feat/text-templates`. Compiled, `cargo test --workspace` passes,
+installed with `scripts/install-linux.sh`, and the three fixes were tried in
+the real app (XWayland, pointer driven by `ydotool`).
+`cargo clippy --workspace --all-targets -D warnings` is clean except for
+what was there before: dead code in `export_dialog.rs` / `export_modal.rs`,
+and `large_enum_variant` on `frame_provider::OwnedContent`, which the new
+toolchain flags.
+
+### 1. Effects and filters as a timeline layer
+
+- **Cause**: free-space drops were only taken over the track rows and landed on
+  the video track under the pointer: the empty space above the tracks did
+  nothing, and a gap on the Main Track got an element with nothing below it.
+- **Model**: `Track::effects` (serde default) marks an effects track.
+  `fx::insert_fx_element` puts an element (an adjustment clip carrying
+  `assets`) on the effects track under the pointer if it has room, else on the
+  topmost one with room, else on a new one on top (`AddTrack::effects`). One
+  undo step.
+- **Schema**: format 3 → 4. `migrate` calls `fx::mark_effects_tracks`: a
+  non-main video track holding only effect elements becomes an effects track.
+- **UI**: a drop anywhere in the timeline that no clip takes (also above
+  or between the rows) makes an element (3 s); «+» does the same at the
+  playhead. The new element is selected. The header shows the fx icon and
+  «Effetti»; Eye and Lock work as on any video track. Moving, trimming,
+  splitting, deleting and duplicating are the clip gestures. Selected, the
+  Properties panel shows only «Effetti e filtri», with ↺ per parameter and per
+  section.
+- **Rendering**: unchanged. `stack_layers` already applied an element to
+  everything below for its length, in the shared preview/export path. New
+  tests cover two clips, moving the element, its Eye, and the tracks above it.
+- **Limits**: a clip dragged onto an effects track (or an element onto a plain
+  track) is not refused. The track flag stays as it is, and the element
+  still works there.
+
+### 2. Subtitle template previews
+
+- **Cause**: the hover loop works in the current build (it was added but never
+  committed). What was still wrong is that the templates name no font, so the
+  bold weights fell back to an unrelated system font (an almost monospaced
+  one here). The preview then did not show the template's look.
+- `SubtitleTemplate::title` now uses the bundled variable Montserrat
+  (`captions::SUBTITLE_FONT`), so preview, real subtitles and export use the
+  same face on every machine. Rendering is live (≈0.3 ms per frame), so no
+  cached loop is needed.
+
+### 3. Editors inside the Multifunction block
+
+- **Cause**: Curves (the keyframe curve editor), Mixer and Color were
+  `egui::Window`s drawn after the Properties block.
+- `ribbon_editors.rs`: the three draw into the block in place of the tab
+  content, under a «← title» header. The tab underneath is kept (and with it
+  the scroll position, held by egui), so «←», or clicking a library tab,
+  goes back to it. They follow the block when it is detached. Their commands go
+  through the same `apply_effect_changes` as Properties, so one gesture is
+  one undo step. The `*_open` window flags were removed from the settings
+  (old keys are ignored). The Color toggle in Properties opens the editor in
+  the block.
+- **Tab strip**: one row that never wraps. When the block is narrow it
+  scrolls, with «‹ ›» arrows on the sides (dimmed at the ends).
+- **Other editors still in a window (not changed, waiting for a decision)**:
+  - the audio effect settings opened from the mixer (EQ, compressor,
+    normalize…, `mixer_panel::effect_window`);
+  - the VST3 plugin GUIs (native windows, `plugin_editors.rs`);
+  - the Speed dialog (`speed_dialog.rs`);
+  - the marker editor (`timeline_markers.rs`).
+
+  Dialogs (settings, presets, paste attributes, relink, new timeline…) are not
+  editors and stay windows.

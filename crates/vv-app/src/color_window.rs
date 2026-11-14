@@ -1,4 +1,4 @@
-//! The Color window: scopes of the selected clip above its color
+//! The Color editor: scopes of the selected clip above its color
 //! correction, a small "Color page".
 
 use vv_core::FrameIdx;
@@ -47,97 +47,88 @@ const SCOPE_HEIGHT: f32 = 240.0;
 /// `grade`: `None` without a selected video clip, `Some(None)` for a clip
 /// without color correction. `can_balance`: see `grade_section`.
 pub(crate) fn show_color_window(
-    ctx: &egui::Context,
-    open: &mut bool,
+    ui: &mut egui::Ui,
     kinds: &mut [ScopeKind; 2],
     view: &mut ScopeView,
     grade: Option<Option<GradeInfo>>,
     can_balance: bool,
 ) -> ColorWindowResponse {
     let mut response = ColorWindowResponse::default();
-    egui::Window::new(t!("color.title"))
-        .id(egui::Id::new("color_window"))
-        .open(open)
-        .default_size([760.0, 640.0])
-        .resizable(true)
-        .show(ctx, |ui| {
-            let spacing = ui.spacing().item_spacing.x;
-            let width = ui.available_width();
-            let slots = if width >= 2.0 * MIN_SCOPE_WIDTH + spacing {
-                2
-            } else {
-                1
-            };
-            let slot_width = ((width - spacing * (slots - 1) as f32) / slots as f32).floor();
-            let pixels = ui.ctx().pixels_per_point();
-            view.sizes = [(0, 0); 2];
-            ui.horizontal_top(|ui| {
-                for (slot, kind_slot) in kinds.iter_mut().enumerate().take(slots) {
-                    ui.vertical(|ui| {
-                        ui.set_width(slot_width);
-                        egui::ComboBox::from_id_salt(("scope_kind", slot))
-                            .selected_text(scope_label(*kind_slot))
-                            .show_ui(ui, |ui| {
-                                for kind in ScopeKind::ALL {
-                                    ui.selectable_value(kind_slot, kind, scope_label(kind));
-                                }
-                            });
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::vec2(slot_width, SCOPE_HEIGHT),
-                            egui::Sense::hover(),
+    ui.scope(|ui| {
+        let spacing = ui.spacing().item_spacing.x;
+        let width = ui.available_width();
+        let slots = if width >= 2.0 * MIN_SCOPE_WIDTH + spacing {
+            2
+        } else {
+            1
+        };
+        let slot_width = ((width - spacing * (slots - 1) as f32) / slots as f32).floor();
+        let pixels = ui.ctx().pixels_per_point();
+        view.sizes = [(0, 0); 2];
+        ui.horizontal_top(|ui| {
+            for (slot, kind_slot) in kinds.iter_mut().enumerate().take(slots) {
+                ui.vertical(|ui| {
+                    ui.set_width(slot_width);
+                    egui::ComboBox::from_id_salt(("scope_kind", slot))
+                        .selected_text(scope_label(*kind_slot))
+                        .show_ui(ui, |ui| {
+                            for kind in ScopeKind::ALL {
+                                ui.selectable_value(kind_slot, kind, scope_label(kind));
+                            }
+                        });
+                    let (rect, _) = ui.allocate_exact_size(
+                        egui::vec2(slot_width, SCOPE_HEIGHT),
+                        egui::Sense::hover(),
+                    );
+                    view.sizes[slot] = (
+                        (rect.width() * pixels).round() as u32,
+                        (rect.height() * pixels).round() as u32,
+                    );
+                    let painter = ui.painter_at(rect);
+                    painter.rect_filled(rect, 2.0, egui::Color32::BLACK);
+                    if !view.has_source {
+                        painter.text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            t!("color.no_scope_source"),
+                            egui::FontId::proportional(12.0),
+                            egui::Color32::from_white_alpha(110),
                         );
-                        view.sizes[slot] = (
-                            (rect.width() * pixels).round() as u32,
-                            (rect.height() * pixels).round() as u32,
+                    } else if let Some((id, _)) = &view.textures[slot]
+                        && view.drawn[slot].is_some_and(|(kind, ..)| kind == *kind_slot)
+                    {
+                        painter.image(
+                            *id,
+                            rect,
+                            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                            egui::Color32::WHITE,
                         );
-                        let painter = ui.painter_at(rect);
-                        painter.rect_filled(rect, 2.0, egui::Color32::BLACK);
-                        if !view.has_source {
-                            painter.text(
-                                rect.center(),
-                                egui::Align2::CENTER_CENTER,
-                                t!("color.no_scope_source"),
-                                egui::FontId::proportional(12.0),
-                                egui::Color32::from_white_alpha(110),
-                            );
-                        } else if let Some((id, _)) = &view.textures[slot]
-                            && view.drawn[slot].is_some_and(|(kind, ..)| kind == *kind_slot)
-                        {
-                            painter.image(
-                                *id,
-                                rect,
-                                egui::Rect::from_min_max(
-                                    egui::pos2(0.0, 0.0),
-                                    egui::pos2(1.0, 1.0),
-                                ),
-                                egui::Color32::WHITE,
-                            );
-                        }
-                        if view.has_source {
-                            graticule(&painter, rect, *kind_slot);
-                        }
-                    });
-                }
-            });
-            ui.separator();
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| match grade {
-                    None => {
-                        ui.label(egui::RichText::new(t!("color.no_clip")).weak());
                     }
-                    Some(None) => {
-                        if ui.button(t!("color.add_correction")).clicked() {
-                            response.add_grade = true;
-                        }
-                    }
-                    Some(Some(info)) => {
-                        let section = crate::grade_panel::grade_section(ui, &info, can_balance);
-                        response.goto = section.goto;
-                        response.grade = Some(section);
+                    if view.has_source {
+                        graticule(&painter, rect, *kind_slot);
                     }
                 });
+            }
         });
+        ui.separator();
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| match grade {
+                None => {
+                    ui.label(egui::RichText::new(t!("color.no_clip")).weak());
+                }
+                Some(None) => {
+                    if ui.button(t!("color.add_correction")).clicked() {
+                        response.add_grade = true;
+                    }
+                }
+                Some(Some(info)) => {
+                    let section = crate::grade_panel::grade_section(ui, &info, can_balance);
+                    response.goto = section.goto;
+                    response.grade = Some(section);
+                }
+            });
+    });
     response
 }
 

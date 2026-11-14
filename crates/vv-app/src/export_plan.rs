@@ -59,11 +59,12 @@ pub fn default_resolution(project_short_side: u32, has_media: bool) -> Resolutio
 }
 
 /// The short side `choice` asks for.
-pub fn target_short_side(choice: ResolutionChoice, project_short_side: u32, best: Option<u32>) -> u32 {
-    choice
-        .short_side()
-        .or(best)
-        .unwrap_or(project_short_side)
+pub fn target_short_side(
+    choice: ResolutionChoice,
+    project_short_side: u32,
+    best: Option<u32>,
+) -> u32 {
+    choice.short_side().or(best).unwrap_or(project_short_side)
 }
 
 /// The timeline's proportions with `short_side` as the shorter one, even.
@@ -74,8 +75,8 @@ pub fn scaled_size(timeline_size: (u32, u32), short_side: u32) -> (u32, u32) {
         return timeline_size;
     }
     let scale = |value: u32| {
-        let scaled = (u64::from(value) * u64::from(short_side) + u64::from(short) / 2)
-            / u64::from(short);
+        let scaled =
+            (u64::from(value) * u64::from(short_side) + u64::from(short) / 2) / u64::from(short);
         ((scaled as u32) & !1).max(2)
     };
     (scale(w), scale(h))
@@ -111,7 +112,12 @@ fn round_tenth(value: f64) -> f64 {
 }
 
 /// The bitrate of `choice`; `detected` is the highest of the clips.
-pub fn choose_mbps(choice: BitrateChoice, recommended: f64, detected: Option<f64>, custom: f64) -> f64 {
+pub fn choose_mbps(
+    choice: BitrateChoice,
+    recommended: f64,
+    detected: Option<f64>,
+    custom: f64,
+) -> f64 {
     match choice {
         BitrateChoice::MatchBest => detected.unwrap_or(recommended),
         BitrateChoice::Recommended => recommended,
@@ -252,7 +258,12 @@ pub fn active_video_media(project: &Project, timeline: TimelineId) -> Vec<MediaI
     found
 }
 
-fn collect_video_media(project: &Project, timeline: TimelineId, depth: u32, found: &mut Vec<MediaId>) {
+fn collect_video_media(
+    project: &Project,
+    timeline: TimelineId,
+    depth: u32,
+    found: &mut Vec<MediaId>,
+) {
     let Some(timeline) = project.timelines.get(timeline) else {
         return;
     };
@@ -385,7 +396,12 @@ impl Estimate {
     /// (bitrate of the video in Mbps + that of the audio) × seconds ÷ 8.
     pub fn megabytes(&self) -> f64 {
         let mbps = if self.has_video {
-            self.video_mbps + if self.video_has_audio { AUDIO_MBPS } else { 0.0 }
+            self.video_mbps
+                + if self.video_has_audio {
+                    AUDIO_MBPS
+                } else {
+                    0.0
+                }
         } else {
             self.audio_file.map_or(0.0, AudioFormat::mbps)
         };
@@ -400,7 +416,12 @@ pub fn format_duration(seconds: f64) -> String {
     } else if total < 3600 {
         format!("{}m {:02}s", total / 60, total % 60)
     } else {
-        format!("{}h {:02}m {:02}s", total / 3600, total / 60 % 60, total % 60)
+        format!(
+            "{}h {:02}m {:02}s",
+            total / 3600,
+            total / 60 % 60,
+            total % 60
+        )
     }
 }
 
@@ -434,7 +455,13 @@ pub fn unique_name(base: &str, taken: impl Fn(&str) -> bool) -> String {
 pub fn sanitize_name(text: &str) -> String {
     text.trim()
         .chars()
-        .map(|c| if std::path::is_separator(c) || c == '\0' { '_' } else { c })
+        .map(|c| {
+            if std::path::is_separator(c) || c == '\0' {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect()
 }
 

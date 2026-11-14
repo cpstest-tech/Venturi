@@ -160,25 +160,10 @@ ribbon.import_unsupported:
   en: "%{name}: format not supported here"
   it: "%{name}: formato non supportato qui"
 
-ribbon.curves_hint:
-  en: "Edit the keyframe curves of the selected clip."
-  it: "Modifica le curve dei keyframe della clip selezionata."
 
-ribbon.mixer_hint:
-  en: "Levels, effects and meters of the audio tracks."
-  it: "Livelli, effetti e meter delle tracce audio."
 
-ribbon.color_hint:
-  en: "Color grading and scopes of the selected clip."
-  it: "Correzione colore e scope della clip selezionata."
 
-ribbon.open_window:
-  en: "Open %{name}"
-  it: "Apri %{name}"
 
-ribbon.close_window:
-  en: "Close %{name}"
-  it: "Chiudi %{name}"
 
 ribbon.added:
   en: "Added"
@@ -191,3 +176,7 @@ ribbon.group_media:
 ribbon.group_stickers:
   en: "Categories"
   it: "Categorie"
+
+ribbon.editor_back:
+  en: "Back to the library"
+  it: "Torna alla libreria"

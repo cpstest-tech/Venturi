@@ -168,6 +168,10 @@ history.set_captions:
   en: "Generate subtitles"
   it: "Genera sottotitoli"
 
+history.link_subtitles:
+  en: "Link subtitles"
+  it: "Collega i sottotitoli"
+
 history.set_cover:
   en: "Change cover"
   it: "Cambia copertina"

@@ -1661,6 +1661,14 @@ impl VenturiApp {
                         let selected_count = self.timeline_state.selected.len();
                         if let Some(sel) = self.timeline_state.selected_transition {
                             self.show_transition_panel(ui, sel, &mut pending_effects);
+                        } else if let Some(element) = video_targets
+                            .first()
+                            .filter(|t| self.is_effect_element(t))
+                        {
+                            if video_targets.len() > 1 {
+                                ui.small(t!("props.applies_to_first"));
+                            }
+                            self.show_asset_effects_section(ui, element, &mut pending_effects);
                         } else if selected_count > 0 {
                             properties_tabs::tab_bar(ui, &mut self.clip_tab);
                             ui.separator();
@@ -1695,7 +1703,8 @@ impl VenturiApp {
                                         mut color,
                                         ..
                                     } = info.clone();
-                                    if targets.len() > 1 {
+                                    let linked = self.show_subtitle_link(ui, &primary, &mut pending_effects);
+                                    if targets.len() > 1 && !linked {
                                         ui.small(t!("props.applies_to_all", count = targets.len()));
                                     }
                                     let tab = self.clip_tab;
@@ -1755,7 +1764,12 @@ impl VenturiApp {
                                                     };
                                                     let clip_ref = (t.timeline, t.track_index, t.clip_id);
                                                     // Before the keyframes: it replaces the whole title.
-                                                    let edited = apply_title_edit(current, &before, &title);
+                                                    let mut edited = apply_title_edit(current, &before, &title);
+                                                    // The words of the other subtitles stay theirs.
+                                                    let own_text = self.timeline_state.selected.contains(&(t.track_index, t.clip_id));
+                                                    if !own_text {
+                                                        edited.content = current.content.clone();
+                                                    }
                                                     if edited != *current {
                                                         pending_effects.push(set_title(clip_ref, edited));
                                                     }
@@ -1775,14 +1789,14 @@ impl VenturiApp {
                                                         }
                                                     }
                                                     let text = &title.content.default;
-                                                    if text_row.toggled_keyframe {
+                                                    if own_text && text_row.toggled_keyframe {
                                                         if current.content.keyframe_at(t.source_frame).is_some() {
                                                             pending_effects.push(remove_keyframe(clip_ref, t.source_frame, vv_core::KeyframeTarget::Text));
                                                         } else {
                                                             let text = current.content.value_at(t.source_frame);
                                                             pending_effects.push(upsert_text_keyframe(clip_ref, t.source_frame, text));
                                                         }
-                                                    } else if before.content != title.content && !current.content.is_constant() {
+                                                    } else if own_text && before.content != title.content && !current.content.is_constant() {
                                                         pending_effects.push(upsert_text_keyframe(clip_ref, t.source_frame, text.clone()));
                                                     }
                                                 }
@@ -2220,7 +2234,7 @@ impl VenturiApp {
                                                 for filter in info.filters.iter().filter(|_| open) {
                                                     let kind = filter.kind;
                                                     let mut enabled = filter.enabled;
-                                                    let mut color_window_open = self.settings.panels.color_window_open;
+                                                    let mut color_window_open = self.library_ribbon.editor == Some(crate::library_ribbon::RibbonTab::Color);
                                                     let reset = title_section_header_with(
                                                         ui,
                                                         &timeline_ui::filter_label(kind),
@@ -2232,7 +2246,13 @@ impl VenturiApp {
                                                             }
                                                         },
                                                     );
-                                                    self.settings.panels.color_window_open = color_window_open;
+                                                    if color_window_open != (self.library_ribbon.editor == Some(crate::library_ribbon::RibbonTab::Color)) {
+                                                        if color_window_open {
+                                                            self.open_ribbon_editor(crate::library_ribbon::RibbonTab::Color);
+                                                        } else {
+                                                            self.library_ribbon.editor = None;
+                                                        }
+                                                    }
                                                     let mut reset_radius = reset;
                                                     let mut reset_direction = reset;
                                                     let mut reset_amount = reset;
@@ -2356,7 +2376,7 @@ impl VenturiApp {
                                                         }
                                                     }
                                                     if kind.has_grade() {
-                                                        if self.settings.panels.color_window_open {
+                                                        if self.color_editor_shown() {
                                                             ui.label(egui::RichText::new(t!("color.in_window")).weak());
                                                         } else {
                                                             let can_balance = self.can_auto_balance(targets);

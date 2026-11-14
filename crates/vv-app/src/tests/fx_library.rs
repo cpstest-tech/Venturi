@@ -142,6 +142,41 @@ mod flow {
     }
 
     #[test]
+    fn a_drop_on_free_space_makes_a_selected_element_on_an_effects_track() {
+        let mut app = app();
+        add(&mut app, 0, 0, 200);
+        app.add_fx_element_at(
+            "filters/noir",
+            3000,
+            40,
+            crate::timeline_ui::MediaDropTarget::Default,
+        );
+        let tl = timeline(&app);
+        let track = tl
+            .tracks
+            .iter()
+            .position(|t| t.effects)
+            .expect("effects track");
+        let element = &tl.tracks[track].clips[0];
+        assert!(element.is_effect_element());
+        assert_eq!((element.timeline_start, element.timeline_len), (40, 75));
+        assert!(app.timeline_state.selected.contains(&(track, element.id)));
+        let target = crate::panel_target(app.timeline_id.unwrap(), track, element, 50);
+        assert!(app.is_effect_element(&target));
+
+        // A second one where there is room shares the track.
+        app.add_fx_element_at(
+            "effects/pulse",
+            3000,
+            150,
+            crate::timeline_ui::MediaDropTarget::Track(track),
+        );
+        let tl = timeline(&app);
+        assert_eq!(tl.tracks.iter().filter(|t| t.effects).count(), 1);
+        assert_eq!(tl.tracks[track].clips.len(), 2);
+    }
+
+    #[test]
     fn a_transition_is_refused_between_clips_that_are_not_adjacent() {
         let mut app = app();
         let a = add(&mut app, 0, 0, 100);

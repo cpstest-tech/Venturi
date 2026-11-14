@@ -276,6 +276,10 @@ timeline.main_track:
   en: "Main Track"
   it: "Main Track"
 
+timeline.effects_track:
+  en: "Effects"
+  it: "Effetti"
+
 timeline.hide_layer:
   en: "Hide the picture of this track"
   it: "Nascondi l'immagine di questa track"

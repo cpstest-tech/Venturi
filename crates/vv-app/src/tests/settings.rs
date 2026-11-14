@@ -169,9 +169,6 @@ fn save_then_load_keeps_custom_panel_layout_and_defaults_it_when_absent() {
     settings.panels = PanelLayout {
         media_pool_open: false,
         effects_open: true,
-        keyframe_editor_open: true,
-        mixer_open: true,
-        color_window_open: true,
         color_scopes: [
             vv_render::ScopeKind::Histogram,
             vv_render::ScopeKind::Parade,

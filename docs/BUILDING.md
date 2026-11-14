@@ -12,6 +12,8 @@ document covers building, testing and packaging from the repository.
 - **clang/libclang** (for `ffmpeg-next`'s bindgen)
 - **Wayland/X11 + Vulkan** (for `eframe`/`wgpu`, the UI and the GPU compositor)
 - **ALSA** (for `cpal`, the audio)
+- **Vulkan headers + `glslc`** (for whisper.cpp's Vulkan backend: subtitles
+  are transcribed on the GPU when there is one)
 
 On Fedora (including Asahi Remix):
 
@@ -21,7 +23,7 @@ sudo dnf install \
   ffmpeg ffmpeg-devel \
   clang clang-devel \
   wayland-devel libxkbcommon-devel libxkbcommon-x11 libX11-devel \
-  vulkan-loader-devel mesa-vulkan-drivers \
+  vulkan-loader-devel vulkan-headers glslc mesa-vulkan-drivers \
   alsa-lib-devel
 ```
 
@@ -39,7 +41,7 @@ sudo apt install \
   libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
   clang libclang-dev \
   libwayland-dev libxkbcommon-dev libx11-dev \
-  libvulkan-dev mesa-vulkan-drivers \
+  libvulkan-dev glslc mesa-vulkan-drivers \
   libasound2-dev
 ```
 

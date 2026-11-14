@@ -39,7 +39,12 @@ pub enum UnitOrder {
 }
 
 impl UnitOrder {
-    pub const ALL: [Self; 4] = [Self::Forward, Self::Backward, Self::Random, Self::FromCenter];
+    pub const ALL: [Self; 4] = [
+        Self::Forward,
+        Self::Backward,
+        Self::Random,
+        Self::FromCenter,
+    ];
 
     pub fn id(self) -> &'static str {
         match self {
@@ -353,7 +358,10 @@ impl TextAnimations {
     /// Finest granularity in use: what the renderer splits the text by.
     pub fn finest(&self) -> Granularity {
         let mut finest = Granularity::Block;
-        for d in [&self.enter, &self.exit, &self.looped].into_iter().flatten() {
+        for d in [&self.enter, &self.exit, &self.looped]
+            .into_iter()
+            .flatten()
+        {
             finest = finest.max(d.granularity);
         }
         if self.karaoke.is_some() {
@@ -425,20 +433,32 @@ pub fn split_units(text: &str, granularity: Granularity) -> Vec<TextUnit> {
                     match (c.is_whitespace(), start) {
                         (false, None) => start = Some(i),
                         (true, Some(s)) => {
-                            units.push(TextUnit { line, start: s, end: i });
+                            units.push(TextUnit {
+                                line,
+                                start: s,
+                                end: i,
+                            });
                             start = None;
                         }
                         _ => {}
                     }
                 }
                 if let Some(s) = start {
-                    units.push(TextUnit { line, start: s, end: content.len() });
+                    units.push(TextUnit {
+                        line,
+                        start: s,
+                        end: content.len(),
+                    });
                 }
             }
             Granularity::Char => {
                 for (i, c) in content.char_indices() {
                     if !c.is_whitespace() {
-                        units.push(TextUnit { line, start: i, end: i + c.len_utf8() });
+                        units.push(TextUnit {
+                            line,
+                            start: i,
+                            end: i + c.len_utf8(),
+                        });
                     }
                 }
             }
@@ -450,7 +470,11 @@ pub fn split_units(text: &str, granularity: Granularity) -> Vec<TextUnit> {
         units = vec![TextUnit {
             line: first.line,
             start: first.start,
-            end: if first.line == last.line { last.end } else { usize::MAX },
+            end: if first.line == last.line {
+                last.end
+            } else {
+                usize::MAX
+            },
         }];
     }
     units
@@ -625,11 +649,24 @@ pub fn plan(anims: &TextAnimations, text: &str, state: &AnimState) -> AnimPlan {
             } else {
                 (state.t_out, d.duration)
             };
-            let progress = d.easing.ease((t / dur.max(1e-3)).clamp(0.0, 1.0)).clamp(0.0, 1.0);
-            let progress = if role == Role::In { progress } else { 1.0 - progress };
-            match decor.iter_mut().find(|x: &&mut DecorDraw| x.decor == decor_spec) {
+            let progress = d
+                .easing
+                .ease((t / dur.max(1e-3)).clamp(0.0, 1.0))
+                .clamp(0.0, 1.0);
+            let progress = if role == Role::In {
+                progress
+            } else {
+                1.0 - progress
+            };
+            match decor
+                .iter_mut()
+                .find(|x: &&mut DecorDraw| x.decor == decor_spec)
+            {
                 Some(existing) => existing.progress *= progress,
-                None => decor.push(DecorDraw { decor: decor_spec, progress }),
+                None => decor.push(DecorDraw {
+                    decor: decor_spec,
+                    progress,
+                }),
             }
         }
     }
@@ -734,8 +771,9 @@ fn signed_noise(seed: u64, step: i64) -> f32 {
 }
 
 fn hash_str(s: &str) -> u64 {
-    s.bytes()
-        .fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3))
+    s.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3)
+    })
 }
 
 #[cfg(test)]

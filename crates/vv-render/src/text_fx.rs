@@ -96,20 +96,17 @@ fn distance_field(mask: &TextMask, b: Bounds) -> Vec<f64> {
     let scratch = |n: usize| (vec![0f64; n], vec![0usize; n], vec![0f64; n + 1]);
     // Columns first, each one contiguous in `columns`.
     let mut columns = vec![0f64; w * h];
-    columns
-        .par_chunks_mut(h)
-        .enumerate()
-        .for_each_init(
-            || (vec![0f64; h], scratch(h)),
-            |(seed, (out, v, z)), (x, column)| {
-                for (y, s) in seed.iter_mut().enumerate() {
-                    let inside = mask.data[(y + b.y0) * stride + x + b.x0] >= 128;
-                    *s = if inside { 0.0 } else { FAR };
-                }
-                edt_1d(seed, out, v, z);
-                column.copy_from_slice(out);
-            },
-        );
+    columns.par_chunks_mut(h).enumerate().for_each_init(
+        || (vec![0f64; h], scratch(h)),
+        |(seed, (out, v, z)), (x, column)| {
+            for (y, s) in seed.iter_mut().enumerate() {
+                let inside = mask.data[(y + b.y0) * stride + x + b.x0] >= 128;
+                *s = if inside { 0.0 } else { FAR };
+            }
+            edt_1d(seed, out, v, z);
+            column.copy_from_slice(out);
+        },
+    );
     let mut g = vec![0f64; w * h];
     g.par_chunks_mut(w).enumerate().for_each_init(
         || (vec![0f64; w], scratch(w)),
@@ -284,7 +281,11 @@ pub fn reduced(mask: &TextMask, step: u32, solid: bool) -> TextMask {
         let mut sums = vec![0u32; rw];
         for y in ry * st..((ry + 1) * st).min(h) {
             for (x, &v) in mask.data[y * w..(y + 1) * w].iter().enumerate() {
-                sums[x / st] += if solid { u32::from(v >= 128) } else { u32::from(v) };
+                sums[x / st] += if solid {
+                    u32::from(v >= 128)
+                } else {
+                    u32::from(v)
+                };
             }
         }
         let area = (st * st) as u32;
@@ -368,7 +369,10 @@ pub fn soft_shadow(silhouette: &TextMask, dx: i32, dy: i32, sigma: f32) -> (Text
     if step == 1 {
         return (blur(&moved, sigma), 1);
     }
-    (blur(&reduced(&moved, step, false), sigma / step as f32), step)
+    (
+        blur(&reduced(&moved, step, false), sigma / step as f32),
+        step,
+    )
 }
 
 pub fn shifted(mask: &TextMask, dx: i32, dy: i32) -> TextMask {

@@ -195,6 +195,7 @@ fn custom_export_encodes_the_requested_dimensions_and_black_bars() {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     }]);
     timeline.resolution = (16, 8);
     let id = project.timelines.insert(timeline);
@@ -311,6 +312,7 @@ fn render_video_frame_returns_black_in_a_gap() {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut active = StreamingFrameProvider::default();
@@ -332,6 +334,7 @@ fn render_video_frame_reads_solid_color_at_the_clips_source_frame() {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut active = StreamingFrameProvider::default();
@@ -361,6 +364,7 @@ fn render_video_frame_recurses_into_a_compound_clips_nested_timeline() {
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         }],
         markers: Vec::new(),
         master: Default::default(),
@@ -402,6 +406,7 @@ fn render_video_frame_recurses_into_a_compound_clips_nested_timeline() {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut provider = StreamingFrameProvider::default();
@@ -462,6 +467,7 @@ fn the_decoders_of_nested_clips_stay_open_between_frames() {
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         }],
         markers: Vec::new(),
         master: Default::default(),
@@ -503,6 +509,7 @@ fn the_decoders_of_nested_clips_stay_open_between_frames() {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut provider = StreamingFrameProvider::default();
@@ -542,6 +549,7 @@ fn render_video_frame_lets_the_track_below_show_through_the_compound_clips_empty
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         }],
         markers: Vec::new(),
         master: Default::default(),
@@ -584,6 +592,7 @@ fn render_video_frame_lets_the_track_below_show_through_the_compound_clips_empty
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         },
         Track {
             kind: TrackKind::Video,
@@ -596,6 +605,7 @@ fn render_video_frame_lets_the_track_below_show_through_the_compound_clips_empty
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         },
     ]);
     let compositor = vv_render::Compositor::new_headless();
@@ -669,6 +679,7 @@ fn render_video_frame_lets_the_track_below_show_through_a_transparent_png() {
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         },
         Track {
             kind: TrackKind::Video,
@@ -681,6 +692,7 @@ fn render_video_frame_lets_the_track_below_show_through_a_transparent_png() {
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         },
     ]);
     let compositor = vv_render::Compositor::new_headless();
@@ -719,6 +731,7 @@ fn render_video_frame_applies_the_transform_to_a_solid_color_clip() {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut active = StreamingFrameProvider::default();
@@ -771,6 +784,7 @@ fn render_video_frame_fails_loudly_when_the_clip_references_a_missing_media() {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     }]);
     let compositor = vv_render::Compositor::new_headless();
     let mut provider = StreamingFrameProvider::default();
@@ -795,6 +809,7 @@ fn render_video_frame_prefers_the_topmost_video_track() {
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         },
         Track {
             kind: TrackKind::Video,
@@ -807,6 +822,7 @@ fn render_video_frame_prefers_the_topmost_video_track() {
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         },
     ]);
     let compositor = vv_render::Compositor::new_headless();
@@ -842,6 +858,7 @@ fn mix_audio_track_is_silence_when_no_audio_track_has_clips() {
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         },
         Track {
             kind: TrackKind::Audio,
@@ -854,6 +871,7 @@ fn mix_audio_track_is_silence_when_no_audio_track_has_clips() {
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         },
     ]);
     let mixed = mix_audio_track(&project, &tl, 0..25).unwrap();
@@ -924,6 +942,7 @@ fn mix_audio_track_recurses_into_a_compound_clips_nested_timeline() {
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         }],
         markers: Vec::new(),
         master: Default::default(),
@@ -966,6 +985,7 @@ fn mix_audio_track_recurses_into_a_compound_clips_nested_timeline() {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     }]);
 
     let mixed = mix_audio_track(&project, &tl, 0..50).unwrap();
@@ -1054,6 +1074,7 @@ fn export_keeps_video_and_audio_frame_accurate_at_a_fractional_ntsc_fps() {
                 armed: Default::default(),
                 main: false,
                 subtitles: false,
+                effects: false,
             },
             Track {
                 kind: TrackKind::Audio,
@@ -1066,6 +1087,7 @@ fn export_keeps_video_and_audio_frame_accurate_at_a_fractional_ntsc_fps() {
                 armed: Default::default(),
                 main: false,
                 subtitles: false,
+                effects: false,
             },
         ],
         markers: Vec::new(),
@@ -1216,6 +1238,7 @@ fn mix_audio_track_plays_a_faster_clip_with_or_without_its_pitch() {
             armed: Default::default(),
             main: false,
             subtitles: false,
+            effects: false,
         }]);
         let mixed = mix_audio_track(&project, &tl, 0..25).unwrap();
         // First channel, the middle half second: away from the stretch's edges.
@@ -1306,6 +1329,7 @@ fn mix_audio_track_of_a_range_is_the_same_part_of_the_whole_mix() {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     };
     let tl = timeline_with(vec![track(vec![clip(1, 30, 5)]), track(vec![faster])]);
 

@@ -576,7 +576,15 @@ pub fn insert_title(
     start: FrameIdx,
 ) -> ClipId {
     let len = Generator::Text.default_len(project.timelines[timeline_id].fps);
-    insert_title_len(project, history, timeline_id, title, track_index, start, len)
+    insert_title_len(
+        project,
+        history,
+        timeline_id,
+        title,
+        track_index,
+        start,
+        len,
+    )
 }
 
 /// `insert_title` lasting `len` frames.

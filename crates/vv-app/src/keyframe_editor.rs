@@ -504,12 +504,10 @@ pub(crate) struct KeyframeEditorResponse {
     pub(crate) playhead: Option<FrameIdx>,
 }
 
-/// Draws the window. `target` is the clip to show (the first selected one)
-/// and `playhead` the current timeline frame.
-#[allow(clippy::too_many_arguments)]
+/// Draws the editor into `ui`. `target` is the clip to show (the first
+/// selected one) and `playhead` the current timeline frame.
 pub(crate) fn show_keyframe_editor(
-    ctx: &egui::Context,
-    open: &mut bool,
+    ui: &mut egui::Ui,
     state: &mut KeyframeEditorState,
     project: &Project,
     target: Option<(TimelineId, usize, ClipId)>,
@@ -522,117 +520,110 @@ pub(crate) fn show_keyframe_editor(
         commands: Vec::new(),
         playhead: None,
     };
-    let mut window_open = *open;
-    let window = egui::Window::new(t!("keyframes.title"))
-        .id(egui::Id::new("keyframe_editor"))
-        .open(&mut window_open)
-        .default_size([720.0, 340.0])
-        .min_width(420.0)
-        .show(ctx, |ui| {
-            let clip = target.and_then(|(tl, track, id)| {
-                project.timelines.get(tl).and_then(|t| t.clip(track, id))
-            });
-            let (Some((timeline, track_index, clip_id)), Some(clip)) = (target, clip) else {
-                ui.label(t!("keyframes.no_clip"));
-                return;
-            };
-            state.reset_for((timeline, track_index, clip_id));
-            let rows = rows(&clip.effects);
-            if rows.is_empty() {
-                ui.label(t!("keyframes.no_keyframes"));
-                return;
-            }
-            // A row that disappeared (undo, keyframes removed) must not stay open.
-            if !state.row.is_some_and(|r| rows.contains(&r)) {
-                state.row = Some(rows[0]);
-            }
-            state
-                .selection
-                .retain(|(t, f)| rows.contains(t) && frames_of(&clip.effects, *t).contains(f));
+    let area = ui.scope(|ui| {
+        let clip = target
+            .and_then(|(tl, track, id)| project.timelines.get(tl).and_then(|t| t.clip(track, id)));
+        let (Some((timeline, track_index, clip_id)), Some(clip)) = (target, clip) else {
+            ui.label(t!("keyframes.no_clip"));
+            return;
+        };
+        state.reset_for((timeline, track_index, clip_id));
+        let rows = rows(&clip.effects);
+        if rows.is_empty() {
+            ui.label(t!("keyframes.no_keyframes"));
+            return;
+        }
+        // A row that disappeared (undo, keyframes removed) must not stay open.
+        if !state.row.is_some_and(|r| rows.contains(&r)) {
+            state.row = Some(rows[0]);
+        }
+        state
+            .selection
+            .retain(|(t, f)| rows.contains(t) && frames_of(&clip.effects, *t).contains(f));
 
-            show_toolbar(
+        show_toolbar(
+            ui,
+            state,
+            zoom_link,
+            (timeline, track_index, clip_id),
+            &mut response,
+        );
+        ui.separator();
+
+        let axis_rect = |rect: egui::Rect| rect.with_min_x(rect.left() + LABEL_WIDTH);
+        let head = clip.source_frame_at(playhead);
+        let full = (
+            clip.source_in(),
+            (clip.source_out() - clip.source_in()).max(1),
+        );
+        handle_zoom(ui, state, axis_rect(ui.available_rect_before_wrap()), full);
+        let view = state.view.unwrap_or(full);
+
+        if let Some(row) = state.row {
+            let (rect, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), CURVE_HEIGHT),
+                egui::Sense::hover(),
+            );
+            let axis = TimeAxis::new(axis_rect(rect), view);
+            draw_curve(
                 ui,
+                rect,
+                axis,
                 state,
-                zoom_link,
+                clip,
                 (timeline, track_index, clip_id),
+                row,
+                head,
+                zoom_link,
                 &mut response,
             );
-            ui.separator();
+        }
 
-            let axis_rect = |rect: egui::Rect| rect.with_min_x(rect.left() + LABEL_WIDTH);
-            let head = clip.source_frame_at(playhead);
-            let full = (
-                clip.source_in(),
-                (clip.source_out() - clip.source_in()).max(1),
-            );
-            handle_zoom(ui, state, axis_rect(ui.available_rect_before_wrap()), full);
-            let view = state.view.unwrap_or(full);
+        let ruler = ui
+            .allocate_exact_size(
+                egui::vec2(ui.available_width(), RULER_HEIGHT),
+                egui::Sense::hover(),
+            )
+            .0;
+        let axis = TimeAxis::new(axis_rect(ruler), view);
+        draw_ruler(ui, ruler, axis, clip, project, timeline, head);
+        let ruler_response = ui.interact(
+            axis_rect(ruler),
+            ui.id().with("kf_ruler"),
+            egui::Sense::click_and_drag(),
+        );
+        if let Some(pos) = ruler_response.interact_pointer_pos() {
+            response.playhead =
+                Some(clip.timeline_frame_at(
+                    axis.frame(pos.x).clamp(clip.source_in(), clip.source_out()),
+                ));
+        }
 
-            if let Some(row) = state.row {
-                let (rect, _) = ui.allocate_exact_size(
-                    egui::vec2(ui.available_width(), CURVE_HEIGHT),
-                    egui::Sense::hover(),
-                );
-                let axis = TimeAxis::new(axis_rect(rect), view);
-                draw_curve(
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                draw_rows(
                     ui,
-                    rect,
-                    axis,
                     state,
                     clip,
                     (timeline, track_index, clip_id),
-                    row,
+                    &rows,
+                    view,
                     head,
                     zoom_link,
                     &mut response,
                 );
-            }
-
-            let ruler = ui
-                .allocate_exact_size(
-                    egui::vec2(ui.available_width(), RULER_HEIGHT),
-                    egui::Sense::hover(),
-                )
-                .0;
-            let axis = TimeAxis::new(axis_rect(ruler), view);
-            draw_ruler(ui, ruler, axis, clip, project, timeline, head);
-            let ruler_response = ui.interact(
-                axis_rect(ruler),
-                ui.id().with("kf_ruler"),
-                egui::Sense::click_and_drag(),
-            );
-            if let Some(pos) = ruler_response.interact_pointer_pos() {
-                response.playhead = Some(clip.timeline_frame_at(
-                    axis.frame(pos.x).clamp(clip.source_in(), clip.source_out()),
-                ));
-            }
-
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    draw_rows(
-                        ui,
-                        state,
-                        clip,
-                        (timeline, track_index, clip_id),
-                        &rows,
-                        view,
-                        head,
-                        zoom_link,
-                        &mut response,
-                    );
-                });
-        });
-    *open = window_open;
+            });
+    });
     // Whoever got the last click decides who takes Del, as between
     // media pool and timeline.
-    if let Some(pos) = ctx.input(|i| {
+    if let Some(pos) = ui.input(|i| {
         i.pointer
             .any_pressed()
             .then(|| i.pointer.interact_pos())
             .flatten()
     }) {
-        state.focused = *open && window.is_some_and(|w| w.response.rect.contains(pos));
+        state.focused = area.response.rect.contains(pos);
     }
     response
 }

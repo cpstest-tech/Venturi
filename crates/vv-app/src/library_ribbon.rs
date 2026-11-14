@@ -54,6 +54,11 @@ impl RibbonTab {
         Self::Color,
     ];
 
+    /// Opens an editor over the library instead of a list.
+    pub(crate) fn is_editor(self) -> bool {
+        matches!(self, Self::Curves | Self::Mixer | Self::Color)
+    }
+
     fn label(self) -> Cow<'static, str> {
         match self {
             Self::Media => t!("ribbon.tab_media"),
@@ -244,6 +249,13 @@ pub(crate) struct RibbonState {
     /// The text card under the pointer and when the pointer arrived.
     text_hover: Option<(String, f64)>,
     text_hover_texture: Option<egui::TextureHandle>,
+    /// Curves, Mixer or Color, drawn over the tab content; `tab` keeps the
+    /// tab to go back to.
+    pub editor: Option<RibbonTab>,
+    pub editor_commands: Vec<crate::properties_panel::BoxedCommand>,
+    pub editor_playhead: Option<vv_core::FrameIdx>,
+    /// Scroll offset and its maximum of the tab strip, as last drawn.
+    tab_strip: (f32, f32),
 }
 
 impl RibbonState {
@@ -439,6 +451,39 @@ pub(crate) fn preview_image_in(
 
 const TAB_WIDTH: f32 = 54.0;
 const TAB_HEIGHT: f32 = 40.0;
+const TAB_STRIP_STEP: f32 = 3.0 * TAB_WIDTH;
+
+/// «‹» or «›» beside the tab strip; dimmed at the end of the scroll.
+fn tab_strip_arrow(ui: &mut egui::Ui, left: bool, enabled: bool) -> egui::Response {
+    let sense = if enabled {
+        egui::Sense::click()
+    } else {
+        egui::Sense::hover()
+    };
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(theme::ICON_SIZE, TAB_HEIGHT), sense);
+    let color = if !enabled {
+        theme::TEXT_DISABLED
+    } else if response.hovered() {
+        theme::TEXT_PRIMARY
+    } else {
+        theme::TEXT_SECONDARY
+    };
+    if enabled && response.hovered() {
+        ui.painter()
+            .rect_filled(rect, theme::RADIUS_CONTROL, theme::BG_RAISED_HOVER);
+    }
+    let c = rect.center();
+    let dx = if left { 3.0 } else { -3.0 };
+    ui.painter().add(egui::Shape::line(
+        vec![
+            c + egui::vec2(dx, -6.0),
+            c + egui::vec2(-dx, 0.0),
+            c + egui::vec2(dx, 6.0),
+        ],
+        egui::Stroke::new(theme::ICON_STROKE, color),
+    ));
+    response
+}
 
 fn ribbon_tab_button(ui: &mut egui::Ui, tab: RibbonTab, selected: bool) -> egui::Response {
     let (rect, response) =
@@ -720,6 +765,11 @@ impl VenturiApp {
             self.library_ribbon.dragged_template = None;
         }
         self.show_ribbon_tabs(ui);
+        if let Some(editor) = self.library_ribbon.editor {
+            self.show_ribbon_editor(ui, editor);
+            ui.allocate_rect(area, egui::Sense::hover());
+            return;
+        }
         let tab = self.library_ribbon.tab;
         match tab {
             RibbonTab::Effects | RibbonTab::Filters | RibbonTab::Transitions => {
@@ -734,11 +784,6 @@ impl VenturiApp {
             }
             RibbonTab::Subtitles => {
                 self.show_subtitles_tab(ui);
-                ui.allocate_rect(area, egui::Sense::hover());
-                return;
-            }
-            RibbonTab::Curves | RibbonTab::Mixer | RibbonTab::Color => {
-                self.show_window_tab(ui, tab);
                 ui.allocate_rect(area, egui::Sense::hover());
                 return;
             }
@@ -761,62 +806,74 @@ impl VenturiApp {
         ui.allocate_rect(area, egui::Sense::hover());
     }
 
+    /// One row of tabs: when the block is too narrow it scrolls, with an
+    /// arrow on each side.
     fn show_ribbon_tabs(&mut self, ui: &mut egui::Ui) {
-        let importable = self.ribbon_import_visible();
+        let importable = self.ribbon_import_visible() && self.library_ribbon.editor.is_none();
         let mut import = false;
-        ui.horizontal_wrapped(|ui| {
+        let mut clicked = None;
+        let (offset, max_offset) = self.library_ribbon.tab_strip;
+        let overflows = max_offset > 0.5;
+        let mut scroll_to = None;
+        ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = theme::SPACE_1;
-            for tab in RibbonTab::ALL {
-                let selected = self.library_ribbon.tab == tab;
-                if ribbon_tab_button(ui, tab, selected).clicked() && !selected {
-                    self.library_ribbon.tab = tab;
-                    if let Some(open) = self.window_flag(tab) {
-                        *open = true;
-                    }
-                    self.library_ribbon.pool.clear();
-                    self.media_pool_state.clear();
-                    self.library_ui.pool.clear();
-                }
-            }
-            if importable {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if importable {
                     import = ui.button(t!("ribbon.import")).clicked();
+                }
+                if overflows && tab_strip_arrow(ui, false, offset < max_offset - 0.5).clicked() {
+                    scroll_to = Some(offset + TAB_STRIP_STEP);
+                }
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    if overflows && tab_strip_arrow(ui, true, offset > 0.5).clicked() {
+                        scroll_to = Some(offset - TAB_STRIP_STEP);
+                    }
+                    let mut area = egui::ScrollArea::horizontal()
+                        .id_salt("ribbon_tab_strip")
+                        .scroll_bar_visibility(
+                            egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
+                        );
+                    if let Some(x) = scroll_to {
+                        area = area.horizontal_scroll_offset(x.clamp(0.0, max_offset));
+                    }
+                    let output = area.show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = theme::SPACE_1;
+                            for tab in RibbonTab::ALL {
+                                let selected = match self.library_ribbon.editor {
+                                    Some(editor) => editor == tab,
+                                    None => self.library_ribbon.tab == tab,
+                                };
+                                if ribbon_tab_button(ui, tab, selected).clicked() && !selected {
+                                    clicked = Some(tab);
+                                }
+                            }
+                        });
+                    });
+                    let max = (output.content_size.x - output.inner_rect.width()).max(0.0);
+                    self.library_ribbon.tab_strip = (output.state.offset.x.min(max), max);
                 });
-            }
+            });
         });
+        if let Some(tab) = clicked {
+            self.select_ribbon_tab(tab);
+        }
         if import {
             self.import_media_dialog();
         }
     }
 
-    fn window_flag(&mut self, tab: RibbonTab) -> Option<&mut bool> {
-        let panels = &mut self.settings.panels;
-        match tab {
-            RibbonTab::Curves => Some(&mut panels.keyframe_editor_open),
-            RibbonTab::Mixer => Some(&mut panels.mixer_open),
-            RibbonTab::Color => Some(&mut panels.color_window_open),
-            _ => None,
-        }
-    }
-
-    fn show_window_tab(&mut self, ui: &mut egui::Ui, tab: RibbonTab) {
-        let Some(open) = self.window_flag(tab) else {
+    pub(crate) fn select_ribbon_tab(&mut self, tab: RibbonTab) {
+        if tab.is_editor() {
+            self.open_ribbon_editor(tab);
             return;
-        };
-        let (label, hint) = match tab {
-            RibbonTab::Curves => (t!("ribbon.curves_hint"), t!("toolbar.keyframe_editor")),
-            RibbonTab::Mixer => (t!("ribbon.mixer_hint"), t!("toolbar.mixer")),
-            _ => (t!("ribbon.color_hint"), t!("toolbar.color")),
-        };
-        ui.add_space(6.0);
-        ui.weak(label);
-        let text = if *open {
-            t!("ribbon.close_window", name = hint)
-        } else {
-            t!("ribbon.open_window", name = hint)
-        };
-        if ui.button(text).clicked() {
-            *open = !*open;
+        }
+        self.library_ribbon.editor = None;
+        if self.library_ribbon.tab != tab {
+            self.library_ribbon.tab = tab;
+            self.library_ribbon.pool.clear();
+            self.media_pool_state.clear();
+            self.library_ui.pool.clear();
         }
     }
 

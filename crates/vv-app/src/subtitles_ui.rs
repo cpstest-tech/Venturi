@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::subtitles::{Message, Section, models_dir};
-use vv_core::captions::{TEMPLATES, TemplateCategory};
+use vv_core::captions::{SubtitleTemplate, TEMPLATES, TemplateCategory};
 use vv_transcribe::Stage;
 
 const CARD_SIDE: f32 = 160.0;
@@ -11,9 +11,60 @@ const PREVIEW_TEXTURE: u32 = 320;
 /// Square frame the sample titles are built and drawn for.
 const PREVIEW_RES: (u32, u32) = (1080, 1080);
 
-/// The sample centred and enlarged to fill most of a square card.
-fn square_preview_image(title: &vv_core::TitleParams) -> egui::ColorImage {
-    let chars = title.content.default.chars().count().max(1) as f32;
+/// Seconds a hover preview plays its animation, and the pause before it loops.
+const PREVIEW_CLIP_SECS: f32 = 1.6;
+const PREVIEW_PAUSE_SECS: f32 = 0.5;
+
+/// The sample `secs` into a looping hover preview.
+fn hover_frame(title: &vv_core::TitleParams, secs: f32) -> vv_core::TitleParams {
+    let t = secs
+        .rem_euclid(PREVIEW_CLIP_SECS + PREVIEW_PAUSE_SECS)
+        .min(PREVIEW_CLIP_SECS);
+    let mut frame = title.clone();
+    frame.anim_state = frame
+        .anim
+        .state_at(&frame.display_text(), t, PREVIEW_CLIP_SECS);
+    frame
+}
+
+/// `template` speaking `sample` word by word as its clips would, `secs`
+/// into a looping hover preview.
+fn template_hover_frame(
+    template: &SubtitleTemplate,
+    sample: &str,
+    secs: f32,
+) -> vv_core::TitleParams {
+    let length = SubtitleTemplate::preview_secs(sample);
+    let t = secs.rem_euclid(length + PREVIEW_PAUSE_SECS).min(length);
+    template.preview_frame(sample, PREVIEW_RES, t)
+}
+
+/// The most characters any frame of a template preview shows, so every
+/// word is drawn at the same size and none overflows the card.
+fn widest_hover_text(template: &SubtitleTemplate, sample: &str) -> usize {
+    let words = sample.split_whitespace().count().max(1);
+    (0..words)
+        .map(|i| {
+            let secs = (i as f32 + 0.5) * vv_core::captions::PREVIEW_WORD_SECS;
+            template
+                .preview_frame(sample, PREVIEW_RES, secs)
+                .content
+                .default
+                .chars()
+                .count()
+        })
+        .max()
+        .unwrap_or(1)
+}
+
+fn text_chars(title: &vv_core::TitleParams) -> usize {
+    title.content.default.chars().count()
+}
+
+/// The sample centred and enlarged so `chars` characters fill most of a
+/// square card.
+fn square_preview_image(title: &vv_core::TitleParams, chars: usize) -> egui::ColorImage {
+    let chars = chars.max(1) as f32;
     let boost = (PREVIEW_RES.0 as f32 * 0.62 / (title.size.max(1.0) * 0.6 * chars)).clamp(1.0, 3.5);
     let mut title = title.clone();
     title.size *= boost;
@@ -25,6 +76,15 @@ fn square_preview_image(title: &vv_core::TitleParams) -> egui::ColorImage {
         (PREVIEW_TEXTURE, PREVIEW_TEXTURE),
     )
 }
+
+/// How a card plays while the pointer is on it.
+enum Hover<'a> {
+    /// The template's clips for this sample, word after word.
+    Template(&'static SubtitleTemplate, &'a str),
+    /// The still title's own animation.
+    Title,
+}
+
 const SIDEBAR: f32 = 112.0;
 
 fn section_label(section: Section) -> std::borrow::Cow<'static, str> {
@@ -59,6 +119,9 @@ pub(crate) fn template_name(id: &str) -> std::borrow::Cow<'static, str> {
         "word_pop" => t!("subtitles.tpl_word_pop"),
         "word_yellow" => t!("subtitles.tpl_word_yellow"),
         "word_build" => t!("subtitles.tpl_word_build"),
+        "word_slam" => t!("subtitles.tpl_word_slam"),
+        "word_drop" => t!("subtitles.tpl_word_drop"),
+        "line_typewriter" => t!("subtitles.tpl_line_typewriter"),
         "line_classic" => t!("subtitles.tpl_line_classic"),
         "line_outline" => t!("subtitles.tpl_line_outline"),
         "line_yellow" => t!("subtitles.tpl_line_yellow"),
@@ -165,10 +228,16 @@ impl VenturiApp {
             if primary_button(ui, t!("subtitles.generate").into_owned(), ready).clicked() {
                 self.retranscribe_subtitles();
             }
-            let model_ready = models_dir().is_some_and(|dir| vv_transcribe::model_present(&dir));
+            let model = vv_transcribe::Model::preferred();
+            let model_ready =
+                models_dir().is_some_and(|dir| vv_transcribe::model_present(&dir, model));
             if !model_ready {
                 ui.add_space(theme::SPACE_1);
-                ui.weak(t!("subtitles.model_download_hint"));
+                ui.weak(t!("subtitles.model_download_hint", mb = model.size_mb()));
+            }
+            if let Some(gpu) = vv_transcribe::gpu_name() {
+                ui.add_space(theme::SPACE_1);
+                ui.weak(t!("subtitles.gpu", name = gpu));
             }
         }
         if let Some(captions) = self
@@ -204,6 +273,7 @@ impl VenturiApp {
             .map(|c| c.template.clone());
         let mut chosen = None;
         let footer = theme::FIELD_HEIGHT + theme::SPACE_2;
+        let hover_sample = t!("subtitles.sample_line").into_owned();
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .max_height((ui.available_height() - footer).max(0.0))
@@ -229,7 +299,8 @@ impl VenturiApp {
                             };
                             let title = template.title(&sample, resolution);
                             let name = template_name(template.id).into_owned();
-                            if self.template_card(ui, template.id, name, &title, selected) {
+                            let hover = Hover::Template(template, &hover_sample);
+                            if self.template_card(ui, template.id, name, &title, hover, selected) {
                                 chosen = Some(template.id.to_owned());
                             }
                         }
@@ -248,7 +319,7 @@ impl VenturiApp {
                         let selected = self.subtitles.selected.as_deref() == Some(id.as_str())
                             || (self.subtitles.selected.is_none()
                                 && applied.as_deref() == Some(id.as_str()));
-                        if self.template_card(ui, &id, name, &title, selected) {
+                        if self.template_card(ui, &id, name, &title, Hover::Title, selected) {
                             chosen = Some(id);
                         }
                     }
@@ -300,11 +371,34 @@ impl VenturiApp {
         id: &str,
         name: String,
         title: &vv_core::TitleParams,
+        hover: Hover<'_>,
         selected: bool,
     ) -> bool {
         let key = id.to_owned();
+        let animated = match hover {
+            Hover::Template(template, _) => !template.title("", PREVIEW_RES).anim.is_empty(),
+            Hover::Title => !title.anim.is_empty(),
+        };
+        let now = ui.input(|i| i.time);
+        let hover_secs = match &self.subtitles.hover {
+            Some((hovered, since)) if animated && *hovered == key => Some((now - since) as f32),
+            _ => None,
+        };
+        if let Some(secs) = hover_secs {
+            let image = match hover {
+                Hover::Template(template, sample) => square_preview_image(
+                    &template_hover_frame(template, sample, secs),
+                    widest_hover_text(template, sample),
+                ),
+                Hover::Title => square_preview_image(&hover_frame(title, secs), text_chars(title)),
+            };
+            let texture =
+                ui.ctx()
+                    .load_texture("subtitle-hover", image, egui::TextureOptions::LINEAR);
+            self.subtitles.hover_texture = Some(texture);
+        }
         if !self.subtitles.previews.contains_key(&key) {
-            let image = square_preview_image(title);
+            let image = square_preview_image(title, text_chars(title));
             let texture = ui.ctx().load_texture(
                 format!("subtitle-{key}"),
                 image,
@@ -322,7 +416,11 @@ impl VenturiApp {
         };
         let painter = ui.painter();
         painter.rect_filled(rect, theme::RADIUS_CONTROL, fill);
-        if let Some(texture) = self.subtitles.previews.get(&key) {
+        let texture = match hover_secs {
+            Some(_) => self.subtitles.hover_texture.as_ref(),
+            None => self.subtitles.previews.get(&key),
+        };
+        if let Some(texture) = texture {
             painter.image(
                 texture.id(),
                 egui::Rect::from_min_size(rect.min, egui::vec2(side, side)),
@@ -344,6 +442,24 @@ impl VenturiApp {
                 egui::Stroke::new(2.0, theme::ACCENT),
                 egui::StrokeKind::Inside,
             );
+        }
+        if animated && response.hovered() {
+            if self
+                .subtitles
+                .hover
+                .as_ref()
+                .is_none_or(|(old, _)| *old != key)
+            {
+                self.subtitles.hover = Some((key, now));
+            }
+            ui.ctx().request_repaint();
+        } else if self
+            .subtitles
+            .hover
+            .as_ref()
+            .is_some_and(|(old, _)| *old == key)
+        {
+            self.subtitles.hover = None;
         }
         response.clicked()
     }

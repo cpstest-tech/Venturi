@@ -49,6 +49,7 @@ mod properties_panel;
 mod properties_tabs;
 mod proxy_worker;
 mod render_ahead;
+mod ribbon_editors;
 mod settings;
 mod settings_dialog;
 mod silence_dialog;
@@ -178,6 +179,24 @@ struct PanelTarget {
     timeline_start: FrameIdx,
     is_solid_color: bool,
     is_text: bool,
+}
+
+fn panel_target(
+    timeline: TimelineId,
+    track_index: usize,
+    clip: &vv_core::Clip,
+    playhead: FrameIdx,
+) -> PanelTarget {
+    let local = (playhead - clip.timeline_start).clamp(0, clip.timeline_len.saturating_sub(1));
+    PanelTarget {
+        timeline,
+        track_index,
+        clip_id: clip.id,
+        source_frame: clip.source_frame_at(clip.timeline_start + local),
+        timeline_start: clip.timeline_start,
+        is_solid_color: matches!(clip.source, vv_core::ClipSource::SolidColor),
+        is_text: matches!(clip.source, vv_core::ClipSource::Text),
+    }
 }
 
 /// Which clips the properties panel edits: a video clip or its audio part.
@@ -708,6 +727,43 @@ impl Default for VenturiApp {
 }
 
 impl VenturiApp {
+    /// `targets` plus, when one is a subtitle of a linked timeline, every
+    /// other subtitle: the look is edited on all of them together.
+    fn with_linked_subtitles(&self, targets: &[PanelTarget]) -> Vec<PanelTarget> {
+        let mut all = targets.to_vec();
+        let Some(timeline_id) = self.timeline_id else {
+            return all;
+        };
+        let timeline = &self.session.project.timelines[timeline_id];
+        let on_subtitles = |t: &PanelTarget| {
+            t.is_text
+                && timeline
+                    .tracks
+                    .get(t.track_index)
+                    .is_some_and(|tr| tr.subtitles)
+        };
+        if !targets.iter().any(on_subtitles)
+            || !vv_core::captions::subtitles_linked(&self.session.project, timeline_id)
+        {
+            return all;
+        }
+        let Some(index) = vv_core::captions::subtitle_track(timeline) else {
+            return all;
+        };
+        for clip in &timeline.tracks[index].clips {
+            let is_text = matches!(clip.source, vv_core::ClipSource::Text);
+            if is_text && !all.iter().any(|t| t.clip_id == clip.id) {
+                all.push(panel_target(
+                    timeline_id,
+                    index,
+                    clip,
+                    self.timeline_state.playhead,
+                ));
+            }
+        }
+        all
+    }
+
     /// Stereo output peak meter, with decay.
     fn draw_audiometer(&mut self, ui: &mut egui::Ui) {
         const DECAY: f32 = 0.85;
@@ -2079,7 +2135,7 @@ impl VenturiApp {
     /// Measures the viewer's frame for the Color window's scope slots, shown
     /// on the next frame. Only what changed (frame, scope or size) is redrawn.
     fn update_scopes(&mut self, ctx: &egui::Context) {
-        if !self.settings.panels.color_window_open {
+        if !self.color_editor_shown() {
             self.scope_frame = None;
             return;
         }
@@ -4273,40 +4329,8 @@ impl VenturiApp {
         }
         self.show_silence_dialog(ui.ctx());
 
-        // Targets of the panel: the selected clips by track kind, in order
-        // (track, start). The frame of each is the playhead in its own source
-        // space; the first gives the shown values, the changes go to all of them.
-        let mut video_targets: Vec<PanelTarget> = Vec::new();
-        let mut audio_targets: Vec<PanelTarget> = Vec::new();
-        if let Some(timeline_id) = self.timeline_id {
-            let tl = &self.session.project.timelines[timeline_id];
-            for &(track_index, clip_id) in &self.timeline_state.selected {
-                let Some(track) = tl.tracks.get(track_index) else {
-                    continue;
-                };
-                let Some(clip) = track.clip(clip_id) else {
-                    continue;
-                };
-                let local = (self.timeline_state.playhead - clip.timeline_start)
-                    .clamp(0, clip.timeline_len.saturating_sub(1));
-                let target = PanelTarget {
-                    timeline: timeline_id,
-                    track_index,
-                    clip_id,
-                    source_frame: clip.source_frame_at(clip.timeline_start + local),
-                    timeline_start: clip.timeline_start,
-                    is_solid_color: matches!(clip.source, vv_core::ClipSource::SolidColor),
-                    is_text: matches!(clip.source, vv_core::ClipSource::Text),
-                };
-                match track.kind {
-                    vv_core::TrackKind::Video => video_targets.push(target),
-                    vv_core::TrackKind::Audio => audio_targets.push(target),
-                }
-            }
-        }
-        for targets in [&mut video_targets, &mut audio_targets] {
-            targets.sort_by_key(|t| (t.track_index, t.timeline_start));
-        }
+        let (video_targets, audio_targets) = self.selection_targets();
+        let panel_targets = self.with_linked_subtitles(&video_targets);
 
         let rects = egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(theme::BG_WINDOW))
@@ -4387,123 +4411,16 @@ impl VenturiApp {
 
         let (mut pending_effects, mut pending_playhead) = self
             .show_block(ui, &rects, Block::Properties, |app, ui| {
-                app.show_properties_panel(ui, &video_targets, &audio_targets)
+                app.show_properties_panel(ui, &panel_targets, &audio_targets)
             })
             .unwrap_or_default();
 
-        if self.settings.panels.keyframe_editor_open {
-            let target = video_targets
-                .first()
-                .or(audio_targets.first())
-                .map(|t| (t.timeline, t.track_index, t.clip_id));
-            let editor = keyframe_editor::show_keyframe_editor(
-                ui.ctx(),
-                &mut self.settings.panels.keyframe_editor_open,
-                &mut self.keyframe_editor,
-                &self.session.project,
-                target,
-                self.timeline_state.playhead,
-                self.zoom_link,
-            );
-            pending_effects.extend(editor.commands);
-            pending_playhead = editor.playhead.or(pending_playhead);
-        }
-        if self.settings.panels.mixer_open {
-            let presets_before = (
-                self.settings.compressor_presets.clone(),
-                self.settings.eq_presets.clone(),
-            );
-            let installed = vv_plugin::installed();
-            pending_effects.extend(mixer_panel::show_mixer(
-                ui.ctx(),
-                &mut self.settings.panels.mixer_open,
-                &mut self.mixer_panel,
-                &self.session.project,
-                self.timeline_id,
-                self.timeline_audio.as_ref().map(TimelineAudio::meters),
-                mixer_panel::EffectPresets {
-                    compressor: &mut self.settings.compressor_presets,
-                    eq: &mut self.settings.eq_presets,
-                },
-                &mixer_panel::ChainView {
-                    installed: &installed,
-                    scanning: self.plugin_scan_rx.is_some(),
-                    known: &|effect| {
-                        self.timeline_audio
-                            .as_ref()
-                            .and_then(|audio| audio.plugin_known(effect))
-                            .unwrap_or_else(|| {
-                                installed.iter().any(|i| i.class_id == effect.class_id)
-                            })
-                    },
-                    latency_ms: &|key| {
-                        self.timeline_audio
-                            .as_ref()
-                            .and_then(|audio| audio.plugin_latency_ms(key))
-                    },
-                    failed: &|key| {
-                        self.timeline_audio
-                            .as_ref()
-                            .is_some_and(|audio| audio.plugin_failed(key))
-                    },
-                    normalize_failed: &|channel, insert| {
-                        let audio = self.timeline_audio.as_ref()?;
-                        let error = audio.normalize_failure(self.timeline_id?, channel, insert)?;
-                        Some(error.to_owned())
-                    },
-                },
-            ));
-            if std::mem::take(&mut self.mixer_panel.rescan_requested) {
-                self.start_plugin_scan(ui.ctx(), true);
-            }
-            // Saved at once: a preset must not wait for the periodic save.
-            if (&self.settings.compressor_presets, &self.settings.eq_presets)
-                != (&presets_before.0, &presets_before.1)
-            {
-                self.persist_settings();
-            }
-        }
-
-        if self.settings.panels.color_window_open {
-            let primary = video_targets.first().copied();
-            let can_balance = self.can_auto_balance(&video_targets);
-            self.scope_target = primary;
-            let grade = primary.map(|t| {
-                self.session.project.timelines[t.timeline]
-                    .clip(t.track_index, t.clip_id)
-                    .and_then(|clip| color_window::grade_info(clip, t.source_frame))
-            });
-            let grade_value = grade.as_ref().and_then(|g| g.as_ref()).map(|g| g.value);
-            let mut response = color_window::show_color_window(
-                ui.ctx(),
-                &mut self.settings.panels.color_window_open,
-                &mut self.settings.panels.color_scopes,
-                &mut self.scope_view,
-                grade,
-                can_balance,
-            );
-            if let (Some(section), Some(value), Some(t)) =
-                (&mut response.grade, grade_value, primary)
-                && section.auto_balance
-            {
-                self.balance_isolated(section, &value, t);
-            }
-            let tl = self
-                .timeline_id
-                .map(|id| &self.session.project.timelines[id]);
-            if let Some(section) = &response.grade {
-                pending_effects.extend(grade_panel::grade_commands(tl, &video_targets, section));
-            }
-            if response.add_grade {
-                pending_effects.extend(grade_panel::add_grade_commands(tl, &video_targets));
-            }
-            if let (Some(source_frame), Some(t)) = (response.goto, primary) {
-                pending_playhead = self.session.project.timelines[t.timeline]
-                    .clip(t.track_index, t.clip_id)
-                    .map(|c| c.timeline_frame_at(source_frame))
-                    .or(pending_playhead);
-            }
-        }
+        pending_effects.extend(std::mem::take(&mut self.library_ribbon.editor_commands));
+        pending_playhead = self
+            .library_ribbon
+            .editor_playhead
+            .take()
+            .or(pending_playhead);
 
         if let Some(browsed) = preview_action {
             self.preview(&browsed);
@@ -4592,6 +4509,35 @@ impl VenturiApp {
         {
             ui.ctx().request_repaint();
         }
+    }
+
+    /// Targets of the panels: the selected clips by track kind, in order
+    /// (track, start). The frame of each is the playhead in its own source
+    /// space; the first gives the shown values, the changes go to all of them.
+    pub(crate) fn selection_targets(&self) -> (Vec<PanelTarget>, Vec<PanelTarget>) {
+        let mut video_targets: Vec<PanelTarget> = Vec::new();
+        let mut audio_targets: Vec<PanelTarget> = Vec::new();
+        if let Some(timeline_id) = self.timeline_id {
+            let tl = &self.session.project.timelines[timeline_id];
+            for &(track_index, clip_id) in &self.timeline_state.selected {
+                let Some(track) = tl.tracks.get(track_index) else {
+                    continue;
+                };
+                let Some(clip) = track.clip(clip_id) else {
+                    continue;
+                };
+                let target =
+                    panel_target(timeline_id, track_index, clip, self.timeline_state.playhead);
+                match track.kind {
+                    vv_core::TrackKind::Video => video_targets.push(target),
+                    vv_core::TrackKind::Audio => audio_targets.push(target),
+                }
+            }
+        }
+        for targets in [&mut video_targets, &mut audio_targets] {
+            targets.sort_by_key(|t| (t.track_index, t.timeline_start));
+        }
+        (video_targets, audio_targets)
     }
 
     /// Draws `block` where it lives: in its tile of the main window, in its

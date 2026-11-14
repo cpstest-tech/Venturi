@@ -60,6 +60,7 @@ pub enum CommandLabel {
     ResetTransform,
     TimelineResolution,
     SetCaptions,
+    LinkSubtitles,
     SetCover,
     ClipColor,
     ClipDisplayColor,
@@ -272,6 +273,7 @@ impl History {
 pub struct AddTrack {
     pub timeline: TimelineId,
     pub kind: TrackKind,
+    pub effects: bool,
     /// Index assigned by `apply` (the last of `tracks` at that moment),
     /// known only afterwards.
     index: Option<usize>,
@@ -282,7 +284,16 @@ impl AddTrack {
         Self {
             timeline,
             kind,
+            effects: false,
             index: None,
+        }
+    }
+
+    /// A video track for effect and filter elements.
+    pub fn effects(timeline: TimelineId) -> Self {
+        Self {
+            effects: true,
+            ..Self::new(timeline, TrackKind::Video)
         }
     }
 
@@ -299,7 +310,10 @@ impl Command for AddTrack {
 
     fn apply(&mut self, project: &mut Project) {
         let tl = &mut project.timelines[self.timeline];
-        tl.tracks.push(Track::new(self.kind));
+        tl.tracks.push(Track {
+            effects: self.effects,
+            ..Track::new(self.kind)
+        });
         self.index = Some(tl.tracks.len() - 1);
     }
 

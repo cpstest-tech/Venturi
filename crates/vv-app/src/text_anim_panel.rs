@@ -80,8 +80,11 @@ fn preview(ui: &mut egui::Ui, title: &TitleParams, timeline_size: (u32, u32)) {
         egui::vec2(ui.available_width(), PREVIEW_HEIGHT),
         egui::Sense::hover(),
     );
-    ui.painter()
-        .rect_filled(rect, crate::theme::RADIUS_CONTROL, crate::theme::BG_INSET_ALT);
+    ui.painter().rect_filled(
+        rect,
+        crate::theme::RADIUS_CONTROL,
+        crate::theme::BG_INSET_ALT,
+    );
     let time = ui.input(|i| i.time) as f32;
     let mut shown = title.clone();
     shown.anim_state = preview_state(&shown.anim, &shown.display_text(), time);
@@ -111,7 +114,9 @@ fn slider_row(
     default: f32,
     range: std::ops::RangeInclusive<f32>,
 ) -> bool {
-    let row = param_row(ui, &label, None, |ui| slider_field(ui, value, range, 0.01, 2));
+    let row = param_row(ui, &label, None, |ui| {
+        slider_field(ui, value, range, 0.01, 2)
+    });
     if row.reset {
         *value = default;
     }
@@ -126,8 +131,20 @@ fn parameters(ui: &mut egui::Ui, slot: Slot, d: &mut AnimDescriptor, id_salt: &s
     } else {
         t!("anim.duration")
     };
-    changed |= slider_row(ui, duration_label.to_string(), &mut d.duration, default.duration, 0.1..=5.0);
-    changed |= slider_row(ui, t!("anim.stagger").to_string(), &mut d.stagger, default.stagger, 0.0..=0.95);
+    changed |= slider_row(
+        ui,
+        duration_label.to_string(),
+        &mut d.duration,
+        default.duration,
+        0.1..=5.0,
+    );
+    changed |= slider_row(
+        ui,
+        t!("anim.stagger").to_string(),
+        &mut d.stagger,
+        default.stagger,
+        0.0..=0.95,
+    );
 
     let easings: Vec<_> = Easing::ALL
         .iter()
@@ -143,22 +160,51 @@ fn parameters(ui: &mut egui::Ui, slot: Slot, d: &mut AnimDescriptor, id_salt: &s
         .collect();
     if slot != Slot::Loop {
         let row = param_row(ui, &t!("anim.easing"), None, |ui| {
-            preview_combo(ui, &format!("{id_salt}_ease"), &mut d.easing, &easings, None, Some(260.0), None)
+            preview_combo(
+                ui,
+                &format!("{id_salt}_ease"),
+                &mut d.easing,
+                &easings,
+                None,
+                Some(260.0),
+                None,
+            )
         });
         changed |= row.changed;
     }
     let row = param_row(ui, &t!("anim.granularity"), None, |ui| {
-        preview_combo(ui, &format!("{id_salt}_grain"), &mut d.granularity, &grains, None, None, None)
+        preview_combo(
+            ui,
+            &format!("{id_salt}_grain"),
+            &mut d.granularity,
+            &grains,
+            None,
+            None,
+            None,
+        )
     });
     changed |= row.changed;
     let row = param_row(ui, &t!("anim.order"), None, |ui| {
-        preview_combo(ui, &format!("{id_salt}_order"), &mut d.order, &orders, None, None, None)
+        preview_combo(
+            ui,
+            &format!("{id_salt}_order"),
+            &mut d.order,
+            &orders,
+            None,
+            None,
+            None,
+        )
     });
     changed |= row.changed;
     changed
 }
 
-fn slot_section(ui: &mut egui::Ui, title: &mut TitleParams, slot: Slot, hovered: &mut Option<TextAnimations>) -> bool {
+fn slot_section(
+    ui: &mut egui::Ui,
+    title: &mut TitleParams,
+    slot: Slot,
+    hovered: &mut Option<TextAnimations>,
+) -> bool {
     let (open, reset) = section_header(ui, &slot.title(), true);
     let mut changed = false;
     if reset {
@@ -171,7 +217,10 @@ fn slot_section(ui: &mut egui::Ui, title: &mut TitleParams, slot: Slot, hovered:
     let current = slot.get(&mut title.anim).as_ref().map(|d| d.id.clone());
     let mut picked: Option<Option<String>> = None;
     ui.horizontal_wrapped(|ui| {
-        if ui.selectable_label(current.is_none(), t!("anim.none")).clicked() {
+        if ui
+            .selectable_label(current.is_none(), t!("anim.none"))
+            .clicked()
+        {
             picked = Some(None);
         }
         for id in slot.ids() {
@@ -222,8 +271,16 @@ fn karaoke_section(
     if let Some(k) = &mut title.anim.karaoke {
         let row = crate::properties_panel::color_row(ui, &t!("anim.karaoke_color"), &mut k.color);
         changed |= row.changed;
-        changed |= slider_row(ui, t!("anim.karaoke_scale").to_string(), &mut k.scale, 1.12, 1.0..=1.6);
-        changed |= ui.checkbox(&mut k.keep_past, t!("anim.karaoke_keep")).changed();
+        changed |= slider_row(
+            ui,
+            t!("anim.karaoke_scale").to_string(),
+            &mut k.scale,
+            1.12,
+            1.0..=1.6,
+        );
+        changed |= ui
+            .checkbox(&mut k.keep_past, t!("anim.karaoke_keep"))
+            .changed();
         let synced = transcript_ms.as_ref().is_some_and(|w| *w == k.word_ms);
         ui.add_enabled_ui(transcript_ms.is_some() && !synced, |ui| {
             if ui.button(t!("anim.karaoke_sync")).clicked() {

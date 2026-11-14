@@ -325,6 +325,14 @@ generator.adjustment:
   en: "Effect Layer"
   it: "Livello effetti"
 
+props.subtitles_linked:
+  en: "Apply to all subtitles"
+  it: "Applica a tutti i sottotitoli"
+
+props.subtitles_linked_hint:
+  en: "Style and animation changes go to every subtitle; the words stay as they are."
+  it: "Stile e animazioni valgono per tutti i sottotitoli; le parole restano quelle di ciascuno."
+
 props.applies_to_all:
   en: "Changes apply to all %{count} clips in this tab."
   it: "Modifiche applicate a tutte le %{count} clip di questa scheda."
@@ -933,3 +941,6 @@ props.reset_section_hint:
   en: "Reset the section"
   it: "Ripristina la sezione"
 
+props.applies_to_first:
+  en: "Shows the first selected element."
+  it: "Mostra il primo elemento selezionato."

@@ -497,8 +497,8 @@ impl TextGpu {
                 self.target(device, target, used),
             ];
             let sigma = group.sigma / step as f32;
-            let params = [([1.0, 0.0], &views[0]), ([0.0, 1.0], &views[1])].map(
-                |(direction, source)| {
+            let params =
+                [([1.0, 0.0], &views[0]), ([0.0, 1.0], &views[1])].map(|(direction, source)| {
                     let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some("vv-render text blur params"),
                         contents: bytemuck::bytes_of(&BlurParams {
@@ -522,8 +522,7 @@ impl TextGpu {
                             },
                         ],
                     })
-                },
-            );
+                });
             blurred.push(Blurred {
                 first,
                 composite,

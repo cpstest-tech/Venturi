@@ -397,6 +397,7 @@ fn video_track(clips: Vec<Clip>) -> Track {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     }
 }
 
@@ -455,6 +456,7 @@ fn crossing_offsets_clear_a_zoomed_clip_fully_off_screen() {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     };
     let timeline = Timeline {
         name: "t".into(),
@@ -935,6 +937,69 @@ mod assets {
         );
     }
 
+    fn is_grey([r, g, b, _]: [u8; 4]) -> bool {
+        r.abs_diff(g) < 4 && g.abs_diff(b) < 4
+    }
+
+    #[test]
+    fn an_element_over_two_clips_acts_on_both_only_in_its_interval() {
+        let compositor = vv_render::Compositor::new_headless();
+        let mut main = Track::new_main();
+        main.clips = vec![colored(1, 0, 50, RED), colored(2, 50, 50, BLUE)];
+        let mut element = Clip::from_source_range(
+            ClipId(3),
+            ClipSource::Adjustment,
+            0,
+            50,
+            25,
+            Rational::one(),
+        );
+        element.effects.assets = vec![AssetFx::new("filters/noir", vec![])];
+        let mut effects = Track::new_effects();
+        effects.clips = vec![element];
+        let mut timeline = timeline(vec![main, effects]);
+
+        let pixel = |timeline: &Timeline, frame| {
+            center_pixel(&compositor, &compose_frame(&compositor, timeline, frame))
+        };
+        assert!(is_grey(pixel(&timeline, 30)), "red clip inside");
+        assert!(is_grey(pixel(&timeline, 60)), "blue clip inside");
+        assert!(!is_grey(pixel(&timeline, 10)), "before the element");
+        assert!(!is_grey(pixel(&timeline, 90)), "after the element");
+
+        timeline.tracks[1].clips[0].timeline_start = 60;
+        assert!(!is_grey(pixel(&timeline, 30)), "moved away");
+
+        timeline.tracks[1].muted = true;
+        assert!(!is_grey(pixel(&timeline, 70)), "hidden by its eye");
+    }
+
+    #[test]
+    fn an_element_leaves_the_tracks_above_it_alone() {
+        let compositor = vv_render::Compositor::new_headless();
+        let mut main = Track::new_main();
+        main.clips = vec![colored(1, 0, 100, RED)];
+        let mut element = Clip::from_source_range(
+            ClipId(2),
+            ClipSource::Adjustment,
+            0,
+            100,
+            0,
+            Rational::one(),
+        );
+        element.effects.assets = vec![AssetFx::new("filters/noir", vec![])];
+        let mut effects = Track::new_effects();
+        effects.clips = vec![element];
+        let mut top = Track::new(TrackKind::Video);
+        top.clips = vec![colored(3, 0, 100, BLUE)];
+        let timeline = timeline(vec![main, effects, top]);
+        let [r, g, b, _] = center_pixel(&compositor, &compose_frame(&compositor, &timeline, 10));
+        assert!(
+            b > 240 && r < 15 && g < 15,
+            "untouched blue, got {r} {g} {b}"
+        );
+    }
+
     #[test]
     fn an_asset_transition_merges_both_sides_into_one_layer() {
         let compositor = vv_render::Compositor::new_headless();
@@ -988,5 +1053,62 @@ mod assets {
         };
         assert!(make(1).crossing_at(95).is_some());
         assert!(make(2).crossing_at(95).is_none());
+    }
+}
+
+#[test]
+fn generated_pop_subtitles_pop_in_on_the_rendered_frames() {
+    let mut project = Project::default();
+    let timeline = project.timelines.insert(Timeline {
+        name: "T".into(),
+        fps: Rational::new(25, 1),
+        resolution: (1920, 1080),
+        tracks: Vec::new(),
+        markers: Vec::new(),
+        master: Default::default(),
+    });
+    let words: Vec<vv_core::CaptionWord> =
+        [("Ciao", 0, 400), ("a", 400, 700), ("tutti", 700, 1200)]
+            .into_iter()
+            .map(|(text, start_ms, end_ms)| vv_core::CaptionWord {
+                text: text.into(),
+                start_ms,
+                end_ms,
+            })
+            .collect();
+    let template = vv_core::SubtitleTemplate::find("word_pop").unwrap();
+    let clips = vv_core::captions::build_clips(&mut project, timeline, &words, template);
+    assert_eq!(clips.len(), 3);
+    let ink_at = |clip: &Clip, frame: FrameIdx| -> u64 {
+        let layer = clip_layer(
+            &project,
+            clip,
+            frame,
+            (1920, 1080),
+            25.0,
+            &mut NoMediaProvider,
+        )
+        .unwrap()
+        .unwrap();
+        let OwnedContent::Text(title) = layer.content else {
+            panic!("not a title");
+        };
+        vv_render::text::render_title(&title, (1920, 1080), (480, 270))
+            .masks()
+            .iter()
+            .map(|(placed, color)| {
+                placed.mask.data.iter().map(|&v| u64::from(v)).sum::<u64>()
+                    * (color.a * 100.0) as u64
+            })
+            .sum()
+    };
+    for clip in &clips {
+        let first = ink_at(clip, clip.timeline_start);
+        let settled = ink_at(clip, clip.timeline_end() - 1);
+        assert!(
+            first * 2 < settled,
+            "clip at {} does not pop: {first} vs {settled}",
+            clip.timeline_start
+        );
     }
 }

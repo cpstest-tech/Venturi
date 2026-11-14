@@ -432,3 +432,44 @@ fn a_project_saved_in_format_1_opens_in_the_current_one() {
         CURRENT_FORMAT_VERSION
     );
 }
+
+#[test]
+fn a_format_3_project_finds_its_effect_elements_on_effects_tracks() {
+    let mut project = Project::default();
+    let mut element = Clip::from_source_range(
+        project.alloc_clip_id(),
+        ClipSource::Adjustment,
+        0,
+        75,
+        0,
+        crate::Rational::one(),
+    );
+    element.effects.assets = vec![crate::AssetFx::new("noir".to_owned(), vec![1.0])];
+    let mut overlay = Track::new(TrackKind::Video);
+    overlay.insert_sorted(element);
+    let timeline = project.timelines.insert(Timeline {
+        name: "T".into(),
+        fps: crate::Rational::new(25, 1),
+        resolution: (1920, 1080),
+        tracks: vec![Track::new_main(), overlay],
+        markers: Vec::new(),
+        master: Default::default(),
+    });
+    // Format 3 had no `effects` field.
+    let text = ron::to_string(&project)
+        .unwrap()
+        .replace(
+            &format!("format_version:{CURRENT_FORMAT_VERSION}"),
+            "format_version:3",
+        )
+        .replace("effects:true,", "")
+        .replace("effects:false,", "");
+    assert!(text.contains("format_version:3"));
+    let loaded = project_from_str(&text).unwrap();
+    let flags: Vec<bool> = loaded.timelines[timeline]
+        .tracks
+        .iter()
+        .map(|t| t.effects)
+        .collect();
+    assert_eq!(flags, [false, true]);
+}

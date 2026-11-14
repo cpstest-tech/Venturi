@@ -47,7 +47,14 @@ fn in_starts_hidden_and_ends_at_rest() {
     let start = plan(&anims, "Hello", &AnimState::default());
     assert_eq!(start.fx[0].opacity, 0.0);
     let dur = anims.enter.as_ref().unwrap().duration;
-    let end = plan(&anims, "Hello", &AnimState { t_in: dur, ..Default::default() });
+    let end = plan(
+        &anims,
+        "Hello",
+        &AnimState {
+            t_in: dur,
+            ..Default::default()
+        },
+    );
     assert!(end.fx[0].is_rest());
 }
 
@@ -55,7 +62,14 @@ fn in_starts_hidden_and_ends_at_rest() {
 fn stagger_delays_later_units() {
     let anims = anims_in("typewriter");
     let dur = anims.enter.as_ref().unwrap().duration;
-    let mid = plan(&anims, "abcdef", &AnimState { t_in: dur * 0.5, ..Default::default() });
+    let mid = plan(
+        &anims,
+        "abcdef",
+        &AnimState {
+            t_in: dur * 0.5,
+            ..Default::default()
+        },
+    );
     assert_eq!(mid.fx[0].opacity, 1.0);
     assert_eq!(mid.fx[5].opacity, 0.0);
 }
@@ -68,7 +82,14 @@ fn out_mirrors_the_in() {
     };
     let dur = out.exit.as_ref().unwrap().duration;
     assert!(plan(&out, "Hi", &AnimState::default()).fx[0].is_rest());
-    let gone = plan(&out, "Hi", &AnimState { t_out: dur, ..Default::default() });
+    let gone = plan(
+        &out,
+        "Hi",
+        &AnimState {
+            t_out: dur,
+            ..Default::default()
+        },
+    );
     assert_eq!(gone.fx[0].opacity, 0.0);
 }
 
@@ -79,7 +100,16 @@ fn loop_is_periodic() {
         ..Default::default()
     };
     let period = anims.looped.as_ref().unwrap().duration;
-    let at = |t: f32| plan(&anims, "Hi", &AnimState { t_loop: t, ..Default::default() });
+    let at = |t: f32| {
+        plan(
+            &anims,
+            "Hi",
+            &AnimState {
+                t_loop: t,
+                ..Default::default()
+            },
+        )
+    };
     let (a, b) = (at(0.3), at(0.3 + period));
     assert!((a.fx[0].scale[0] - b.fx[0].scale[0]).abs() < 1e-4);
     assert!(at(period / 2.0).fx[0].scale[0] > 1.07);
@@ -88,7 +118,13 @@ fn loop_is_periodic() {
 #[test]
 fn same_state_same_plan_for_every_preset() {
     let text = "Some title\nwith two lines";
-    let state = AnimState { t_in: 0.21, t_out: 0.13, t_loop: 1.37, kara_word: 2, clip_len: 4.0 };
+    let state = AnimState {
+        t_in: 0.21,
+        t_out: 0.13,
+        t_loop: 1.37,
+        kara_word: 2,
+        clip_len: 4.0,
+    };
     for id in presets::IN_IDS {
         let a = TextAnimations {
             enter: presets::in_preset(id),
@@ -96,7 +132,11 @@ fn same_state_same_plan_for_every_preset() {
             looped: presets::loop_preset("shake"),
             karaoke: Some(Karaoke::default()),
         };
-        assert_eq!(plan(&a, text, &state), plan(&a.clone(), text, &state), "{id}");
+        assert_eq!(
+            plan(&a, text, &state),
+            plan(&a.clone(), text, &state),
+            "{id}"
+        );
     }
 }
 
@@ -117,7 +157,16 @@ fn every_preset_exists() {
 fn jitter_is_deterministic_and_settles() {
     let anims = anims_in("glitch");
     let dur = anims.enter.as_ref().unwrap().duration;
-    let at = |t: f32| plan(&anims, "glitch", &AnimState { t_in: t, ..Default::default() });
+    let at = |t: f32| {
+        plan(
+            &anims,
+            "glitch",
+            &AnimState {
+                t_in: t,
+                ..Default::default()
+            },
+        )
+    };
     assert_eq!(at(0.2), at(0.2));
     assert!(at(dur).fx.iter().all(|f| f.offset[0].abs() < 1e-6));
 }
@@ -135,7 +184,15 @@ fn karaoke_uses_word_times_or_spreads_evenly() {
     assert_eq!(anims.state_at("one two", 0.7, 2.0).unwrap().kara_word, 1);
     anims.karaoke.as_mut().unwrap().word_ms.clear();
     assert_eq!(anims.state_at("one two", 1.5, 2.0).unwrap().kara_word, 1);
-    let p = plan(&anims, "one two", &AnimState { kara_word: 1, clip_len: 2.0, ..Default::default() });
+    let p = plan(
+        &anims,
+        "one two",
+        &AnimState {
+            kara_word: 1,
+            clip_len: 2.0,
+            ..Default::default()
+        },
+    );
     assert_eq!(p.fx[0].tint.1, 0.0);
     assert_eq!(p.fx[1].tint.1, 1.0);
 }
@@ -166,7 +223,14 @@ fn decor_progress_follows_the_in() {
     let anims = anims_in("underline");
     let dur = anims.enter.as_ref().unwrap().duration;
     let start = plan(&anims, "x", &AnimState::default());
-    let end = plan(&anims, "x", &AnimState { t_in: dur, ..Default::default() });
+    let end = plan(
+        &anims,
+        "x",
+        &AnimState {
+            t_in: dur,
+            ..Default::default()
+        },
+    );
     assert_eq!(start.decor[0].progress, 0.0);
     assert_eq!(end.decor[0].progress, 1.0);
 }

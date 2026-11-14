@@ -1141,6 +1141,7 @@ fn draw_track_headers(
     can_record: bool,
     main_track: Option<usize>,
     text_tracks: &[bool],
+    effects_tracks: &[bool],
 ) {
     let (rect, _resp) = ui.allocate_exact_size(
         egui::vec2(TRACK_HEADER_WIDTH, RULER_HEIGHT),
@@ -1228,6 +1229,9 @@ fn draw_track_headers(
             egui::vec2(20.0, 16.0),
         );
         match kind {
+            TrackKind::Video if effects_tracks[track_index] => {
+                paint_fx_icon(ui.painter(), icon_rect.center(), 14.0, text_color)
+            }
             TrackKind::Video if text_tracks[track_index] => {
                 crate::timeline_bar::paint_text_icon(ui.painter(), icon_rect, text_color)
             }
@@ -1240,6 +1244,8 @@ fn draw_track_headers(
         }
         let label = if is_main {
             t!("timeline.main_track").into_owned()
+        } else if effects_tracks[track_index] {
+            t!("timeline.effects_track").into_owned()
         } else {
             track_labels[track_index].clone()
         };
@@ -2178,6 +2184,11 @@ pub fn show_timeline(
                 && t.clips.iter().all(|c| matches!(c.source, ClipSource::Text))
         })
         .collect();
+    let effects_tracks: Vec<bool> = project.timelines[timeline_id]
+        .tracks
+        .iter()
+        .map(|t| t.effects)
+        .collect();
     let timeline_is_empty = visuals.is_empty();
 
     let total_secs = (max_end_frames as f64 / fps + TRAILING_MARGIN_SECS).max(MIN_TIMELINE_SECS);
@@ -2326,6 +2337,7 @@ pub fn show_timeline(
             state.can_record,
             main_track,
             &text_tracks,
+            &effects_tracks,
         );
 
         egui::ScrollArea::horizontal()
@@ -4131,9 +4143,9 @@ pub fn show_timeline(
                     });
                 }
                 // An asset effect or transition that no clip above took: free
-                // space (an element on the tracks below) or no valid cut.
-                if pointer_over_tracks
-                    && egui::DragAndDrop::has_payload_of_type::<crate::fx_library::FxDrag>(ui.ctx())
+                // space anywhere, also above or between the rows (an element on
+                // an effects track), or no valid cut.
+                if egui::DragAndDrop::has_payload_of_type::<crate::fx_library::FxDrag>(ui.ctx())
                     && let Some(fx) =
                         marquee_resp.dnd_release_payload::<crate::fx_library::FxDrag>()
                 {
@@ -4141,10 +4153,12 @@ pub fn show_timeline(
                         state.toast = Some(t!("fx.no_adjacent_pair").into_owned());
                     } else if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
                         let drag = TimelineDrag::Fx((*fx).clone());
-                        if let Some(target) = drop_target(&drag, pos) {
-                            let frame = drop_frame(&drag, pos);
-                            media_drop = Some((drag, frame, target));
-                        }
+                        let hovered = over_rows(pos)
+                            .then(|| track_at_y(pos.y - origin.y))
+                            .filter(|&t| project.timelines[timeline_id].tracks[t].effects);
+                        let target =
+                            hovered.map_or(MediaDropTarget::Default, MediaDropTarget::Track);
+                        media_drop = Some((drag.clone(), drop_frame(&drag, pos), target));
                     }
                 }
                 // See the docs of `pending_crossing_previews`: only now, with the

@@ -215,3 +215,112 @@ fn the_default_transition_lasts_half_a_second() {
     .unwrap();
     assert_eq!(crossing.transition.duration, 13);
 }
+
+fn element_assets() -> Vec<AssetFx> {
+    vec![AssetFx::new("noir".to_owned(), vec![1.0])]
+}
+
+#[test]
+fn an_element_goes_on_a_new_effects_track_on_top() {
+    let (mut project, tl) = project_with_tracks(&[TrackKind::Video, TrackKind::Video]);
+    let mut history = History::default();
+    let (track, id) = insert_fx_element(
+        &mut project,
+        &mut history,
+        tl,
+        None,
+        10,
+        75,
+        element_assets(),
+    );
+    let timeline = &project.timelines[tl];
+    assert_eq!(track, 2, "above every existing track");
+    assert!(timeline.tracks[track].effects);
+    let clip = timeline.clip(track, id).unwrap();
+    assert!(clip.is_effect_element());
+    assert_eq!((clip.timeline_start, clip.timeline_len), (10, 75));
+    history.undo(&mut project);
+    assert_eq!(project.timelines[tl].tracks.len(), 2, "one undo step");
+}
+
+#[test]
+fn elements_share_an_effects_track_while_they_fit() {
+    let (mut project, tl) = project_with_tracks(&[TrackKind::Video]);
+    let mut history = History::default();
+    let (first, _) = insert_fx_element(
+        &mut project,
+        &mut history,
+        tl,
+        None,
+        0,
+        50,
+        element_assets(),
+    );
+    let (second, _) = insert_fx_element(
+        &mut project,
+        &mut history,
+        tl,
+        None,
+        50,
+        50,
+        element_assets(),
+    );
+    assert_eq!(first, second, "free space on the same track");
+    let (third, _) = insert_fx_element(
+        &mut project,
+        &mut history,
+        tl,
+        Some(first),
+        25,
+        50,
+        element_assets(),
+    );
+    assert_ne!(third, first, "overlapping: a new track");
+    assert!(project.timelines[tl].tracks[third].effects);
+}
+
+#[test]
+fn a_locked_effects_track_is_skipped() {
+    let (mut project, tl) = project_with_tracks(&[TrackKind::Video]);
+    let mut history = History::default();
+    let (first, _) = insert_fx_element(
+        &mut project,
+        &mut history,
+        tl,
+        None,
+        0,
+        10,
+        element_assets(),
+    );
+    project.timelines[tl].tracks[first].locked = true;
+    let (second, _) = insert_fx_element(
+        &mut project,
+        &mut history,
+        tl,
+        Some(first),
+        100,
+        10,
+        element_assets(),
+    );
+    assert_ne!(second, first);
+}
+
+#[test]
+fn old_files_get_their_effects_tracks_marked() {
+    let (mut project, tl) =
+        project_with_tracks(&[TrackKind::Video, TrackKind::Video, TrackKind::Video]);
+    let element = put(&mut project, tl, 1, ClipSource::Adjustment, 0, 10);
+    project.timelines[tl]
+        .clip_mut(1, element)
+        .unwrap()
+        .effects
+        .assets = element_assets();
+    put(&mut project, tl, 2, ClipSource::Text, 0, 10);
+    mark_effects_tracks(&mut project);
+    let flags: Vec<bool> = project.timelines[tl]
+        .tracks
+        .iter()
+        .map(|t| t.effects)
+        .collect();
+    assert_eq!(flags, [false, true, false]);
+}

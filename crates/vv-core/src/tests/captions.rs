@@ -52,6 +52,7 @@ fn generate(project: &mut Project, timeline: TimelineId, id: &str) -> SetCaption
         language: "it".into(),
         words,
         template: id.into(),
+        linked: true,
     };
     SetCaptions::new(timeline, Some(captions), clips)
 }
@@ -220,4 +221,129 @@ fn a_long_word_shrinks_to_fit_the_frame() {
     let clips = build_clips(&mut project, timeline, &spoken, template);
     let size = clips[0].effects.title.as_ref().unwrap().size;
     assert!(17.0 * size * 0.6 <= 1080.0 * 0.88 + 1.0, "size {size}");
+}
+
+fn enter_of(
+    project: &Project,
+    timeline: TimelineId,
+    n: usize,
+) -> Option<crate::text_anim::AnimDescriptor> {
+    let track = subtitle_track(&project.timelines[timeline]).unwrap();
+    project.timelines[timeline].tracks[track].clips[n]
+        .effects
+        .title
+        .as_ref()
+        .unwrap()
+        .anim
+        .enter
+        .clone()
+}
+
+#[test]
+fn templates_animate_each_clip_with_their_preset() {
+    for (id, preset) in [
+        ("word_pop", "sub_pop"),
+        ("word_slam", "sub_slam"),
+        ("word_drop", "sub_drop"),
+        ("line_typewriter", "sub_typewriter"),
+        ("word_yellow", "sub_rise"),
+        ("line_classic", "sub_fade"),
+    ] {
+        let (mut project, timeline) = project();
+        let command = generate(&mut project, timeline, id);
+        History::default().do_command(&mut project, Box::new(command));
+        assert_eq!(enter_of(&project, timeline, 0).unwrap().id, preset, "{id}");
+    }
+}
+
+#[test]
+fn pop_overshoots_before_settling() {
+    let pop = crate::text_anim_presets::subtitle_in("sub_pop").unwrap();
+    let scale = pop
+        .tracks
+        .iter()
+        .find(|t| t.prop == crate::text_anim::AnimProp::Scale)
+        .unwrap();
+    let at = |p: f32| scale.from + (scale.to - scale.from) * pop.easing.ease(p);
+    assert!(at(0.0) < 0.3);
+    assert!(at(0.7) > 1.02, "no overshoot: {}", at(0.7));
+    assert!((at(1.0) - 1.0).abs() < 1e-4);
+}
+
+#[test]
+fn the_in_of_a_short_clip_fits_inside_it() {
+    let (mut project, timeline) = project();
+    let words = words(&[("Hi", 0, 100), ("there", 120, 300)]);
+    let template = SubtitleTemplate::find("word_drop").unwrap();
+    let clips = build_clips(&mut project, timeline, &words, template);
+    for clip in &clips {
+        let secs = (clip.timeline_end() - clip.timeline_start) as f32 / 25.0;
+        let enter = clip
+            .effects
+            .title
+            .as_ref()
+            .unwrap()
+            .anim
+            .enter
+            .as_ref()
+            .unwrap();
+        assert!(
+            enter.duration <= secs * 0.6 + 1e-4,
+            "{} > {secs}",
+            enter.duration
+        );
+    }
+}
+
+#[test]
+fn linking_the_subtitles_is_undoable_and_defaults_on() {
+    let (mut project, timeline) = project();
+    let mut history = History::default();
+    let generate = generate(&mut project, timeline, "word_pop");
+    history.do_command(&mut project, Box::new(generate));
+    assert!(subtitles_linked(&project, timeline));
+    history.do_command(
+        &mut project,
+        Box::new(SetSubtitlesLinked::new(timeline, false)),
+    );
+    assert!(!subtitles_linked(&project, timeline));
+    history.undo(&mut project);
+    assert!(subtitles_linked(&project, timeline));
+}
+
+#[test]
+fn captions_saved_before_linking_load_as_linked() {
+    let old = r#"{"language":"it","words":[],"template":"line_classic"}"#;
+    let captions: Captions = serde_json::from_str(old).unwrap();
+    assert!(captions.linked);
+}
+
+#[test]
+fn every_template_animates_its_subtitles() {
+    for template in TEMPLATES.iter() {
+        let title = template.title("Hi", (1920, 1080));
+        assert!(title.anim.enter.is_some(), "{} is static", template.id);
+    }
+}
+
+#[test]
+fn a_preview_frame_animates_like_the_clips_of_its_template() {
+    let pop = SubtitleTemplate::find("word_pop").unwrap();
+    let start = pop.preview_frame("Ciao a tutti", (1080, 1920), PREVIEW_WORD_SECS + 0.01);
+    assert_eq!(start.content.default, "a");
+    let state = start.anim_state.expect("the word is popping in");
+    assert!(state.t_in < 0.05);
+    let line = SubtitleTemplate::find("line_classic").unwrap();
+    let frame = line.preview_frame("Ciao a tutti", (1920, 1080), 0.05);
+    assert_eq!(frame.content.default, "Ciao a tutti");
+    assert!(frame.anim_state.is_some());
+    let build = SubtitleTemplate::find("word_build").unwrap();
+    let frame = build.preview_frame("Ciao a tutti", (1920, 1080), 2.0 * PREVIEW_WORD_SECS + 0.1);
+    assert_eq!(frame.content.default, "Ciao a tutti");
+    assert!(
+        pop.preview_frame("", (1920, 1080), 0.3)
+            .content
+            .default
+            .is_empty()
+    );
 }

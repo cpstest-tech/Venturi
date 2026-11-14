@@ -256,19 +256,20 @@ impl ExportModal {
                 bitrate_kbps: AUDIO_KBPS,
             });
         }
-        let captions = (self.captions_on && vv_core::captions::has_subtitles(env.project, env.timeline))
-            .then(|| {
-                let text = match self.caption_format {
-                    CaptionFormat::Srt => vv_core::captions::clips_to_srt(tl),
-                    CaptionFormat::Txt => vv_core::captions::clips_to_txt(tl),
-                };
-                (
-                    settings
-                        .output_path
-                        .with_extension(self.caption_format.extension()),
-                    text,
-                )
-            });
+        let captions = (self.captions_on
+            && vv_core::captions::has_subtitles(env.project, env.timeline))
+        .then(|| {
+            let text = match self.caption_format {
+                CaptionFormat::Srt => vv_core::captions::clips_to_srt(tl),
+                CaptionFormat::Txt => vv_core::captions::clips_to_txt(tl),
+            };
+            (
+                settings
+                    .output_path
+                    .with_extension(self.caption_format.extension()),
+                text,
+            )
+        });
         StartRequest {
             settings,
             range: env.range.clone(),
@@ -332,10 +333,13 @@ impl ExportModal {
 
     /// Thumbnail with the cover button; `true` when the button was clicked.
     fn cover_view(&mut self, ui: &mut egui::Ui, env: &Env) -> bool {
-        self.cover.request(env.project, env.timeline, env.cover_frame);
+        self.cover
+            .request(env.project, env.timeline, env.cover_frame);
         self.cover.poll(ui.ctx());
-        let (rect, _) =
-            ui.allocate_exact_size(egui::vec2(LEFT_WIDTH, BODY_HEIGHT * 0.6), egui::Sense::hover());
+        let (rect, _) = ui.allocate_exact_size(
+            egui::vec2(LEFT_WIDTH, BODY_HEIGHT * 0.6),
+            egui::Sense::hover(),
+        );
         paint_fitted(ui, rect, self.cover.texture());
         let button = egui::Button::new(
             egui::RichText::new(t!("export.edit_cover"))
@@ -375,10 +379,20 @@ impl ExportModal {
         ui.add_space(theme::SPACE_1);
         ui.separator();
 
-        if section_header(ui, &mut self.video_on, &mut self.video_open, &t!("export.video")) {
+        if section_header(
+            ui,
+            &mut self.video_on,
+            &mut self.video_open,
+            &t!("export.video"),
+        ) {
             self.video_rows(ui, env, derived);
         }
-        if section_header(ui, &mut self.audio_on, &mut self.audio_open, &t!("export.audio")) {
+        if section_header(
+            ui,
+            &mut self.audio_on,
+            &mut self.audio_open,
+            &t!("export.audio"),
+        ) {
             row(ui, t!("export.format"), |ui| {
                 let items: Vec<_> = [
                     AudioFormat::Mp3,
@@ -389,7 +403,15 @@ impl ExportModal {
                 .into_iter()
                 .map(|f| (f, f.label().to_owned(), f.engine().is_available()))
                 .collect();
-                preview_combo(ui, "export_audio_format", &mut self.audio_format, &items, None, None, None);
+                preview_combo(
+                    ui,
+                    "export_audio_format",
+                    &mut self.audio_format,
+                    &items,
+                    None,
+                    None,
+                    None,
+                );
             });
             if !self.video_on {
                 ui.weak(t!("export.audio_only_hint"));
@@ -408,7 +430,15 @@ impl ExportModal {
                     .into_iter()
                     .map(|f| (f, f.label().to_owned(), true))
                     .collect();
-                preview_combo(ui, "export_caption_format", &mut self.caption_format, &items, None, None, None);
+                preview_combo(
+                    ui,
+                    "export_caption_format",
+                    &mut self.caption_format,
+                    &items,
+                    None,
+                    None,
+                    None,
+                );
             });
             ui.weak(match self.caption_format {
                 CaptionFormat::Srt => t!("export.captions_srt_hint"),
@@ -441,7 +471,15 @@ impl ExportModal {
                     (choice, format!("{label} ({w}×{h})"), true)
                 })
                 .collect();
-            preview_combo(ui, "export_resolution", &mut self.resolution, &items, None, None, None);
+            preview_combo(
+                ui,
+                "export_resolution",
+                &mut self.resolution,
+                &items,
+                None,
+                None,
+                None,
+            );
         });
 
         row(ui, t!("export.bitrate"), |ui| {
@@ -465,7 +503,15 @@ impl ExportModal {
                     (choice, label, true)
                 })
                 .collect();
-            preview_combo(ui, "export_bitrate", &mut self.bitrate, &items, None, None, None);
+            preview_combo(
+                ui,
+                "export_bitrate",
+                &mut self.bitrate,
+                &items,
+                None,
+                None,
+                None,
+            );
         });
         if self.bitrate == BitrateChoice::Custom {
             self.custom_rows(ui);
@@ -479,12 +525,26 @@ impl ExportModal {
                 .filter(|c| c.available())
                 .map(|c| (c, c.label().to_owned(), true))
                 .collect();
-            preview_combo(ui, "export_codec", &mut self.codec, &items, None, None, None);
+            preview_combo(
+                ui,
+                "export_codec",
+                &mut self.codec,
+                &items,
+                None,
+                None,
+                None,
+            );
         });
         row(ui, t!("export.container"), |ui| {
             let items: Vec<_> = Container::ALL
                 .into_iter()
-                .map(|c| (c, c.label().to_owned(), export_plan::valid_combination(self.codec, c)))
+                .map(|c| {
+                    (
+                        c,
+                        c.label().to_owned(),
+                        export_plan::valid_combination(self.codec, c),
+                    )
+                })
                 .collect();
             preview_combo(
                 ui,
@@ -518,7 +578,9 @@ impl ExportModal {
             preview_combo(ui, "export_fps", &mut self.fps, &items, None, None, None);
         });
         row(ui, t!("export.color_space"), |ui| {
-            ui.label(egui::RichText::new(t!("export.color_space_value")).color(theme::TEXT_SECONDARY));
+            ui.label(
+                egui::RichText::new(t!("export.color_space_value")).color(theme::TEXT_SECONDARY),
+            );
         });
     }
 
@@ -578,13 +640,21 @@ impl ExportModal {
         result
     }
 
-    fn running_view(&mut self, ui: &mut egui::Ui, progress: &Arc<Mutex<ExportProgress>>) -> Outcome {
+    fn running_view(
+        &mut self,
+        ui: &mut egui::Ui,
+        progress: &Arc<Mutex<ExportProgress>>,
+    ) -> Outcome {
         let (current, total, done, error, fps, preview) = {
             let p = progress.lock().unwrap();
             let fresh = p
                 .preview
                 .as_ref()
-                .filter(|_| self.preview.as_ref().is_none_or(|(v, _)| *v != p.preview_version))
+                .filter(|_| {
+                    self.preview
+                        .as_ref()
+                        .is_none_or(|(v, _)| *v != p.preview_version)
+                })
                 .map(|frame| (p.preview_version, frame.clone()));
             (
                 p.current_frame,
@@ -603,9 +673,9 @@ impl ExportModal {
                 [frame.width as usize, frame.height as usize],
                 &frame.rgba,
             );
-            let texture = ui
-                .ctx()
-                .load_texture("export_preview", image, egui::TextureOptions::LINEAR);
+            let texture =
+                ui.ctx()
+                    .load_texture("export_preview", image, egui::TextureOptions::LINEAR);
             self.preview = Some((version, texture));
         }
         // Cancelled: the session already removed the partial files.
@@ -709,13 +779,23 @@ fn row(ui: &mut egui::Ui, label: impl Into<String>, add: impl FnOnce(&mut egui::
 fn section_header(ui: &mut egui::Ui, on: &mut bool, open: &mut bool, title: &str) -> bool {
     ui.add_space(theme::SPACE_1);
     ui.horizontal(|ui| {
-        let (rect, response) =
-            ui.allocate_exact_size(egui::vec2(theme::ICON_SIZE, theme::ICON_SIZE), egui::Sense::click());
+        let (rect, response) = ui.allocate_exact_size(
+            egui::vec2(theme::ICON_SIZE, theme::ICON_SIZE),
+            egui::Sense::click(),
+        );
         let c = rect.center();
         let points = if *open {
-            vec![c + egui::vec2(-4.0, -2.0), c + egui::vec2(4.0, -2.0), c + egui::vec2(0.0, 3.0)]
+            vec![
+                c + egui::vec2(-4.0, -2.0),
+                c + egui::vec2(4.0, -2.0),
+                c + egui::vec2(0.0, 3.0),
+            ]
         } else {
-            vec![c + egui::vec2(-2.0, -4.0), c + egui::vec2(3.0, 0.0), c + egui::vec2(-2.0, 4.0)]
+            vec![
+                c + egui::vec2(-2.0, -4.0),
+                c + egui::vec2(3.0, 0.0),
+                c + egui::vec2(-2.0, 4.0),
+            ]
         };
         ui.painter().add(egui::Shape::convex_polygon(
             points,
@@ -736,7 +816,10 @@ fn section_header(ui: &mut egui::Ui, on: &mut bool, open: &mut bool, title: &str
 }
 
 fn paint_film_icon(ui: &mut egui::Ui) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(theme::ICON_SIZE, theme::ICON_SIZE), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(theme::ICON_SIZE, theme::ICON_SIZE),
+        egui::Sense::hover(),
+    );
     let stroke = egui::Stroke::new(theme::ICON_STROKE, theme::TEXT_SECONDARY);
     let body = rect.shrink2(egui::vec2(1.0, 2.0));
     let painter = ui.painter();
@@ -744,13 +827,19 @@ fn paint_film_icon(ui: &mut egui::Ui) {
     for i in 0..3 {
         let y = body.top() + 2.5 + i as f32 * 3.5;
         painter.circle_filled(egui::pos2(body.left() + 2.0, y), 0.8, theme::TEXT_SECONDARY);
-        painter.circle_filled(egui::pos2(body.right() - 2.0, y), 0.8, theme::TEXT_SECONDARY);
+        painter.circle_filled(
+            egui::pos2(body.right() - 2.0, y),
+            0.8,
+            theme::TEXT_SECONDARY,
+        );
     }
 }
 
 fn info_icon(ui: &mut egui::Ui, hint: &str) {
-    let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(theme::ICON_SIZE, theme::ICON_SIZE), egui::Sense::hover());
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(theme::ICON_SIZE, theme::ICON_SIZE),
+        egui::Sense::hover(),
+    );
     let painter = ui.painter();
     painter.circle_stroke(
         rect.center(),

@@ -623,7 +623,10 @@ impl VenturiApp {
     }
 
     /// An effect element: an adjustment clip carrying the effect, which
-    /// processes every track below for its length.
+    /// processes every track below for its length. It goes on the effects
+    /// track under the pointer when it has room, else on another one, else on
+    /// a new one on top; then it is selected so Properties shows its
+    /// parameters.
     pub(crate) fn add_fx_element_at(
         &mut self,
         id: &str,
@@ -637,32 +640,25 @@ impl VenturiApp {
         };
         let group = self.session.history.begin_group();
         let timeline_id = self.ensure_timeline();
-        if let Some(tracks) = self.resolve_drop_tracks(timeline_id, target, true, false) {
-            let track = tracks.video.expect("an element always has a video track");
-            let fps = self.session.project.timelines[timeline_id].fps.as_f64();
-            let len = ((fps * f64::from(millis) / 1000.0).round() as FrameIdx).max(1);
-            let clip = vv_core::edit::insert_generator(
-                &mut self.session.project,
-                &mut self.session.history,
-                timeline_id,
-                timeline_ui::Generator::Adjustment,
-                track,
-                start,
-                Some(len),
-            );
-            self.session.history.do_command(
-                &mut self.session.project,
-                Box::new(vv_core::set_clip_assets(
-                    timeline_id,
-                    track,
-                    clip,
-                    vec![AssetFx::new(asset.id.clone(), asset.default_params())],
-                )),
-            );
-        }
+        let fps = self.session.project.timelines[timeline_id].fps.as_f64();
+        let len = ((fps * f64::from(millis) / 1000.0).round() as FrameIdx).max(1);
+        let preferred = match target {
+            timeline_ui::MediaDropTarget::Track(track) => Some(track),
+            _ => None,
+        };
+        let element = vv_core::fx::insert_fx_element(
+            &mut self.session.project,
+            &mut self.session.history,
+            timeline_id,
+            preferred,
+            start,
+            len,
+            vec![AssetFx::new(asset.id.clone(), asset.default_params())],
+        );
         self.session
             .history
             .end_group_as(group, vv_core::CommandLabel::InsertClips);
+        self.timeline_state.selected = std::iter::once(element).collect();
     }
 
     fn transition_pair_for_add(&self) -> Option<(usize, vv_core::ClipId, vv_core::ClipId)> {
@@ -710,6 +706,15 @@ impl VenturiApp {
         }
     }
 
+    pub(crate) fn is_effect_element(&self, target: &PanelTarget) -> bool {
+        self.session
+            .project
+            .timelines
+            .get(target.timeline)
+            .and_then(|t| t.clip(target.track_index, target.clip_id))
+            .is_some_and(vv_core::Clip::is_effect_element)
+    }
+
     /// Rows of the asset effects and filters of the first target clip: switch,
     /// parameters (double click resets), remove. One slider drag is one undo
     /// step: the app merges the commands while the pointer is down.
@@ -732,15 +737,20 @@ impl VenturiApp {
             return;
         }
         ui.add_space(6.0);
-        let (open, _) = crate::properties_panel::section_header(ui, &t!("fx.props_title"), false);
-        if !open {
-            return;
-        }
+        let (open, reset_all) =
+            crate::properties_panel::section_header(ui, &t!("fx.props_title"), true);
         let library = assets::library();
         let lang = rust_i18n::locale().to_string();
         let mut after = before.clone();
+        if reset_all {
+            for fx in &mut after {
+                if let Some(asset) = library.get(&fx.id) {
+                    fx.params = asset.default_params();
+                }
+            }
+        }
         let mut remove = None;
-        for (index, fx) in after.iter_mut().enumerate() {
+        for (index, fx) in after.iter_mut().enumerate().filter(|_| open) {
             let asset = library.get(&fx.id);
             ui.horizontal(|ui| {
                 ui.checkbox(&mut fx.enabled, "");
@@ -767,7 +777,8 @@ impl VenturiApp {
                     ui.label(param.name.get(&lang));
                     let response =
                         ui.add(egui::Slider::new(value, param.min..=param.max).max_decimals(3));
-                    if response.double_clicked() {
+                    let reset = crate::properties_panel::reset_icon_button(ui).clicked();
+                    if reset || response.double_clicked() {
                         *value = param.default;
                     }
                 });

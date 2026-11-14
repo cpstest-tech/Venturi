@@ -143,8 +143,7 @@ impl MixerPanelState {
 }
 
 pub(crate) fn show_mixer(
-    ctx: &egui::Context,
-    open: &mut bool,
+    ui: &mut egui::Ui,
     state: &mut MixerPanelState,
     project: &Project,
     timeline_id: Option<TimelineId>,
@@ -153,77 +152,80 @@ pub(crate) fn show_mixer(
     chain: &ChainView,
 ) -> Vec<BoxedCommand> {
     let mut commands: Vec<BoxedCommand> = Vec::new();
-    egui::Window::new(t!("mixer.title"))
-        .id(egui::Id::new("audio_mixer"))
-        .open(open)
-        .default_width(420.0)
-        .show(ctx, |ui| {
-            let Some((timeline_id, timeline)) =
-                timeline_id.and_then(|id| project.timelines.get(id).map(|t| (id, t)))
-            else {
-                ui.label(t!("mixer.no_timeline"));
-                return;
-            };
-            let mut falling = false;
-            // The strips with fewer effects leave the difference empty on
-            // top, so the faders stay on one line.
-            let effect_slots = timeline
-                .tracks_of_kind(TrackKind::Audio)
-                .map(|(_, t)| &t.mix)
-                .chain([&timeline.master])
-                .map(|strip| strip.effects.len())
-                .max()
-                .unwrap_or(0);
-            let keys = vv_audio::plugin_keys_in(0, timeline);
-            let mut edits: Vec<(StripEdit, MixerChannel)> = Vec::new();
-            egui::ScrollArea::horizontal().show(ui, |ui| {
-                ui.horizontal_top(|ui| {
-                    for (index, track) in timeline.tracks_of_kind(TrackKind::Audio) {
-                        let channel = MixerChannel::Track(index);
-                        let level = state.level(channel, meters.and_then(|m| m.track(index)));
-                        falling |= level.iter().any(|l| *l > 0.001);
-                        let flags = Some((track.solo, track.muted));
-                        let edit = strip(
-                            ui,
-                            &keys,
-                            channel,
-                            &timeline.track_label(index),
-                            &track.mix,
-                            flags,
-                            level,
-                            effect_slots,
-                            chain,
-                        );
-                        edits.push((edit, channel));
-                    }
-                    let level = state.level(MixerChannel::Master, meters.map(MixMeters::master));
+    ui.scope(|ui| {
+        let Some((timeline_id, timeline)) =
+            timeline_id.and_then(|id| project.timelines.get(id).map(|t| (id, t)))
+        else {
+            ui.label(t!("mixer.no_timeline"));
+            return;
+        };
+        let mut falling = false;
+        // The strips with fewer effects leave the difference empty on
+        // top, so the faders stay on one line.
+        let effect_slots = timeline
+            .tracks_of_kind(TrackKind::Audio)
+            .map(|(_, t)| &t.mix)
+            .chain([&timeline.master])
+            .map(|strip| strip.effects.len())
+            .max()
+            .unwrap_or(0);
+        let keys = vv_audio::plugin_keys_in(0, timeline);
+        let mut edits: Vec<(StripEdit, MixerChannel)> = Vec::new();
+        egui::ScrollArea::horizontal().show(ui, |ui| {
+            ui.horizontal_top(|ui| {
+                for (index, track) in timeline.tracks_of_kind(TrackKind::Audio) {
+                    let channel = MixerChannel::Track(index);
+                    let level = state.level(channel, meters.and_then(|m| m.track(index)));
                     falling |= level.iter().any(|l| *l > 0.001);
+                    let flags = Some((track.solo, track.muted));
                     let edit = strip(
                         ui,
                         &keys,
-                        MixerChannel::Master,
-                        &t!("mixer.master"),
-                        &timeline.master,
-                        None,
+                        channel,
+                        &timeline.track_label(index),
+                        &track.mix,
+                        flags,
                         level,
                         effect_slots,
                         chain,
                     );
-                    edits.push((edit, MixerChannel::Master));
-                });
+                    edits.push((edit, channel));
+                }
+                let level = state.level(MixerChannel::Master, meters.map(MixMeters::master));
+                falling |= level.iter().any(|l| *l > 0.001);
+                let edit = strip(
+                    ui,
+                    &keys,
+                    MixerChannel::Master,
+                    &t!("mixer.master"),
+                    &timeline.master,
+                    None,
+                    level,
+                    effect_slots,
+                    chain,
+                );
+                edits.push((edit, MixerChannel::Master));
             });
-            if falling {
-                ui.ctx().request_repaint();
-            }
-            state.rescan_requested |= edits.iter().any(|(edit, _)| edit.rescan);
-            for (edit, channel) in edits {
-                state.follow_edit(&edit, timeline_id, channel);
-                commands.extend(edit.into_commands(timeline_id, channel));
-            }
         });
+        if falling {
+            ui.ctx().request_repaint();
+        }
+        state.rescan_requested |= edits.iter().any(|(edit, _)| edit.rescan);
+        for (edit, channel) in edits {
+            state.follow_edit(&edit, timeline_id, channel);
+            commands.extend(edit.into_commands(timeline_id, channel));
+        }
+    });
     match timeline_id.and_then(|id| project.timelines.get(id).map(|t| (id, t))) {
         Some((id, timeline)) => {
-            commands.extend(effect_window(ctx, state, id, timeline, meters, presets));
+            commands.extend(effect_window(
+                ui.ctx(),
+                state,
+                id,
+                timeline,
+                meters,
+                presets,
+            ));
         }
         None => state.open_effect = None,
     }

@@ -707,10 +707,7 @@ const MAX_RECENT_PROJECTS: usize = 10;
 pub struct PanelLayout {
     pub media_pool_open: bool,
     pub effects_open: bool,
-    pub keyframe_editor_open: bool,
-    pub mixer_open: bool,
-    pub color_window_open: bool,
-    /// What the Color window's two scope slots show.
+    /// What the Color editor's two scope slots show.
     pub color_scopes: [vv_render::ScopeKind; 2],
     /// Share of the left column's height given to the media pool when the
     /// Effects panel is open too.
@@ -724,9 +721,6 @@ impl Default for PanelLayout {
         Self {
             media_pool_open: true,
             effects_open: false,
-            keyframe_editor_open: false,
-            mixer_open: false,
-            color_window_open: false,
             color_scopes: [
                 vv_render::ScopeKind::Waveform,
                 vv_render::ScopeKind::Vectorscope,
@@ -986,12 +980,6 @@ struct PanelLayoutFile {
     #[serde(default)]
     effects_open: Option<bool>,
     #[serde(default)]
-    keyframe_editor_open: Option<bool>,
-    #[serde(default)]
-    mixer_open: Option<bool>,
-    #[serde(default)]
-    color_window_open: Option<bool>,
-    #[serde(default)]
     color_scopes: Option<[vv_render::ScopeKind; 2]>,
     #[serde(default)]
     media_pool_fraction: Option<f32>,
@@ -1177,15 +1165,6 @@ impl Settings {
                 .media_pool_open
                 .unwrap_or(defaults.media_pool_open),
             effects_open: file.panels.effects_open.unwrap_or(defaults.effects_open),
-            keyframe_editor_open: file
-                .panels
-                .keyframe_editor_open
-                .unwrap_or(defaults.keyframe_editor_open),
-            mixer_open: file.panels.mixer_open.unwrap_or(defaults.mixer_open),
-            color_window_open: file
-                .panels
-                .color_window_open
-                .unwrap_or(defaults.color_window_open),
             color_scopes: file.panels.color_scopes.unwrap_or(defaults.color_scopes),
             media_pool_fraction: file
                 .panels
@@ -1256,9 +1235,6 @@ impl Settings {
             panels: PanelLayoutFile {
                 media_pool_open: Some(self.panels.media_pool_open),
                 effects_open: Some(self.panels.effects_open),
-                keyframe_editor_open: Some(self.panels.keyframe_editor_open),
-                mixer_open: Some(self.panels.mixer_open),
-                color_window_open: Some(self.panels.color_window_open),
                 color_scopes: Some(self.panels.color_scopes),
                 media_pool_fraction: Some(self.panels.media_pool_fraction),
                 media_pool_layout: Some(self.panels.media_pool_layout),

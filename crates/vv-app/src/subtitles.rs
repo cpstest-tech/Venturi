@@ -37,6 +37,9 @@ pub(crate) struct SubtitleState {
     pub job: Option<TranscribeJob>,
     pub message: Option<Message>,
     pub previews: HashMap<String, egui::TextureHandle>,
+    /// The card under the pointer and when the pointer got there.
+    pub hover: Option<(String, f64)>,
+    pub hover_texture: Option<egui::TextureHandle>,
 }
 
 pub(crate) enum Message {
@@ -60,6 +63,17 @@ fn words_of(transcript: &Transcript) -> Vec<CaptionWord> {
             end_ms: w.end_ms,
         })
         .collect()
+}
+
+fn error_text(error: &vv_transcribe::Error) -> String {
+    use vv_transcribe::Error;
+    match error {
+        Error::Cancelled => t!("subtitles.cancelled"),
+        Error::Download(detail) => t!("subtitles.error_download", detail = detail),
+        Error::Model(detail) => t!("subtitles.error_model", detail = detail),
+        Error::Transcribe(detail) => t!("subtitles.error_transcribe", detail = detail),
+    }
+    .into_owned()
 }
 
 /// The timeline's mix as 16 kHz mono, built as the export mixes it.
@@ -122,7 +136,8 @@ impl VenturiApp {
             return;
         }
         let Some(model_dir) = models_dir() else {
-            self.subtitles.message = Some(Message::Error(t!("subtitles.no_model_dir").into_owned()));
+            self.subtitles.message =
+                Some(Message::Error(t!("subtitles.no_model_dir").into_owned()));
             return;
         };
         self.subtitles.message = None;
@@ -135,9 +150,10 @@ impl VenturiApp {
             let (progress, cancel) = (progress.clone(), cancel.clone());
             move || {
                 let result = (|| {
-                    let model = vv_transcribe::ensure_model(&model_dir, &progress, &cancel)?;
+                    let model = vv_transcribe::Model::preferred();
+                    let path = vv_transcribe::ensure_model(&model_dir, model, &progress, &cancel)?;
                     let samples = mix_for_speech(&project, timeline_id, &cancel)?;
-                    vv_transcribe::transcribe(&model, &samples, language, &progress, &cancel)
+                    vv_transcribe::transcribe(model, &path, &samples, language, &progress, &cancel)
                 })();
                 let _ = tx.send(result);
             }
@@ -176,20 +192,28 @@ impl VenturiApp {
         };
         match result {
             Ok(transcript) if transcript.words.is_empty() => {
-                self.subtitles.message = Some(Message::Info(t!("subtitles.no_speech").into_owned()));
+                self.subtitles.message =
+                    Some(Message::Info(t!("subtitles.no_speech").into_owned()));
             }
             Ok(transcript) => {
                 let captions = Captions {
                     language: transcript.language.clone(),
                     words: words_of(&transcript),
                     template: job.template.clone(),
+                    linked: self
+                        .session
+                        .project
+                        .captions
+                        .get(&job.timeline)
+                        .is_none_or(|c| c.linked),
                 };
                 self.apply_captions(job.timeline, captions);
             }
             Err(vv_transcribe::Error::Cancelled) => {
-                self.subtitles.message = Some(Message::Info(t!("subtitles.cancelled").into_owned()));
+                self.subtitles.message =
+                    Some(Message::Info(t!("subtitles.cancelled").into_owned()));
             }
-            Err(e) => self.subtitles.message = Some(Message::Error(e.to_string())),
+            Err(e) => self.subtitles.message = Some(Message::Error(error_text(&e))),
         }
     }
 

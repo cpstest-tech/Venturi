@@ -37,9 +37,10 @@ fn fixture(clips: &[(u32, u32, u32, i64)]) -> Fixture {
     let mut track = Track::new_main();
     let mut start = 0;
     for &(w, h, fps, frames) in clips {
-        let media = project
-            .media_pool
-            .insert(item(meta(w, h, Rational::new(fps as i32, 1), frames, true)));
+        let media =
+            project
+                .media_pool
+                .insert(item(meta(w, h, Rational::new(fps as i32, 1), frames, true)));
         let id = project.alloc_clip_id();
         track.clips.push(Clip::from_source_range(
             id,
@@ -81,19 +82,30 @@ fn the_default_resolution_follows_the_project_or_is_1080p() {
 
 #[test]
 fn match_best_takes_the_largest_video() {
-    let f = fixture(&[(1280, 720, 30, 30), (3840, 2160, 60, 30), (1080, 1920, 25, 30)]);
+    let f = fixture(&[
+        (1280, 720, 30, 30),
+        (3840, 2160, 60, 30),
+        (1080, 1920, 25, 30),
+    ]);
     let media = active_video_media(&f.project, f.timeline);
     assert_eq!(media.len(), 3);
     assert_eq!(best_short_side(&f.project, &media), Some(2160));
     assert_eq!(best_fps(&f.project, &media), Some(Rational::new(60, 1)));
     let short = target_short_side(ResolutionChoice::MatchBest, 1080, Some(2160));
     assert_eq!(short, 2160);
-    assert_eq!(target_short_side(ResolutionChoice::MatchBest, 1080, None), 1080);
+    assert_eq!(
+        target_short_side(ResolutionChoice::MatchBest, 1080, None),
+        1080
+    );
 }
 
 #[test]
 fn hidden_disabled_and_photo_clips_are_ignored() {
-    let mut f = fixture(&[(1920, 1080, 30, 30), (3840, 2160, 60, 30), (3840, 2160, 60, 30)]);
+    let mut f = fixture(&[
+        (1920, 1080, 30, 30),
+        (3840, 2160, 60, 30),
+        (3840, 2160, 60, 30),
+    ]);
     let photo = f.project.media_pool.insert(item(meta(
         8000,
         6000,
@@ -109,14 +121,16 @@ fn hidden_disabled_and_photo_clips_are_ignored() {
     timeline.tracks[0].clips.truncate(2);
     timeline.tracks.push(hidden);
     let id = f.project.alloc_clip_id();
-    f.project.timelines[f.timeline].tracks[0].clips.push(Clip::from_source_range(
-        id,
-        ClipSource::Media(photo),
-        0,
-        150,
-        60,
-        Rational::one(),
-    ));
+    f.project.timelines[f.timeline].tracks[0]
+        .clips
+        .push(Clip::from_source_range(
+            id,
+            ClipSource::Media(photo),
+            0,
+            150,
+            60,
+            Rational::one(),
+        ));
     let media = active_video_media(&f.project, f.timeline);
     assert_eq!(media.len(), 1);
     assert_eq!(best_short_side(&f.project, &media), Some(1080));
@@ -138,14 +152,16 @@ fn compound_clips_count_through_their_content() {
     compound.compound = Some(inner);
     let media = f.project.media_pool.insert(compound);
     let id = f.project.alloc_clip_id();
-    f.project.timelines[outer].tracks[0].clips.push(Clip::from_source_range(
-        id,
-        ClipSource::Media(media),
-        0,
-        30,
-        0,
-        Rational::one(),
-    ));
+    f.project.timelines[outer].tracks[0]
+        .clips
+        .push(Clip::from_source_range(
+            id,
+            ClipSource::Media(media),
+            0,
+            30,
+            0,
+            Rational::one(),
+        ));
     let found = active_video_media(&f.project, outer);
     assert_eq!(best_short_side(&f.project, &found), Some(2160));
 }
@@ -160,8 +176,14 @@ fn ffprobe_output_gives_the_stream_bitrate_or_the_container_one() {
 
 #[test]
 fn match_best_uses_the_highest_bitrate_and_falls_back_to_recommended() {
-    let detected = [12_000u32, 25_000, 60_000].into_iter().max().map(|k| f64::from(k) / 1000.0);
-    assert_eq!(choose_mbps(BitrateChoice::MatchBest, 8.0, detected, 5.0), 60.0);
+    let detected = [12_000u32, 25_000, 60_000]
+        .into_iter()
+        .max()
+        .map(|k| f64::from(k) / 1000.0);
+    assert_eq!(
+        choose_mbps(BitrateChoice::MatchBest, 8.0, detected, 5.0),
+        60.0
+    );
     assert_eq!(choose_mbps(BitrateChoice::MatchBest, 8.0, None, 5.0), 8.0);
 }
 
@@ -248,7 +270,13 @@ fn only_what_the_engine_encodes_is_available() {
 fn the_frame_rate_follows_the_choice() {
     let timeline = Rational::new(30, 1);
     let best = Some(Rational::new(60, 1));
-    assert_eq!(target_fps(FpsChoice::F24, timeline, best), Rational::new(24, 1));
-    assert_eq!(target_fps(FpsChoice::MatchBest, timeline, best), Rational::new(60, 1));
+    assert_eq!(
+        target_fps(FpsChoice::F24, timeline, best),
+        Rational::new(24, 1)
+    );
+    assert_eq!(
+        target_fps(FpsChoice::MatchBest, timeline, best),
+        Rational::new(60, 1)
+    );
     assert_eq!(target_fps(FpsChoice::MatchBest, timeline, None), timeline);
 }

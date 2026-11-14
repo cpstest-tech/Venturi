@@ -49,8 +49,11 @@ subtitles.stage_transcribe:
   it: "Trascrizione…"
 
 subtitles.model_download_hint:
-  en: "The model (about 180 MB) is downloaded the first time."
-  it: "Il modello (circa 180 MB) viene scaricato la prima volta."
+  en: "The model (about %{mb} MB) is downloaded the first time."
+  it: "Il modello (circa %{mb} MB) viene scaricato la prima volta."
+subtitles.gpu:
+  en: "Accelerated on %{name}"
+  it: "Accelerato su %{name}"
 
 subtitles.existing:
   en: "%{words} words · %{language} · %{template}"
@@ -71,6 +74,18 @@ subtitles.no_speech:
 subtitles.cancelled:
   en: "Cancelled."
   it: "Annullato."
+
+subtitles.error_download:
+  en: "Could not download the speech model: %{detail}"
+  it: "Download del modello vocale non riuscito: %{detail}"
+
+subtitles.error_model:
+  en: "Could not load the speech model: %{detail}"
+  it: "Impossibile caricare il modello vocale: %{detail}"
+
+subtitles.error_transcribe:
+  en: "Transcription failed: %{detail}"
+  it: "Trascrizione non riuscita: %{detail}"
 
 subtitles.pick_template:
   en: "Pick a template first."
@@ -111,6 +126,18 @@ subtitles.tpl_line_classic:
 subtitles.tpl_line_outline:
   en: "Bold"
   it: "Grassetto"
+
+subtitles.tpl_word_slam:
+  en: "Slam"
+  it: "Impatto"
+
+subtitles.tpl_word_drop:
+  en: "Drop"
+  it: "Caduta"
+
+subtitles.tpl_line_typewriter:
+  en: "Typewriter"
+  it: "Macchina da scrivere"
 
 subtitles.tpl_line_yellow:
   en: "Yellow"

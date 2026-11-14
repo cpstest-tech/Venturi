@@ -5,8 +5,8 @@
 use crate::easing::Easing;
 use crate::model::Rgba;
 use crate::text_anim::{
-    AnimDescriptor, AnimProp as P, Decor, DecorShape, Granularity as G, PropTrack as T,
-    UnitOrder, Wave,
+    AnimDescriptor, AnimProp as P, Decor, DecorShape, Granularity as G, PropTrack as T, UnitOrder,
+    Wave,
 };
 
 pub const IN_IDS: [&str; 14] = [
@@ -211,6 +211,44 @@ pub fn in_preset(id: &str) -> Option<AnimDescriptor> {
     })
 }
 
+/// Short In animations for subtitle words and lines; they are not in `IN_IDS`.
+pub fn subtitle_in(id: &str) -> Option<AnimDescriptor> {
+    Some(match id {
+        "sub_pop" => with(
+            base(id, 0.32, G::Block, Easing::BackOut),
+            &[T::new(P::Scale, 0.15, 1.0), T::new(P::Opacity, 0.0, 1.0)],
+        ),
+        "sub_fade" => with(
+            base(id, 0.2, G::Block, Easing::Linear),
+            &[T::new(P::Opacity, 0.0, 1.0)],
+        ),
+        "sub_rise" => with(
+            base(id, 0.3, G::Block, Easing::CubicOut),
+            &[T::new(P::PosY, 0.6, 0.0), T::new(P::Opacity, 0.0, 1.0)],
+        ),
+        "sub_slam" => with(
+            base(id, 0.18, G::Block, Easing::CubicIn),
+            &[
+                T::new(P::Scale, 2.8, 1.0),
+                T::new(P::Opacity, 0.0, 1.0),
+                T::new(P::Blur, 0.2, 0.0),
+            ],
+        ),
+        "sub_drop" => with(
+            base(id, 0.45, G::Block, Easing::BounceOut),
+            &[T::new(P::PosY, 1.6, 0.0), T::new(P::Opacity, 0.0, 1.0)],
+        ),
+        "sub_typewriter" => staggered(
+            with(
+                base(id, 0.9, G::Char, Easing::Linear),
+                &[T::new(P::Opacity, 0.0, 1.0)],
+            ),
+            0.9,
+        ),
+        _ => return None,
+    })
+}
+
 pub fn out_preset(id: &str) -> Option<AnimDescriptor> {
     match id {
         "dissolve" => {
@@ -279,15 +317,13 @@ pub fn loop_preset(id: &str) -> Option<AnimDescriptor> {
             d.tint = CYAN;
             d
         }
-        "shimmer" => {
-            staggered(
-                with(
-                    base(id, 1.8, G::Char, Easing::Linear),
-                    &[T::new(P::Tint, 0.0, 0.9).wave(Wave::Triangle)],
-                ),
-                0.5,
-            )
-        }
+        "shimmer" => staggered(
+            with(
+                base(id, 1.8, G::Char, Easing::Linear),
+                &[T::new(P::Tint, 0.0, 0.9).wave(Wave::Triangle)],
+            ),
+            0.5,
+        ),
         "flicker" => {
             let mut d = staggered(
                 with(

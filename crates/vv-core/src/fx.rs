@@ -10,6 +10,85 @@ use crate::{
 };
 use std::collections::HashMap;
 
+/// The effects track an element of `len` frames at `start` lands on: the
+/// `preferred` one if it is an unlocked effects track with room, else the
+/// topmost such track with room. `None`: a new one is needed.
+pub fn effects_track_for(
+    timeline: &Timeline,
+    preferred: Option<usize>,
+    start: FrameIdx,
+    len: FrameIdx,
+) -> Option<usize> {
+    let fits = |index: usize| {
+        timeline
+            .tracks
+            .get(index)
+            .is_some_and(|t| t.effects && !t.locked && t.is_free(start, len))
+    };
+    preferred
+        .filter(|&i| fits(i))
+        .or_else(|| (0..timeline.tracks.len()).rev().find(|&i| fits(i)))
+}
+
+/// Inserts an effect or filter element (an adjustment clip carrying
+/// `assets`) on an effects track, creating one on top if none has room.
+/// One undo step. Returns where it went.
+pub fn insert_fx_element(
+    project: &mut Project,
+    history: &mut History,
+    timeline_id: TimelineId,
+    preferred: Option<usize>,
+    start: FrameIdx,
+    len: FrameIdx,
+    assets: Vec<AssetFx>,
+) -> (usize, ClipId) {
+    let group = history.begin_group();
+    let len = len.max(1);
+    let start = start.max(0);
+    let track = match effects_track_for(&project.timelines[timeline_id], preferred, start, len) {
+        Some(track) => track,
+        None => {
+            history.do_command(project, Box::new(AddTrack::effects(timeline_id)));
+            project.timelines[timeline_id].tracks.len() - 1
+        }
+    };
+    let id = project.alloc_clip_id();
+    let mut clip = Clip::from_source_range(
+        id,
+        ClipSource::Adjustment,
+        0,
+        len,
+        start,
+        crate::Rational::one(),
+    );
+    clip.effects.assets = assets;
+    crate::edit::insert_clips(
+        project,
+        history,
+        timeline_id,
+        vec![(track, clip, None::<u64>)],
+        CommandLabel::InsertClips,
+    );
+    history.end_group_as(group, CommandLabel::InsertClips);
+    (track, id)
+}
+
+/// Video tracks holding nothing but effect elements: the effects tracks of
+/// files saved before the flag existed.
+pub fn mark_effects_tracks(project: &mut Project) {
+    for timeline in project.timelines.values_mut() {
+        for track in &mut timeline.tracks {
+            if track.kind == TrackKind::Video
+                && !track.main
+                && !track.clips.is_empty()
+                && track.clips.iter().all(Clip::is_effect_element)
+            {
+                track.effects = true;
+            }
+        }
+    }
+}
+
 /// The clip touching `edge` of `clip_id` on the same track (a gap of
 /// `ADJACENT_TOLERANCE` frames still counts). Effect elements never pair.
 pub fn adjacent_neighbor(track: &Track, clip_id: ClipId, edge: FadeEdge) -> Option<ClipId> {

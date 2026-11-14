@@ -18,7 +18,7 @@ pub mod text_style;
 pub mod text_template;
 pub mod workflow;
 
-pub use captions::{CaptionWord, Captions, SetCaptions, SubtitleTemplate};
+pub use captions::{CaptionWord, Captions, SetCaptions, SetSubtitlesLinked, SubtitleTemplate};
 pub use command::{
     AddAudioEffect, AddTrack, Command, CommandLabel, CompositeCommand, CompoundPlan, FadeEdge,
     GroupMark, History, InsertClip, JoinableStep, KeyframePick, KeyframeTarget, KeyframeValue,

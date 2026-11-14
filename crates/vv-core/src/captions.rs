@@ -9,6 +9,7 @@ use crate::model::{
     Clip, ClipFilter, ClipSource, FilterKind, FontCase, FrameIdx, HAnchor, Keyframed, Project,
     Rational, Rgba, TextAlign, TimelineId, TitleBackground, TitleParams, Track, TrackKind, VAnchor,
 };
+use crate::text_anim_presets;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CaptionWord {
@@ -17,12 +18,30 @@ pub struct CaptionWord {
     pub end_ms: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Captions {
     pub language: String,
     pub words: Vec<CaptionWord>,
     /// Id of the `SubtitleTemplate` the clips were last built with.
     pub template: String,
+    /// Editing the look of one subtitle edits all of them.
+    #[serde(default = "linked_by_default")]
+    pub linked: bool,
+}
+
+fn linked_by_default() -> bool {
+    true
+}
+
+impl Default for Captions {
+    fn default() -> Self {
+        Self {
+            language: String::new(),
+            words: Vec::new(),
+            template: String::new(),
+            linked: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,9 +74,12 @@ pub struct SubtitleTemplate {
     box_alpha: f32,
     /// A dark halo behind the text (the Drop Shadow filter).
     halo: bool,
+    /// Id of the In animation of each clip, see `text_anim_presets::subtitle_in`.
+    enter: Option<&'static str>,
 }
 
 pub const DEFAULT_TEMPLATE: &str = "line_classic";
+pub const SUBTITLE_FONT: &str = "Montserrat";
 
 const fn template(
     id: &'static str,
@@ -69,6 +91,7 @@ const fn template(
     color: [f32; 3],
     box_alpha: f32,
     halo: bool,
+    enter: Option<&'static str>,
 ) -> SubtitleTemplate {
     SubtitleTemplate {
         id,
@@ -80,12 +103,13 @@ const fn template(
         color,
         box_alpha,
         halo,
+        enter,
     }
 }
 
 use TemplateCategory::{Line, WordByWord};
 
-pub const TEMPLATES: [SubtitleTemplate; 6] = [
+pub const TEMPLATES: [SubtitleTemplate; 9] = [
     template(
         "word_pop",
         WordByWord,
@@ -96,6 +120,7 @@ pub const TEMPLATES: [SubtitleTemplate; 6] = [
         [1.0, 1.0, 1.0],
         0.0,
         true,
+        Some("sub_pop"),
     ),
     template(
         "word_yellow",
@@ -107,6 +132,7 @@ pub const TEMPLATES: [SubtitleTemplate; 6] = [
         [1.0, 0.85, 0.1],
         0.0,
         true,
+        Some("sub_rise"),
     ),
     template(
         "word_build",
@@ -118,6 +144,7 @@ pub const TEMPLATES: [SubtitleTemplate; 6] = [
         [1.0, 1.0, 1.0],
         0.0,
         true,
+        Some("sub_fade"),
     ),
     template(
         "line_classic",
@@ -129,6 +156,7 @@ pub const TEMPLATES: [SubtitleTemplate; 6] = [
         [1.0, 1.0, 1.0],
         0.6,
         false,
+        Some("sub_fade"),
     ),
     template(
         "line_outline",
@@ -140,6 +168,7 @@ pub const TEMPLATES: [SubtitleTemplate; 6] = [
         [1.0, 1.0, 1.0],
         0.0,
         true,
+        Some("sub_rise"),
     ),
     template(
         "line_yellow",
@@ -151,6 +180,43 @@ pub const TEMPLATES: [SubtitleTemplate; 6] = [
         [1.0, 0.85, 0.1],
         0.0,
         true,
+        Some("sub_rise"),
+    ),
+    template(
+        "word_slam",
+        WordByWord,
+        Reveal::Single,
+        0.12,
+        900,
+        FontCase::Upper,
+        [1.0, 0.35, 0.2],
+        0.0,
+        true,
+        Some("sub_slam"),
+    ),
+    template(
+        "word_drop",
+        WordByWord,
+        Reveal::Single,
+        0.1,
+        800,
+        FontCase::Mixed,
+        [0.3, 0.9, 1.0],
+        0.0,
+        true,
+        Some("sub_drop"),
+    ),
+    template(
+        "line_typewriter",
+        Line,
+        Reveal::Line,
+        0.055,
+        700,
+        FontCase::Mixed,
+        [1.0, 1.0, 1.0],
+        0.6,
+        false,
+        Some("sub_typewriter"),
     ),
 ];
 
@@ -168,6 +234,9 @@ impl SubtitleTemplate {
         let height = resolution.1 as f32;
         let [r, g, b] = self.color;
         let mut title = TitleParams {
+            // A bundled variable font: the system sans may lack the weight
+            // and fall back to an unrelated face.
+            font_family: SUBTITLE_FONT.to_owned(),
             font_weight: self.weight,
             color: Rgba { r, g, b, a: 1.0 },
             size: (height * self.size).round().max(8.0),
@@ -178,6 +247,7 @@ impl SubtitleTemplate {
             ..TitleParams::default()
         };
         title.content = Keyframed::constant(text.to_owned());
+        title.anim.enter = self.enter.and_then(text_anim_presets::subtitle_in);
         if self.box_alpha > 0.0 {
             title.background = TitleBackground {
                 enabled: true,
@@ -187,6 +257,50 @@ impl SubtitleTemplate {
             };
         }
         title
+    }
+}
+
+/// Seconds between the words of a template preview.
+pub const PREVIEW_WORD_SECS: f32 = 0.45;
+
+impl SubtitleTemplate {
+    /// Seconds a preview of `sample` lasts.
+    pub fn preview_secs(sample: &str) -> f32 {
+        sample.split_whitespace().count().max(1) as f32 * PREVIEW_WORD_SECS
+    }
+
+    /// What the clips of `sample` show `secs` into it, spoken one word
+    /// every `PREVIEW_WORD_SECS`, animation included.
+    pub fn preview_frame(&self, sample: &str, resolution: (u32, u32), secs: f32) -> TitleParams {
+        let words: Vec<&str> = sample.split_whitespace().collect();
+        let count = words.len().max(1);
+        let total = count as f32 * PREVIEW_WORD_SECS;
+        let secs = secs.clamp(0.0, total);
+        let index = ((secs / PREVIEW_WORD_SECS) as usize).min(count - 1);
+        let word_start = index as f32 * PREVIEW_WORD_SECS;
+        let (text, local, len) = match self.reveal {
+            Reveal::Line => (words.join(" "), secs, total),
+            Reveal::Single => (
+                words.get(index).copied().unwrap_or_default().to_owned(),
+                secs - word_start,
+                PREVIEW_WORD_SECS,
+            ),
+            Reveal::Cumulative => (
+                words[..(index + 1).min(words.len())].join(" "),
+                secs - word_start,
+                PREVIEW_WORD_SECS,
+            ),
+        };
+        let mut title = self.title(&text, resolution);
+        fit_enter(&mut title, len);
+        title.animated(local, len)
+    }
+}
+
+/// A short clip must still finish its In.
+fn fit_enter(title: &mut TitleParams, clip_secs: f32) {
+    if let Some(enter) = &mut title.anim.enter {
+        enter.duration = enter.duration.min(clip_secs * 0.6).max(0.05);
     }
 }
 
@@ -343,6 +457,10 @@ pub fn build_clips_with(
         let mut clip =
             Clip::from_source_range(id, ClipSource::Text, 0, end - start, start, Rational::one());
         let mut styled = title(&text, resolution);
+        fit_enter(
+            &mut styled,
+            (end - start) as f32 * fps.den as f32 / fps.num.max(1) as f32,
+        );
         let estimated = text.chars().count() as f32 * styled.size * 0.6;
         let room = resolution.0 as f32 * 0.88;
         if estimated > room {
@@ -411,6 +529,11 @@ fn words_within(
 /// The index of the subtitle track, if the timeline has one.
 pub fn subtitle_track(timeline: &crate::model::Timeline) -> Option<usize> {
     timeline.tracks.iter().position(|t| t.subtitles)
+}
+
+/// Whether the look of the subtitles of `timeline` is edited together.
+pub fn subtitles_linked(project: &Project, timeline: TimelineId) -> bool {
+    project.captions.get(&timeline).is_some_and(|c| c.linked)
 }
 
 /// Whether the timeline shows subtitles, generated or not.
@@ -498,6 +621,42 @@ pub fn clips_to_txt(timeline: &crate::model::Timeline) -> String {
         .join(" ");
     text.push('\n');
     text
+}
+
+/// Turns the linked editing of the subtitles on or off.
+#[derive(Debug)]
+pub struct SetSubtitlesLinked {
+    timeline: TimelineId,
+    linked: bool,
+    old: Option<bool>,
+}
+
+impl SetSubtitlesLinked {
+    pub fn new(timeline: TimelineId, linked: bool) -> Self {
+        Self {
+            timeline,
+            linked,
+            old: None,
+        }
+    }
+}
+
+impl Command for SetSubtitlesLinked {
+    fn label(&self) -> CommandLabel {
+        CommandLabel::LinkSubtitles
+    }
+
+    fn apply(&mut self, project: &mut Project) {
+        if let Some(captions) = project.captions.get_mut(&self.timeline) {
+            self.old = Some(std::mem::replace(&mut captions.linked, self.linked));
+        }
+    }
+
+    fn undo(&self, project: &mut Project) {
+        if let (Some(old), Some(captions)) = (self.old, project.captions.get_mut(&self.timeline)) {
+            captions.linked = old;
+        }
+    }
 }
 
 /// Replaces the subtitle track's clips and the stored transcription in one

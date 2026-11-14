@@ -73,6 +73,7 @@ fn audio_track(clips: Vec<Clip>) -> Track {
         armed: Default::default(),
         main: false,
         subtitles: false,
+        effects: false,
     }
 }
 

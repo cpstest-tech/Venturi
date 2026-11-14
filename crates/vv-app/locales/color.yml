@@ -29,12 +29,12 @@ color.add_correction:
   it: "Aggiungi correzione colore"
 
 color.in_window:
-  en: "Edited in the Color window."
-  it: "Si modifica nella finestra Colore."
+  en: "Edited in the Color editor of the Multifunction block."
+  it: "Si modifica nell'editor Colore del blocco Multifunzione."
 
 color.open_window:
-  en: "Edit in the Color window, with the scopes"
-  it: "Modifica nella finestra Colore, con gli scope"
+  en: "Edit in the Color editor, with the scopes"
+  it: "Modifica nell'editor Colore, con gli scope"
 
 color.no_scope_source:
   en: "Select a video clip and put the playhead on it"

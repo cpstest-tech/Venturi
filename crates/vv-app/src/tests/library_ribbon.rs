@@ -550,6 +550,7 @@ fn a_text_template_styles_the_subtitles_without_new_transcription() {
             language: "en".into(),
             words,
             template: vv_core::captions::DEFAULT_TEMPLATE.into(),
+            linked: true,
         },
     );
     app.choose_subtitle_template("text:karaoke_pop");
@@ -590,4 +591,121 @@ fn subtitle_template_previews_show_text_in_any_aspect() {
             assert!(drawn(&title, res) > 0, "{} at {res:?}", def.id);
         }
     }
+}
+
+#[test]
+fn a_linked_subtitle_edits_all_the_subtitles() {
+    let mut app = VenturiApp::default();
+    app.insert_text_at_playhead(None);
+    let timeline_id = app.timeline_id.unwrap();
+    let words = ["one", "two", "three"]
+        .iter()
+        .enumerate()
+        .map(|(i, w)| vv_core::CaptionWord {
+            text: (*w).into(),
+            start_ms: i as u32 * 500,
+            end_ms: i as u32 * 500 + 400,
+        })
+        .collect();
+    app.session.project.captions.insert(
+        timeline_id,
+        vv_core::Captions {
+            language: "en".into(),
+            words,
+            template: vv_core::captions::DEFAULT_TEMPLATE.into(),
+            linked: true,
+        },
+    );
+    app.choose_subtitle_template("word_pop");
+    let timeline = timeline_of(&app);
+    let index = vv_core::captions::subtitle_track(timeline).unwrap();
+    let clips = &timeline.tracks[index].clips;
+    assert!(clips.len() >= 2);
+    let first = crate::panel_target(timeline_id, index, &clips[0], 0);
+
+    assert_eq!(app.with_linked_subtitles(&[first]).len(), clips.len());
+    app.session
+        .project
+        .captions
+        .get_mut(&timeline_id)
+        .unwrap()
+        .linked = false;
+    assert_eq!(app.with_linked_subtitles(&[first]).len(), 1);
+}
+
+fn draw_ribbon(app: &mut VenturiApp, ctx: &egui::Context, width: f32, events: Vec<egui::Event>) {
+    let raw = egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(width, 400.0),
+        )),
+        events,
+        ..Default::default()
+    };
+    let mut output = ctx.run_ui(raw, |ui| app.show_ribbon(ui, &mut None));
+    output.textures_delta.clear();
+}
+
+#[test]
+fn a_narrow_ribbon_keeps_its_tabs_on_one_scrolling_row() {
+    let mut app = VenturiApp::default();
+    // No Import button beside the arrows.
+    app.select_ribbon_tab(RibbonTab::Text);
+    let ctx = egui::Context::default();
+    for _ in 0..2 {
+        draw_ribbon(&mut app, &ctx, 1000.0, Vec::new());
+    }
+    assert_eq!(
+        app.library_ribbon.tab_strip.1, 0.0,
+        "wide: nothing to scroll"
+    );
+    for _ in 0..2 {
+        draw_ribbon(&mut app, &ctx, 260.0, Vec::new());
+    }
+    let (offset, max) = app.library_ribbon.tab_strip;
+    assert!(max > 0.0, "narrow: the strip must scroll");
+    assert_eq!(offset, 0.0);
+    // The «›» arrow sits at the right edge of the row.
+    let right_arrow = egui::pos2(260.0 - theme::ICON_SIZE / 2.0, TAB_HEIGHT / 2.0);
+    let click = [
+        egui::Event::PointerMoved(right_arrow),
+        egui::Event::PointerButton {
+            pos: right_arrow,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        },
+        egui::Event::PointerButton {
+            pos: right_arrow,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        },
+    ];
+    draw_ribbon(&mut app, &ctx, 260.0, vec![click[0].clone()]);
+    draw_ribbon(&mut app, &ctx, 260.0, click[1..].to_vec());
+    for _ in 0..2 {
+        draw_ribbon(&mut app, &ctx, 260.0, Vec::new());
+    }
+    assert!(
+        app.library_ribbon.tab_strip.0 > 0.0,
+        "the arrow scrolls the strip"
+    );
+}
+
+#[test]
+fn an_editor_covers_the_tab_and_closing_it_goes_back() {
+    let mut app = VenturiApp::default();
+    app.select_ribbon_tab(RibbonTab::Text);
+    for editor in [RibbonTab::Curves, RibbonTab::Mixer, RibbonTab::Color] {
+        app.select_ribbon_tab(editor);
+        assert_eq!(app.library_ribbon.editor, Some(editor));
+        assert_eq!(app.library_ribbon.tab, RibbonTab::Text);
+        let ctx = egui::Context::default();
+        draw_ribbon(&mut app, &ctx, 400.0, Vec::new());
+    }
+    assert!(app.color_editor_shown() || !app.workspace.is_shown(workspace::Block::Library));
+    app.select_ribbon_tab(RibbonTab::Text);
+    assert_eq!(app.library_ribbon.editor, None);
+    assert_eq!(app.library_ribbon.tab, RibbonTab::Text);
 }

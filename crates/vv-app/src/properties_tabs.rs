@@ -449,6 +449,41 @@ impl VenturiApp {
         });
     }
 
+    /// The "apply to all subtitles" switch, for a subtitle clip; whether the
+    /// look is edited together.
+    pub(crate) fn show_subtitle_link(
+        &self,
+        ui: &mut egui::Ui,
+        clip: &PanelTarget,
+        pending: &mut Vec<BoxedCommand>,
+    ) -> bool {
+        let project = &self.session.project;
+        let on_subtitles = clip.is_text
+            && project.timelines[clip.timeline]
+                .tracks
+                .get(clip.track_index)
+                .is_some_and(|t| t.subtitles);
+        let Some(captions) = project
+            .captions
+            .get(&clip.timeline)
+            .filter(|_| on_subtitles)
+        else {
+            return false;
+        };
+        let mut linked = captions.linked;
+        if ui
+            .checkbox(&mut linked, t!("props.subtitles_linked"))
+            .on_hover_text(t!("props.subtitles_linked_hint"))
+            .changed()
+        {
+            pending.push(Box::new(vv_core::SetSubtitlesLinked::new(
+                clip.timeline,
+                linked,
+            )));
+        }
+        linked
+    }
+
     /// Fade in/out of the clips, in seconds; the timeline dots edit the same value.
     pub(crate) fn show_fade_rows(
         &self,
@@ -505,7 +540,8 @@ impl VenturiApp {
         let captions = self.session.project.captions.get(&tid)?;
         let timeline = self.session.project.timelines.get(tid)?;
         let c = timeline.tracks.get(clip.track_index)?.clip(clip.clip_id)?;
-        let ms = |frame: i64| (frame as f64 / timeline.fps.as_f64().max(1.0) * 1000.0).round() as u32;
+        let ms =
+            |frame: i64| (frame as f64 / timeline.fps.as_f64().max(1.0) * 1000.0).round() as u32;
         let words = vv_core::split_units(&title.display_text(), vv_core::Granularity::Word).len();
         vv_core::captions::clip_word_ms(
             captions,

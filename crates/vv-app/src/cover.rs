@@ -52,7 +52,8 @@ impl CoverRender {
                         [image.width as usize, image.height as usize],
                         &image.rgba,
                     );
-                    self.texture = Some(ctx.load_texture("cover", color, egui::TextureOptions::LINEAR));
+                    self.texture =
+                        Some(ctx.load_texture("cover", color, egui::TextureOptions::LINEAR));
                     self.last = Some(image);
                 }
                 ctx.request_repaint();
@@ -82,8 +83,14 @@ fn render(project: &Project, timeline: TimelineId, frame: FrameIdx) -> Option<Re
     let width = PREVIEW_WIDTH.min(size.0.max(2));
     let height = ((u64::from(width) * u64::from(size.1)) / u64::from(size.0.max(1))).max(2) as u32;
     let compositor = vv_render::Compositor::new_headless_with_precision(project.precision);
-    let rgba = vv_session::export::render_frame_rgba(project, timeline, frame, (width, height), &compositor)
-        .ok()?;
+    let rgba = vv_session::export::render_frame_rgba(
+        project,
+        timeline,
+        frame,
+        (width, height),
+        &compositor,
+    )
+    .ok()?;
     Some(Rendered {
         width,
         height,
