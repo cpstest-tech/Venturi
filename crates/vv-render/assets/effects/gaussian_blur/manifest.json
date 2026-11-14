@@ -1,0 +1,20 @@
+{
+  "kind": "effect",
+  "name": {
+    "en": "Gaussian blur",
+    "it": "Sfocatura gaussiana"
+  },
+  "category": "style",
+  "params": [
+    {
+      "id": "radius",
+      "name": {
+        "en": "Radius",
+        "it": "Raggio"
+      },
+      "min": 0,
+      "max": 48,
+      "default": 12
+    }
+  ]
+}

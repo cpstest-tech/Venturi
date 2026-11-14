@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "capcut_cracked",
+  "name": "Cracked Glow",
+  "category": "titles",
+  "tags": [
+    "capcut",
+    "ported",
+    "cracked glow"
+  ],
+  "duration": 3,
+  "layers": [
+    {
+      "text": "Testo predefinito",
+      "font": "Metropolis",
+      "size": 49.21875,
+      "color": "#FFFFFFFF",
+      "line_spacing": -1.4765625,
+      "position": [
+        0.0,
+        0.0
+      ],
+      "weight": 500,
+      "italic": false,
+      "shadows": [],
+      "glows": [
+        {
+          "color": "#F5E746",
+          "radius": 7.875,
+          "intensity": 2
+        }
+      ],
+      "underlays": []
+    }
+  ]
+}

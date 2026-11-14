@@ -1,6 +1,19 @@
 use super::*;
 use crate::{History, Timeline};
 
+#[test]
+fn pop_uses_the_reference_font_without_changing_other_subtitles() {
+    let pop = SubtitleTemplate::find("word_pop")
+        .unwrap()
+        .title("Hello", (1080, 1920));
+    assert_eq!(pop.font_family, "ZY Resolve");
+    assert_eq!(pop.font_weight, 400);
+    let classic = SubtitleTemplate::find("line_classic")
+        .unwrap()
+        .title("Hello", (1080, 1920));
+    assert_eq!(classic.font_family, SUBTITLE_FONT);
+}
+
 fn words(spec: &[(&str, u32, u32)]) -> Vec<CaptionWord> {
     spec.iter()
         .map(|&(text, start_ms, end_ms)| CaptionWord {

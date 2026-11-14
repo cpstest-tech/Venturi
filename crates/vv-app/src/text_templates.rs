@@ -26,6 +26,13 @@ const SOURCES: &[&str] = bundled![
     "sunset_script",
     "outline_hollow",
     "lower_third_bold",
+    "capcut_pause",
+    "capcut_onfire",
+    "capcut_modern",
+    "capcut_wide",
+    "capcut_blue",
+    "capcut_cracked",
+    "capcut_purple",
 ];
 
 /// Prefix of a template id in `Captions::template`.

@@ -234,10 +234,17 @@ impl SubtitleTemplate {
         let height = resolution.1 as f32;
         let [r, g, b] = self.color;
         let mut title = TitleParams {
-            // A bundled variable font: the system sans may lack the weight
-            // and fall back to an unrelated face.
-            font_family: SUBTITLE_FONT.to_owned(),
-            font_weight: self.weight,
+            font_family: if self.id == "word_pop" {
+                "ZY Resolve"
+            } else {
+                SUBTITLE_FONT
+            }
+            .to_owned(),
+            font_weight: if self.id == "word_pop" {
+                400
+            } else {
+                self.weight
+            },
             color: Rgba { r, g, b, a: 1.0 },
             size: (height * self.size).round().max(8.0),
             case: self.case,

@@ -33,6 +33,7 @@ pub(crate) enum RibbonTab {
     Filters,
     Transitions,
     Subtitles,
+    AiClips,
     Curves,
     Mixer,
     Color,
@@ -41,7 +42,7 @@ pub(crate) enum RibbonTab {
 const SIDEBAR_WIDTH: f32 = 112.0;
 
 impl RibbonTab {
-    const ALL: [RibbonTab; 11] = [
+    const ALL: [RibbonTab; 12] = [
         Self::Media,
         Self::Audio,
         Self::Text,
@@ -50,6 +51,7 @@ impl RibbonTab {
         Self::Filters,
         Self::Transitions,
         Self::Subtitles,
+        Self::AiClips,
         Self::Curves,
         Self::Mixer,
         Self::Color,
@@ -70,6 +72,7 @@ impl RibbonTab {
             Self::Filters => t!("fx.tab_filters"),
             Self::Transitions => t!("fx.tab_transitions"),
             Self::Subtitles => t!("ribbon.tab_subtitles"),
+            Self::AiClips => "AI Clips".into(),
             Self::Curves => t!("toolbar.keyframe_editor"),
             Self::Mixer => t!("toolbar.mixer"),
             Self::Color => t!("toolbar.color"),
@@ -94,6 +97,7 @@ impl RibbonTab {
             | Self::Filters
             | Self::Transitions
             | Self::Subtitles
+            | Self::AiClips
             | Self::Curves
             | Self::Mixer
             | Self::Color => {}
@@ -583,6 +587,11 @@ fn paint_tab_icon(painter: &egui::Painter, tab: RibbonTab, c: egui::Pos2, color:
             line(v(1.0, 1.5), v(4.5, 1.5));
             line(v(-4.5, -1.5), v(2.5, -1.5));
         }
+        RibbonTab::AiClips => {
+            painter.rect_stroke(square, 2.0, stroke, egui::StrokeKind::Middle);
+            line(v(-4.0, -4.0), v(4.0, 0.0));
+            line(v(4.0, 0.0), v(-4.0, 4.0));
+        }
         RibbonTab::Curves => {
             let points = (0..=12)
                 .map(|i| {
@@ -791,6 +800,11 @@ impl VenturiApp {
             }
             RibbonTab::Subtitles => {
                 self.show_subtitles_tab(ui);
+                ui.allocate_rect(area, egui::Sense::hover());
+                return;
+            }
+            RibbonTab::AiClips => {
+                self.show_ai_clips_tab(ui);
                 ui.allocate_rect(area, egui::Sense::hover());
                 return;
             }

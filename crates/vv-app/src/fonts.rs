@@ -1,4 +1,4 @@
-//! Fonts shipped with the app (all SIL OFL, licences in `assets/fonts`).
+//! Fonts shipped with the app; imported reference faces live in `fonts/capcut`.
 
 macro_rules! font {
     ($file:literal) => {
@@ -9,7 +9,7 @@ macro_rules! font {
 const BUNDLED: &[&[u8]] = &[
     font!("Anton-Regular.ttf"),
     font!("BebasNeue-Regular.ttf"),
-    font!("Bangers-Regular.ttf"),
+    font!("capcut/Bangers-Regular.ttf"),
     font!("Bungee-Regular.ttf"),
     font!("Fredoka.ttf"),
     font!("Montserrat.ttf"),
@@ -28,6 +28,11 @@ const BUNDLED: &[&[u8]] = &[
     font!("PressStart2P-Regular.ttf"),
     font!("SpaceGrotesk.ttf"),
     font!("ArchivoBlack-Regular.ttf"),
+    font!("capcut/CoreSansD77CnBlack-Italic.otf"),
+    font!("capcut/ZY Modern.ttf"),
+    font!("capcut/tmpsequel100wide-75.ttf"),
+    font!("capcut/en.ttf"),
+    font!("capcut/ZY Resolve.ttf"),
 ];
 
 pub fn register_bundled() {

@@ -1,7 +1,7 @@
 use super::*;
 use vv_core::text_template::TemplateCategory;
 
-const NAMES: [&str; 16] = [
+const NAMES: [&str; 23] = [
     "Neon Pulse",
     "Bubble Pop",
     "Hype Impact",
@@ -18,10 +18,17 @@ const NAMES: [&str; 16] = [
     "Sunset Script",
     "Outline Hollow",
     "Lower Third Bold",
+    "Pause",
+    "On Fire",
+    "Modern Halo",
+    "Wide",
+    "Blue Outline",
+    "Cracked Glow",
+    "Purple Glow",
 ];
 
 #[test]
-fn all_sixteen_templates_load() {
+fn all_templates_load() {
     assert_eq!(all().len(), SOURCES.len());
     let names: Vec<&str> = all().iter().map(|t| t.name.as_str()).collect();
     assert_eq!(names, NAMES);
@@ -32,7 +39,7 @@ fn ids_are_unique_and_match_the_file_names() {
     let mut ids: Vec<&str> = all().iter().map(|t| t.id.as_str()).collect();
     ids.sort_unstable();
     ids.dedup();
-    assert_eq!(ids.len(), 16);
+    assert_eq!(ids.len(), SOURCES.len());
 }
 
 #[test]
@@ -47,13 +54,15 @@ fn every_category_has_a_template_and_a_duration() {
 }
 
 #[test]
-fn every_template_animates_in_and_out_and_uses_a_bundled_font() {
+fn every_template_uses_a_bundled_font_and_originals_animate_in_and_out() {
     register_fonts();
     let families = vv_render::text::font_families();
     for t in all() {
         for clip in t.clips((1920, 1080)) {
             let a = &clip.title.anim;
-            assert!(a.enter.is_some() && a.exit.is_some(), "{}", t.id);
+            if !t.id.starts_with("capcut_") {
+                assert!(a.enter.is_some() && a.exit.is_some(), "{}", t.id);
+            }
             let font = &clip.title.font_family;
             assert!(families.iter().any(|f| f == font), "{}: {font}", t.id);
         }
@@ -67,9 +76,39 @@ fn some_templates_have_several_levels_and_one_is_karaoke() {
 }
 
 #[test]
+fn ported_templates_render_as_composites_in_portrait_and_landscape() {
+    register_fonts();
+    for template in all().iter().filter(|t| t.id.starts_with("capcut_")) {
+        for resolution in [(1080, 1920), (1920, 1080)] {
+            assert_eq!(
+                template.clips(resolution).len(),
+                1,
+                "{} must edit as one title",
+                template.id
+            );
+            let titles: Vec<_> = template
+                .clips(resolution)
+                .into_iter()
+                .map(|clip| clip.title.animated(1.8, clip.length_secs))
+                .collect();
+            let image = crate::library_ribbon::layers_preview_image(&titles, resolution);
+            let lit = image
+                .pixels
+                .iter()
+                .filter(|p| p.r() > 60 || p.g() > 60)
+                .count();
+            assert!(lit > 40, "{} at {resolution:?} draws nothing", template.id);
+        }
+    }
+}
+
+#[test]
 fn every_template_renders_ink_at_every_animation_stage() {
     register_fonts();
     for t in all() {
+        if t.id.starts_with("capcut_") {
+            continue;
+        }
         for clip in t.clips((1920, 1080)) {
             let mut title = clip.title.clone();
             title.anim_state = title.anim.state_at(

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "capcut_wide",
+  "name": "Wide",
+  "category": "titles",
+  "tags": [
+    "capcut",
+    "ported",
+    "wide"
+  ],
+  "duration": 3,
+  "layers": [
+    {
+      "text": "abcde\nABCDE",
+      "font": "Sequel 100 Wide",
+      "size": 106.28692475124376,
+      "color": "#FFFFFFFF",
+      "line_spacing": -3.1886077425373127,
+      "position": [
+        0.0,
+        0.0
+      ],
+      "weight": 40,
+      "italic": false,
+      "shadows": [
+        {
+          "color": "#000000BC",
+          "offset": [
+            4.294639890035115,
+            -4.294639890035114
+          ],
+          "blur": 4.184726911188052,
+          "opacity": 100
+        }
+      ],
+      "underlays": []
+    }
+  ]
+}

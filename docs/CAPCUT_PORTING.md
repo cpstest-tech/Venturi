@@ -319,3 +319,46 @@ an RGBA still with transparent bars, and set `CAPCUT_NATIVE=1000x646`.
 `CAPCUT_BACKGROUND=0,171,59` composites the result over the background used
 in this reference; omit it for the normal black background. In/out harness
 progress spans the slot duration; combo progress spans the clip.
+
+## 10. Text styles
+
+The later `copazione animazioni` draft is a text reference: seven consecutive
+three-second styles followed by a subtitle sample. The bundled templates are
+Pause, On Fire, Modern Halo, Wide, Blue Outline, Cracked Glow and Purple Glow.
+Search for `capcut` in the text library to find them. The subtitle sample's
+ZY Resolve face is used by the existing `word_pop` subtitle template.
+
+Regenerate the assets from the original draft and Windows user directory:
+
+```sh
+python3 scripts/capcut/port_texts.py /path/to/draft_content.json /path/to/Users/Utente
+```
+
+The text on a track can reference `materials.text_templates` instead of a
+text material. Resolve its `text_info_resources[].text_material_id` first.
+Apply the attachment scale and position as well as the segment transform.
+The font paths and `effectStyle` paths live inside the stringified `content`
+JSON. Simple flower styles describe their fill, outlines and shadow stacks
+in `effectStyle.json`; older styles can instead use a binary scene and shaders.
+
+Each imported style is one editable title. Its `TextStyle::underlays` reuse
+the current glyph mask for the offset outlines and shadows, so editing the
+content also edits the decoration. Measures are converted to the template's
+1080-pixel reference height. Imported fonts live in `assets/fonts/capcut`.
+Use their actual OS/2 weights: Wide declares 40 and Metropolis 500; asking
+cosmic-text for weight 400 silently substitutes another family. Pop uses
+ZY Resolve's actual weight 400 for the same reason.
+
+`bake_text.lua` runs the original AETools scale interpolator for Pause.
+`AnimDescriptor::sampled_tracks` preserves its overshoot rather than fitting
+it to a generic easing. On Fire uses the native mask reveal and the source
+38-frame flame atlas at 30 fps. The atlas is decoded once and cached as
+small palette masks, which are moved and scaled by the text GPU renderer.
+It remains part of the title when the text or title position changes.
+
+These are visual ports, not pixel-identical CapCut output. The native
+renderer approximates the nested shadow strokes, inner highlight, glow,
+the original diagonal dynamic mask and the old Cracked Glow shader. Pause's
+scale curve is sampled from the source; its per-line lateral movement and
+On Fire's small attachment tilt are not reproduced. Compare the stable
+frames as well as the entrance when adjusting these approximations.

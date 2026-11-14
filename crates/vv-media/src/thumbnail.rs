@@ -35,7 +35,7 @@ pub fn generate_thumbnail(
     Ok(downscale_to_rgba(&frame, max_width))
 }
 
-fn downscale_to_rgba(frame: &FrameYuv420, max_width: u32) -> Thumbnail {
+pub fn downscale_to_rgba(frame: &FrameYuv420, max_width: u32) -> Thumbnail {
     let width = frame.width.min(max_width).max(1);
     let height = ((frame.height as u64 * width as u64) / frame.width.max(1) as u64).max(1) as u32;
     let (kr, kb) = match frame.matrix {

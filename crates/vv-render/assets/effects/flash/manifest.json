@@ -1,0 +1,30 @@
+{
+  "kind": "effect",
+  "name": {
+    "en": "Flash",
+    "it": "Flash"
+  },
+  "category": "style",
+  "params": [
+    {
+      "id": "intensity",
+      "name": {
+        "en": "Intensity",
+        "it": "Intensità"
+      },
+      "min": 0,
+      "max": 2,
+      "default": 1
+    },
+    {
+      "id": "speed",
+      "name": {
+        "en": "Speed",
+        "it": "Velocità"
+      },
+      "min": 0.25,
+      "max": 12,
+      "default": 2
+    }
+  ]
+}

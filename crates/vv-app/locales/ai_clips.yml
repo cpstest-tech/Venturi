@@ -1,0 +1,65 @@
+_version: 2
+
+ai_clips.title:
+  en: "AI Clips · Long to Short"
+  it: "AI Clips · Da lungo a breve"
+ai_clips.select_source:
+  en: "Import a video with audio in the Media tab first."
+  it: "Importa prima un video con audio nella scheda Media."
+ai_clips.source:
+  en: "Source video"
+  it: "Video sorgente"
+ai_clips.key_required:
+  en: "Add a Gemini API key in Settings → Integrations before generating clips."
+  it: "Aggiungi una chiave API Gemini in Impostazioni → Integrazioni prima di generare le clip."
+ai_clips.key_missing:
+  en: "No Gemini API key set."
+  it: "Nessuna chiave API Gemini impostata."
+ai_clips.open_settings:
+  en: "Open Settings"
+  it: "Apri Impostazioni"
+ai_clips.instructions:
+  en: "AI instructions"
+  it: "Istruzioni per l'AI"
+ai_clips.prompt_hint:
+  en: "Find the most engaging moments…"
+  it: "Trova i momenti più coinvolgenti…"
+ai_clips.subtitles:
+  en: "Generate subtitles automatically"
+  it: "Genera sottotitoli automaticamente"
+ai_clips.cancel:
+  en: "Cancel"
+  it: "Annulla"
+ai_clips.generate:
+  en: "Generate clips"
+  it: "Genera clip"
+ai_clips.regenerate:
+  en: "Regenerate clips"
+  it: "Rigenera clip"
+ai_clips.previous:
+  en: "Previous results"
+  it: "Risultati precedenti"
+ai_clips.insert:
+  en: "Insert selected clips at timeline end"
+  it: "Inserisci le clip selezionate alla fine della timeline"
+ai_clips.replace:
+  en: "Replace clips in timeline"
+  it: "Sostituisci clip nella timeline"
+ai_clips.replace_warning:
+  en: "Replace the last AI Clips batch inserted in this session? This can be undone."
+  it: "Sostituire l'ultimo gruppo AI Clips inserito in questa sessione? Puoi annullare l'operazione."
+ai_clips.confirm_replace:
+  en: "Confirm replacement"
+  it: "Conferma sostituzione"
+ai_clips.stage_prepare:
+  en: "Preparing source…"
+  it: "Preparazione del video…"
+ai_clips.stage_transcribe:
+  en: "Transcribing audio…"
+  it: "Trascrizione dell'audio…"
+ai_clips.stage_analyze:
+  en: "Analyzing transcript with Gemini…"
+  it: "Analisi della trascrizione con Gemini…"
+ai_clips.stage_visual:
+  en: "Checking candidate frames…"
+  it: "Verifica dei fotogrammi candidati…"

@@ -426,3 +426,33 @@ action.extract_audio:
 action.group_clips:
   en: "Group clips"
   it: "Raggruppa clip"
+settings.gemini_key:
+  en: "Gemini API key (AI Clips)"
+  it: "Chiave API Gemini (AI Clips)"
+settings.gemini_key_hint:
+  en: "Used by AI Clips to pick the best moments. Stored only on this computer, never in projects."
+  it: "Usata da AI Clips per scegliere i momenti migliori. Salvata solo su questo computer, mai nei progetti."
+settings.gemini_key_placeholder:
+  en: "Paste your Gemini API key"
+  it: "Incolla la tua chiave API Gemini"
+settings.gemini_key_save:
+  en: "Save key"
+  it: "Salva chiave"
+settings.gemini_key_delete:
+  en: "Delete key"
+  it: "Elimina chiave"
+settings.gemini_key_get:
+  en: "Get a key"
+  it: "Ottieni una chiave"
+settings.gemini_key_empty:
+  en: "The key is empty."
+  it: "La chiave è vuota."
+settings.gemini_key_saved:
+  en: "Key saved."
+  it: "Chiave salvata."
+settings.gemini_key_deleted:
+  en: "Key deleted."
+  it: "Chiave eliminata."
+settings.gemini_key_location:
+  en: "Saved in %{path} (readable only by you)"
+  it: "Salvata in %{path} (leggibile solo da te)"

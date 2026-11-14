@@ -283,11 +283,13 @@ pub fn render_title(
             return render;
         }
     }
-    let render = Arc::new(if params.anim_state.is_some() {
+    let mut render = if params.anim_state.is_some() {
         crate::text_anim_render::rasterize(params, timeline_size, output_size)
     } else {
         rasterize(params, timeline_size, output_size)
-    });
+    };
+    crate::text_sticker::append(&mut render, params, timeline_size, output_size);
+    let render = Arc::new(render);
     let mut cache = renders.lock().unwrap_or_else(|e| e.into_inner());
     if cache.len() >= CACHE_LEN {
         cache.remove(0);
@@ -515,6 +517,12 @@ pub(crate) fn reach(params: &TitleParams, scale: f32, font_px: f32, halo: bool) 
         .fold(0.0, f32::max);
     let extrude = style.extrude.as_ref().map_or(0.0, |e| e.depth);
     let mut total = (stroke + shadow + glow + extrude) * scale;
+    for underlay in &style.underlays {
+        let mut child = params.clone();
+        child.style = underlay.style.clone();
+        let offset = underlay.offset[0].abs().max(underlay.offset[1].abs()) * scale;
+        total = total.max(reach(&child, scale, font_px, halo) as f32 + offset);
+    }
     total += font_px * if halo { 0.6 } else { 0.2 };
     total.ceil() as i32 + 2
 }
@@ -722,6 +730,18 @@ pub(crate) fn style_layers(
 ) -> (Vec<StyledLayer>, usize) {
     let scale_px = |v: f32| v * scale;
     let style = &params.style;
+    let mut backplates = Vec::new();
+    for underlay in &style.underlays {
+        let mut child = params.clone();
+        child.style = underlay.style.clone();
+        child.color = underlay.color;
+        let shifted = text_fx::shifted(
+            &text,
+            scale_px(underlay.offset[0]).round() as i32,
+            -scale_px(underlay.offset[1]).round() as i32,
+        );
+        backplates.extend(style_layers(shifted, &child, scale, block_center, (block_w, block_h)).0);
+    }
     // Widest stroke first: the narrower ones sit on top of it.
     let mut strokes: Vec<_> = style.strokes.iter().filter(|s| s.width > 0.0).collect();
     strokes.sort_by(|a, b| b.width.total_cmp(&a.width));
@@ -747,7 +767,7 @@ pub(crate) fn style_layers(
                 .map(Under::Extrude),
         )
         .collect();
-    let mut layers: Vec<StyledLayer> = under
+    let layers: Vec<StyledLayer> = under
         .par_iter()
         .map(|item| match item {
             Under::Shadow(shadow) => {
@@ -778,6 +798,8 @@ pub(crate) fn style_layers(
             ),
         })
         .collect();
+    backplates.extend(layers);
+    let mut layers = backplates;
     layers.extend(stroke_masks);
 
     let fill_start = layers.len();

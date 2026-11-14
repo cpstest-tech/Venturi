@@ -1,0 +1,40 @@
+{
+  "kind": "effect",
+  "name": {
+    "en": "Zoom lens",
+    "it": "Zoom lente"
+  },
+  "category": "motion",
+  "params": [
+    {
+      "id": "zoom",
+      "name": {
+        "en": "Zoom",
+        "it": "Zoom"
+      },
+      "min": 0,
+      "max": 0.8,
+      "default": 0.2
+    },
+    {
+      "id": "speed",
+      "name": {
+        "en": "Speed",
+        "it": "Velocità"
+      },
+      "min": 0,
+      "max": 8,
+      "default": 1.5
+    },
+    {
+      "id": "distortion",
+      "name": {
+        "en": "Lens distortion",
+        "it": "Distorsione lente"
+      },
+      "min": 0,
+      "max": 0.5,
+      "default": 0.12
+    }
+  ]
+}

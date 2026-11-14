@@ -1,4 +1,30 @@
 use super::*;
+
+#[test]
+fn sampled_animation_interpolates_overshoot_and_survives_project_serialization() {
+    let mut descriptor = AnimDescriptor::default();
+    descriptor.sampled_tracks.push(SampledTrack {
+        prop: AnimProp::Scale,
+        values: vec![0.0, 1.12, 0.98, 1.0],
+    });
+    let text = ron::to_string(&descriptor).unwrap();
+    let decoded: AnimDescriptor = ron::from_str(&text).unwrap();
+    assert_eq!(decoded, descriptor);
+    let track = &decoded.sampled_tracks[0];
+    assert_eq!(track.value_at(-1.0), Some(0.0));
+    assert_eq!(track.value_at(2.0), Some(1.0));
+    assert!((track.value_at(0.5).unwrap() - 1.05).abs() < 1e-6);
+    let animations = TextAnimations {
+        enter: Some(decoded),
+        ..Default::default()
+    };
+    let state = AnimState {
+        t_in: 0.2,
+        ..Default::default()
+    };
+    let plan = plan(&animations, "PAUSE", &state);
+    assert!((plan.fx[0].scale[0] - 1.12).abs() < 1e-6);
+}
 use crate::text_anim_presets as presets;
 
 fn anims_in(id: &str) -> TextAnimations {

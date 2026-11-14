@@ -195,6 +195,10 @@ impl Default for TextExtrude {
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct TextStyle {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub underlays: Vec<TextUnderlay>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sticker: Option<TextSticker>,
     #[serde(default)]
     pub fill: TextFill,
     #[serde(default)]
@@ -207,11 +211,33 @@ pub struct TextStyle {
     pub extrude: Option<TextExtrude>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TextUnderlay {
+    pub color: Rgba,
+    pub offset: [f32; 2],
+    pub style: TextStyle,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TextSticker {
+    pub asset: String,
+    /// Size and offset in font sizes, Y upwards.
+    pub size: [f32; 2],
+    pub offset: [f32; 2],
+    #[serde(default)]
+    pub rotation: f32,
+    #[serde(default)]
+    pub start: f32,
+}
+
 impl TextStyle {
     pub fn at(&self, frame: FrameIdx) -> Self {
         let mut style = self.clone();
         if let TextFill::Gradient(g) = &mut style.fill {
             *g = g.at(frame);
+        }
+        for underlay in &mut style.underlays {
+            underlay.style = underlay.style.at(frame);
         }
         style
     }

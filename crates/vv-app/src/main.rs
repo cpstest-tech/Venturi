@@ -7,6 +7,7 @@ extern crate rust_i18n;
 rust_i18n::i18n!("locales", fallback = "en");
 
 mod app_menu;
+mod ai_clips;
 mod autosave;
 mod color_window;
 mod compressor_panel;
@@ -590,6 +591,7 @@ struct VenturiApp {
     top_bar_center_width: f32,
     export_modal: Option<export_modal::ExportModal>,
     subtitles: subtitles::SubtitleState,
+    ai_clips: ai_clips::State,
     cover_picker: Option<cover::CoverPicker>,
     /// Name of the project reopened after a crash, until acknowledged.
     recovered_project: Option<String>,
@@ -728,6 +730,7 @@ impl Default for VenturiApp {
             top_bar_center_width: 0.0,
             export_modal: None,
             subtitles: subtitles::SubtitleState::default(),
+            ai_clips: ai_clips::State::default(),
             cover_picker: None,
             recovered_project: None,
         }
@@ -2662,6 +2665,9 @@ impl VenturiApp {
         if self.settings.mcp_enabled != before.mcp_enabled {
             self.apply_mcp_setting(ctx);
         }
+        if response.gemini_key_changed {
+            self.ai_clips.key_present = None;
+        }
         if !response.open {
             self.settings_dialog = None;
         }
@@ -4292,6 +4298,7 @@ impl VenturiApp {
         self.show_export_modal(ui.ctx());
         self.show_cover_picker(ui.ctx());
         self.poll_subtitles(ui.ctx());
+        self.poll_ai_clips(ui.ctx());
         self.show_recovery_notice(ui.ctx());
         self.show_toast(ui.ctx());
         self.show_settings_dialog(ui.ctx());

@@ -105,6 +105,10 @@ impl Default for SubtitleDef {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LayerDef {
+    #[serde(default)]
+    pub underlays: Vec<LayerDef>,
+    #[serde(default)]
+    pub sticker: Option<crate::TextSticker>,
     pub text: String,
     #[serde(default)]
     pub font: String,
@@ -303,6 +307,8 @@ fn default_corner() -> f32 {
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct AnimDef {
+    #[serde(default)]
+    pub enter_custom: Option<AnimDescriptor>,
     #[serde(default, rename = "in")]
     pub enter: Option<AnimRef>,
     #[serde(default, rename = "out")]
@@ -464,6 +470,18 @@ impl LayerDef {
             })
         };
         let mut style = TextStyle::default();
+        style.sticker = self.sticker.clone();
+        for layer in &self.underlays {
+            let underlay = layer.title(scale)?;
+            style.underlays.push(crate::TextUnderlay {
+                color: underlay.color,
+                offset: [
+                    underlay.position[0] - self.position[0] * scale,
+                    underlay.position[1] - self.position[1] * scale,
+                ],
+                style: underlay.style,
+            });
+        }
         if let Some(g) = &self.fill {
             style.fill = TextFill::Gradient(gradient(g)?);
         }
@@ -563,6 +581,9 @@ impl LayerDef {
             ..TitleParams::default()
         };
         title.anim = self.anim.build()?;
+        if self.sticker.is_some() && title.anim.looped.is_none() {
+            title.anim.looped = Some(AnimDescriptor::default());
+        }
         Ok(title)
     }
 }
@@ -608,7 +629,10 @@ impl AnimDef {
             })
             .transpose()?;
         Ok(TextAnimations {
-            enter: resolve(&self.enter, text_anim_presets::in_preset)?,
+            enter: self
+                .enter_custom
+                .clone()
+                .or(resolve(&self.enter, text_anim_presets::in_preset)?),
             exit: resolve(&self.exit, text_anim_presets::out_preset)?,
             looped: resolve(&self.looped, text_anim_presets::loop_preset)?,
             karaoke,
@@ -630,19 +654,7 @@ pub fn subtitle_from_title(
     let mut title = base.clone();
     title.size = new_size;
     title.line_spacing *= k;
-    for s in &mut title.style.strokes {
-        s.width *= k;
-    }
-    for s in &mut title.style.shadows {
-        s.offset = s.offset.map(|v| v * k);
-        s.blur *= k;
-    }
-    for g in &mut title.style.glows {
-        g.radius *= k;
-    }
-    if let Some(e) = &mut title.style.extrude {
-        e.depth *= k;
-    }
+    scale_style(&mut title.style, k);
     title.background.outline_width *= k;
     title.content = Keyframed::constant(text.to_owned());
     title.anchor = (HAnchor::Center, VAnchor::Bottom);
@@ -650,6 +662,26 @@ pub fn subtitle_from_title(
     title.align = TextAlign::Center;
     title.background.center = [0.0, 0.0];
     title
+}
+
+fn scale_style(style: &mut TextStyle, scale: f32) {
+    for stroke in &mut style.strokes {
+        stroke.width *= scale;
+    }
+    for shadow in &mut style.shadows {
+        shadow.offset = shadow.offset.map(|v| v * scale);
+        shadow.blur *= scale;
+    }
+    for glow in &mut style.glows {
+        glow.radius *= scale;
+    }
+    if let Some(extrude) = &mut style.extrude {
+        extrude.depth *= scale;
+    }
+    for underlay in &mut style.underlays {
+        underlay.offset = underlay.offset.map(|v| v * scale);
+        scale_style(&mut underlay.style, scale);
+    }
 }
 
 #[cfg(test)]

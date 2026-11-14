@@ -12,6 +12,12 @@ fn main() {
             vv_render::text::register_font(std::fs::read(path).unwrap());
         }
     }
+    for entry in std::fs::read_dir(root.join("fonts/capcut")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "ttf" || e == "otf") {
+            vv_render::text::register_font(std::fs::read(path).unwrap());
+        }
+    }
     let args: Vec<String> = std::env::args().collect();
     let size: (u32, u32) = match args.get(1).map(String::as_str) {
         Some("4k") => (3840, 2160),

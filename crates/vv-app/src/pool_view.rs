@@ -1196,19 +1196,63 @@ fn paint_thumb(
     rect
 }
 
-fn paint_tile_tags<I, F>(ui: &egui::Ui, rect: egui::Rect, entry: &PoolEntry<I, F>) {
+fn paint_tag(ui: &egui::Ui, text: String, anchor: egui::Align2, corner: egui::Pos2) {
     let painter = ui.painter();
     let font = egui::FontId::proportional(crate::theme::FONT_SMALL);
+    let galley = painter.layout_no_wrap(text, font, crate::theme::TEXT_PRIMARY);
+    let size = galley.size() + egui::vec2(8.0, 2.0);
+    let tag_rect = anchor.anchor_size(corner, size);
+    painter.rect_filled(tag_rect, crate::theme::RADIUS_TAG, theme::BG_WINDOW);
+    painter.galley(
+        tag_rect.min + egui::vec2(4.0, 1.0),
+        galley,
+        crate::theme::TEXT_PRIMARY,
+    );
+}
+
+/// A media tile styled like the pool's grid, for pickers outside the pool.
+pub(crate) fn media_tile(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    thumb: &Thumb,
+    meta: &vv_core::MediaMeta,
+    name: &str,
+    width: f32,
+    selected: bool,
+) -> egui::Response {
+    let thumb_size = egui::vec2(width, width * 9.0 / 16.0);
+    let rect = egui::Frame::NONE
+        .inner_margin(GRID_TILE_MARGIN)
+        .show(ui, |ui| {
+            ui.set_width(width);
+            ui.vertical(|ui| {
+                let thumb_rect = paint_thumb(ui, thumb, meta, thumb_size);
+                if meta.duration_frames > 0 && !meta.is_image() {
+                    paint_tag(
+                        ui,
+                        duration_text(meta),
+                        egui::Align2::RIGHT_TOP,
+                        thumb_rect.right_top() + egui::vec2(-4.0, 4.0),
+                    );
+                }
+                ui.add(egui::Label::new(name).truncate());
+            });
+        })
+        .response
+        .rect;
+    let response = ui.interact(rect, id, egui::Sense::click());
+    if selected {
+        paint_selected(ui, rect, 4.0);
+    } else if response.hovered() {
+        ui.painter()
+            .rect_filled(rect, 4.0, egui::Color32::from_white_alpha(8));
+    }
+    response.on_hover_text(name)
+}
+
+fn paint_tile_tags<I, F>(ui: &egui::Ui, rect: egui::Rect, entry: &PoolEntry<I, F>) {
     let tag = |text: String, anchor: egui::Align2, corner: egui::Pos2| {
-        let galley = painter.layout_no_wrap(text, font.clone(), crate::theme::TEXT_PRIMARY);
-        let size = galley.size() + egui::vec2(8.0, 2.0);
-        let tag_rect = anchor.anchor_size(corner, size);
-        painter.rect_filled(tag_rect, crate::theme::RADIUS_TAG, theme::BG_WINDOW);
-        painter.galley(
-            tag_rect.min + egui::vec2(4.0, 1.0),
-            galley,
-            crate::theme::TEXT_PRIMARY,
-        );
+        paint_tag(ui, text, anchor, corner)
     };
     if entry.meta.duration_frames > 0 && !entry.meta.is_image() {
         tag(

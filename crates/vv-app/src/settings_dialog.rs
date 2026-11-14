@@ -57,6 +57,9 @@ pub struct SettingsDialog {
     input_devices: Vec<String>,
     /// The formats this FFmpeg can write, asked once like the devices.
     recording_formats: Vec<AudioFileFormat>,
+    /// Lives in its own owner-only file, never in the settings.
+    gemini_key: String,
+    gemini_notice: Option<String>,
 }
 
 pub struct SettingsDialogResponse {
@@ -64,6 +67,7 @@ pub struct SettingsDialogResponse {
     pub changed: bool,
     /// The folder of the takes must be chosen with the system dialog.
     pub pick_recording_dir: bool,
+    pub gemini_key_changed: bool,
 }
 
 impl SettingsDialog {
@@ -75,6 +79,8 @@ impl SettingsDialog {
             notice: None,
             input_devices: vv_audio::recorder::input_device_names(),
             recording_formats: AudioFileFormat::available(),
+            gemini_key: crate::ai_clips::load_key().unwrap_or_default(),
+            gemini_notice: None,
         }
     }
 
@@ -88,6 +94,7 @@ impl SettingsDialog {
             open: true,
             changed: false,
             pick_recording_dir: false,
+            gemini_key_changed: false,
         };
         response.changed |= self.capture_key(ctx, &mut settings.keymap);
         egui::Window::new(t!("settings.title"))
@@ -123,6 +130,13 @@ impl SettingsDialog {
                         }
                         Section::Integrations => {
                             response.changed |= integrations_section(ui, settings, self.mcp_forced);
+                            ui.add_space(12.0);
+                            ui.separator();
+                            response.gemini_key_changed |= gemini_key_section(
+                                ui,
+                                &mut self.gemini_key,
+                                &mut self.gemini_notice,
+                            );
                         }
                         Section::Shortcuts => {
                             response.changed |= self.shortcuts_section(ui, &mut settings.keymap);
@@ -393,6 +407,58 @@ fn integrations_section(ui: &mut egui::Ui, settings: &mut Settings, forced: bool
             .code_editor()
             .desired_width(f32::INFINITY),
     );
+    changed
+}
+
+fn gemini_key_section(ui: &mut egui::Ui, key: &mut String, notice: &mut Option<String>) -> bool {
+    let mut changed = false;
+    ui.strong(t!("settings.gemini_key"));
+    ui.label(egui::RichText::new(t!("settings.gemini_key_hint")).weak());
+    ui.add(
+        egui::TextEdit::singleline(key)
+            .password(true)
+            .desired_width(f32::INFINITY)
+            .hint_text(t!("settings.gemini_key_placeholder")),
+    );
+    ui.horizontal(|ui| {
+        if ui.button(t!("settings.gemini_key_save")).clicked() {
+            *notice = Some(if key.trim().is_empty() {
+                t!("settings.gemini_key_empty").into_owned()
+            } else {
+                match crate::ai_clips::save_key(key) {
+                    Ok(()) => {
+                        changed = true;
+                        t!("settings.gemini_key_saved").into_owned()
+                    }
+                    Err(error) => error,
+                }
+            });
+        }
+        if ui.button(t!("settings.gemini_key_delete")).clicked() {
+            *notice = Some(match crate::ai_clips::delete_key() {
+                Ok(()) => {
+                    key.clear();
+                    changed = true;
+                    t!("settings.gemini_key_deleted").into_owned()
+                }
+                Err(error) => error,
+            });
+        }
+        ui.hyperlink_to(
+            t!("settings.gemini_key_get"),
+            "https://aistudio.google.com/apikey",
+        );
+    });
+    if let Some(notice) = notice {
+        ui.label(notice.as_str());
+    }
+    if let Ok(path) = crate::ai_clips::key_path() {
+        ui.label(
+            egui::RichText::new(t!("settings.gemini_key_location", path = path.display()))
+                .small()
+                .weak(),
+        );
+    }
     changed
 }
 

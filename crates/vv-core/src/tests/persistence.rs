@@ -365,6 +365,21 @@ fn styled_title() -> TitleParams {
     gradient.offset.upsert(30, 1.0, Interpolation::Linear);
     let mut title = TitleParams::default();
     title.style = TextStyle {
+        underlays: vec![TextUnderlay {
+            color: red,
+            offset: [4.0, -6.0],
+            style: TextStyle {
+                strokes: vec![TextStroke::default()],
+                ..Default::default()
+            },
+        }],
+        sticker: Some(TextSticker {
+            asset: "capcut_onfire".into(),
+            size: [3.0, 0.5],
+            offset: [0.0, 0.5],
+            rotation: -4.7,
+            start: 0.38,
+        }),
         fill: TextFill::Gradient(gradient.clone()),
         strokes: vec![
             TextStroke::default(),

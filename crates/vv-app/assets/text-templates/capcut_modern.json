@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "capcut_modern",
+  "name": "Modern Halo",
+  "category": "titles",
+  "tags": [
+    "capcut",
+    "ported",
+    "modern halo"
+  ],
+  "duration": 3,
+  "layers": [
+    {
+      "text": "PROVA",
+      "font": "ZY Modern",
+      "size": 95.31214928604228,
+      "color": "#FFFFFFFF",
+      "line_spacing": -2.8593644785812686,
+      "position": [
+        0.0,
+        -295.3808752025932
+      ],
+      "weight": 400,
+      "italic": true,
+      "shadows": [
+        {
+          "color": "#000000FF",
+          "offset": [
+            0.0,
+            0.0
+          ],
+          "blur": 15.928408240157024,
+          "opacity": 100
+        }
+      ],
+      "underlays": []
+    }
+  ]
+}

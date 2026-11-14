@@ -4947,6 +4947,7 @@ name = "vv-app"
 version = "0.8.3"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
  "eframe",
  "egui",
  "egui_tiles",
@@ -4956,6 +4957,7 @@ dependencies = [
  "raw-window-handle",
  "resvg",
  "rfd",
+ "ring",
  "rust-i18n",
  "serde",
  "serde_json",

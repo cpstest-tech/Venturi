@@ -73,11 +73,13 @@ pub(crate) fn keyed_section_header(
     }
     let mut toggled_keyframe = false;
     if let Some(all_keyed) = all_keyed {
-        let right = if resettable { rect.right() - 32.0 } else { rect.right() - 12.0 };
-        let icon = egui::Rect::from_center_size(
-            egui::pos2(right, rect.center().y),
-            KEYFRAME_TOGGLE_SIZE,
-        );
+        let right = if resettable {
+            rect.right() - 32.0
+        } else {
+            rect.right() - 12.0
+        };
+        let icon =
+            egui::Rect::from_center_size(egui::pos2(right, rect.center().y), KEYFRAME_TOGGLE_SIZE);
         let hit = ui.interact(icon, id.with("keyframe"), egui::Sense::click());
         let visuals = ui.style().interact(&hit);
         if hit.hovered() {

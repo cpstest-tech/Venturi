@@ -235,6 +235,8 @@ pub struct AnimDescriptor {
     pub granularity: Granularity,
     pub easing: Easing,
     pub tracks: Vec<PropTrack>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sampled_tracks: Vec<SampledTrack>,
     /// Colour of `Tint` and `Glow`.
     pub tint: Rgba,
     pub reveal_dir: RevealDir,
@@ -255,11 +257,28 @@ impl Default for AnimDescriptor {
             granularity: Granularity::Block,
             easing: Easing::QuadOut,
             tracks: Vec::new(),
+            sampled_tracks: Vec::new(),
             tint: Rgba::WHITE,
             reveal_dir: RevealDir::Right,
             mirror: false,
             decor: None,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SampledTrack {
+    pub prop: AnimProp,
+    pub values: Vec<f32>,
+}
+
+impl SampledTrack {
+    pub fn value_at(&self, progress: f32) -> Option<f32> {
+        let last = self.values.len().checked_sub(1)?;
+        let at = progress.clamp(0.0, 1.0) * last as f32;
+        let index = (at.floor() as usize).min(last);
+        let next = (index + 1).min(last);
+        Some(self.values[index] + (self.values[next] - self.values[index]) * at.fract())
     }
 }
 
@@ -638,6 +657,20 @@ pub fn plan(anims: &TextAnimations, text: &str, state: &AnimState) -> AnimPlan {
                     gradient_offset += value;
                 } else {
                     fx[gi].apply(track.prop, value, d, &mut turns[gi]);
+                }
+            }
+            for track in &d.sampled_tracks {
+                let progress = if role == Role::Loop {
+                    phase.rem_euclid(1.0)
+                } else {
+                    p
+                };
+                if let Some(value) = track.value_at(progress) {
+                    if track.prop == AnimProp::GradientOffset {
+                        gradient_offset += value;
+                    } else {
+                        fx[gi].apply(track.prop, value, d, &mut turns[gi]);
+                    }
                 }
             }
         }

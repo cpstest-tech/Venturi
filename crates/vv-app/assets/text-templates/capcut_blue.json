@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "id": "capcut_blue",
+  "name": "Blue Outline",
+  "category": "titles",
+  "tags": [
+    "capcut",
+    "ported",
+    "blue outline"
+  ],
+  "duration": 3,
+  "layers": [
+    {
+      "text": "Testo predefinito",
+      "font": "Metropolis",
+      "size": 49.21875,
+      "color": "#FFFFFFFF",
+      "line_spacing": -1.4765625,
+      "position": [
+        0.0,
+        0.0
+      ],
+      "weight": 500,
+      "italic": false,
+      "strokes": [
+        {
+          "color": "#003856FF",
+          "width": 1.575
+        },
+        {
+          "color": "#43B7FFFF",
+          "width": 3.2484375
+        }
+      ],
+      "underlays": [
+        {
+          "text": "Testo predefinito",
+          "font": "Metropolis",
+          "size": 49.21875,
+          "color": "#5BC2FFFF",
+          "line_spacing": -1.4765625,
+          "position": [
+            0.33763672594120675,
+            -0.3376367259412067
+          ],
+          "weight": 500,
+          "italic": false,
+          "strokes": [],
+          "shadows": [
+            {
+              "color": "#5BC2FFFF",
+              "offset": [
+                0,
+                0
+              ],
+              "blur": 4.1015625,
+              "opacity": 100
+            }
+          ]
+        },
+        {
+          "text": "Testo predefinito",
+          "font": "Metropolis",
+          "size": 49.21875,
+          "color": "#5BC2FFFF",
+          "line_spacing": -1.4765625,
+          "position": [
+            -3.04169252092869,
+            2.50040253921773
+          ],
+          "weight": 500,
+          "italic": false,
+          "strokes": [],
+          "shadows": [
+            {
+              "color": "#5BC2FFFF",
+              "offset": [
+                0,
+                0
+              ],
+              "blur": 2.4609375,
+              "opacity": 100
+            }
+          ]
+        },
+        {
+          "text": "Testo predefinito",
+          "font": "Metropolis",
+          "size": 49.21875,
+          "color": "#5BC2FFFF",
+          "line_spacing": -1.4765625,
+          "position": [
+            4.772970773009196,
+            -4.772970773009195
+          ],
+          "weight": 500,
+          "italic": false,
+          "strokes": [],
+          "shadows": [
+            {
+              "color": "#5BC2FFFF",
+              "offset": [
+                0,
+                0
+              ],
+              "blur": 2.4609375,
+              "opacity": 100
+            }
+          ]
+        },
+        {
+          "text": "Testo predefinito",
+          "font": "Metropolis",
+          "size": 49.21875,
+          "color": "#FFFFFFFF",
+          "line_spacing": -1.4765625,
+          "position": [
+            0.0,
+            0.0
+          ],
+          "weight": 500,
+          "italic": false,
+          "strokes": [
+            {
+              "color": "#FFFFFFFF",
+              "width": 2.165625
+            }
+          ]
+        },
+        {
+          "text": "Testo predefinito",
+          "font": "Metropolis",
+          "size": 49.21875,
+          "color": "#FFFFFFFF",
+          "line_spacing": -1.4765625,
+          "position": [
+            1.988737822087165,
+            -1.9887378220871648
+          ],
+          "weight": 500,
+          "italic": false,
+          "strokes": [
+            {
+              "color": "#FFFFFFFF",
+              "width": 2.165625
+            }
+          ]
+        },
+        {
+          "text": "Testo predefinito",
+          "font": "Metropolis",
+          "size": 49.21875,
+          "color": "#003F6DFF",
+          "line_spacing": -1.4765625,
+          "position": [
+            1.988737822087165,
+            -1.9887378220871648
+          ],
+          "weight": 500,
+          "italic": false,
+          "strokes": []
+        }
+      ]
+    }
+  ]
+}

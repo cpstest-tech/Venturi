@@ -1,6 +1,63 @@
 use super::*;
 
 #[test]
+fn imported_wide_font_shapes_with_its_own_face() {
+    register_font(
+        include_bytes!("../../../vv-app/assets/fonts/capcut/tmpsequel100wide-75.ttf").to_vec(),
+    );
+    let params = TitleParams {
+        font_family: "Sequel 100 Wide".into(),
+        font_weight: 40,
+        content: vv_core::Keyframed::constant("abcde ABCDE".into()),
+        ..Default::default()
+    };
+    let (attrs, align) = text_attrs(&params);
+    with_fonts(|fonts, _| {
+        let mut buffer = Buffer::new(fonts, Metrics::new(100.0, 120.0));
+        shape_block(fonts, &mut buffer, &params, &attrs, align);
+        for run in buffer.layout_runs() {
+            for glyph in run.glyphs {
+                let face = fonts.db().face(glyph.font_id).unwrap();
+                assert!(
+                    face.families
+                        .iter()
+                        .any(|(family, _)| family == &params.font_family),
+                    "fallback: {:?}",
+                    face.families
+                );
+            }
+        }
+    });
+}
+
+#[test]
+fn styled_underlays_follow_edits_to_the_title_content() {
+    let mut title = TitleParams {
+        content: vv_core::Keyframed::constant("MMMMMM".into()),
+        size: 60.0,
+        ..Default::default()
+    };
+    title.style.underlays.push(vv_core::TextUnderlay {
+        color: Rgba::WHITE,
+        offset: [4.0, -6.0],
+        style: vv_core::TextStyle {
+            strokes: vec![vv_core::TextStroke {
+                width: 8.0,
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    });
+    let before = render_title(&title, (640, 360), (640, 360)).masks();
+    title.content.default = "I".into();
+    let after = render_title(&title, (640, 360), (640, 360)).masks();
+    assert_eq!(before.len(), after.len());
+    for ((before, _), (after, _)) in before.iter().zip(&after) {
+        assert!(after.mask.width < before.mask.width / 2);
+    }
+}
+
+#[test]
 fn prewarm_queue_deduplicates_animation_frames_and_bounds_pending_work() {
     let mut queue = PrewarmQueue::default();
     let title = TitleParams {

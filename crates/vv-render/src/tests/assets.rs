@@ -9,6 +9,13 @@ fn builtins_parse_and_cover_every_kind() {
     for asset in lib.of_kind(AssetKind::Transition) {
         assert!(asset.default_secs > 0.0);
     }
+    for id in [
+        "effects/gaussian_blur",
+        "effects/flash",
+        "effects/zoom_lens",
+    ] {
+        assert!(lib.get(id).is_some(), "{id}");
+    }
 }
 
 #[test]

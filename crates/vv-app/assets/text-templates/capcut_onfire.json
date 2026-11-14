@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "id": "capcut_onfire",
+  "name": "On Fire",
+  "category": "social",
+  "tags": [
+    "capcut",
+    "ported",
+    "on fire"
+  ],
+  "duration": 3,
+  "layers": [
+    {
+      "text": "ONFIRE",
+      "font": "Core Sans D 77 Cn Black",
+      "size": 149.7564733028412,
+      "color": "#FFFFFFFF",
+      "line_spacing": -4.492694199085236,
+      "position": [
+        0.0,
+        -19.99068832397461
+      ],
+      "weight": 400,
+      "italic": true,
+      "fill": {
+        "angle": 90.0,
+        "stops": [
+          [
+            0.0,
+            "#FFFFFFFF"
+          ],
+          [
+            0.5123893805309733,
+            "#DAD9D9FF"
+          ],
+          [
+            1.0,
+            "#AFAFAFFF"
+          ]
+        ]
+      },
+      "strokes": [
+        {
+          "color": "#400706FF",
+          "width": 8.985388197331389
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "mask_reveal",
+          "duration": 0.95,
+          "granularity": "block"
+        }
+      },
+      "sticker": {
+        "asset": "capcut_onfire",
+        "size": [
+          2.1161578600282342,
+          0.5054584758260579
+        ],
+        "offset": [
+          0.037560980677108946,
+          0.5128544527043558
+        ],
+        "rotation": -4.702644348144531,
+        "start": 0.383332
+      },
+      "underlays": [
+        {
+          "text": "ONFIRE",
+          "font": "Core Sans D 77 Cn Black",
+          "size": 149.7564733028412,
+          "color": "#E90300FF",
+          "line_spacing": -4.492694199085236,
+          "position": [
+            9.631941345366577,
+            -25.368362674534108
+          ],
+          "weight": 400,
+          "italic": true,
+          "strokes": [],
+          "shadows": [
+            {
+              "color": "#E90300FF",
+              "offset": [
+                0,
+                0
+              ],
+              "blur": 29.620079711715174,
+              "opacity": 100
+            }
+          ],
+          "glows": [
+            {
+              "color": "#E90300",
+              "radius": 26.956165194511414,
+              "intensity": 1.5
+            }
+          ]
+        },
+        {
+          "text": "ONFIRE",
+          "font": "Core Sans D 77 Cn Black",
+          "size": 149.7564733028412,
+          "color": "#360102FF",
+          "line_spacing": -4.492694199085236,
+          "position": [
+            0.0,
+            -19.99068832397461
+          ],
+          "weight": 400,
+          "italic": true,
+          "strokes": [
+            {
+              "color": "#F2C992",
+              "width": 14.975647330284119
+            },
+            {
+              "color": "#FB140B",
+              "width": 19.468341529369354
+            }
+          ],
+          "extrude": {
+            "color": "#360102FF",
+            "depth": 25.67253828048706,
+            "angle": -49.6492890995259
+          }
+        }
+      ]
+    }
+  ]
+}

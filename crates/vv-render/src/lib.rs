@@ -13,6 +13,7 @@ pub mod text;
 mod text_anim_render;
 mod text_fx;
 mod text_gpu;
+mod text_sticker;
 
 pub use compositor::{
     Compositor, Layer, LayerContent, OutputFrame, PooledTexture, YuvChroma, YuvFrame,
