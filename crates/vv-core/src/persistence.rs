@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Bumped whenever a file needs a step in `migrate` to load right.
-pub const CURRENT_FORMAT_VERSION: u32 = 2;
+pub const CURRENT_FORMAT_VERSION: u32 = 3;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersistenceError {

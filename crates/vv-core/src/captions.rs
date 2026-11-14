@@ -338,6 +338,24 @@ fn halo_filter(height: u32) -> ClipFilter {
     }
 }
 
+/// The words of `captions` spoken inside `start_ms..end_ms`, as `[start, end]`
+/// in ms from `start_ms`; `None` unless there are exactly `expected` of them
+/// (the words of the clip's text).
+pub fn clip_word_ms(
+    captions: &Captions,
+    start_ms: u32,
+    end_ms: u32,
+    expected: usize,
+) -> Option<Vec<[u32; 2]>> {
+    let words: Vec<[u32; 2]> = captions
+        .words
+        .iter()
+        .filter(|w| w.start_ms >= start_ms && w.start_ms < end_ms)
+        .map(|w| [w.start_ms - start_ms, w.end_ms.saturating_sub(start_ms)])
+        .collect();
+    (words.len() == expected).then_some(words)
+}
+
 /// The index of the subtitle track, if the timeline has one.
 pub fn subtitle_track(timeline: &crate::model::Timeline) -> Option<usize> {
     timeline.tracks.iter().position(|t| t.subtitles)

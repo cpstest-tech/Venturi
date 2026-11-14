@@ -56,6 +56,7 @@ mod slip_viewer;
 mod speed_dialog;
 mod subtitles;
 mod subtitles_ui;
+mod text_anim_panel;
 mod text_style_panel;
 mod theme;
 mod thumbnail_worker;

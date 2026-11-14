@@ -426,8 +426,13 @@ fn preset_label(interpolation: Interpolation) -> String {
         Interpolation::EaseIn => t!("keyframes.ease_in"),
         Interpolation::EaseOut => t!("keyframes.ease_out"),
         Interpolation::Bezier { .. } => t!("keyframes.bezier"),
+        Interpolation::Curve(easing) => easing_label(easing).into(),
     }
     .to_string()
+}
+
+pub(crate) fn easing_label(easing: vv_core::Easing) -> String {
+    t!(format!("easing.{}", easing.id())).into_owned()
 }
 
 /// Button drawing the easing curve of `preset`, its name in the tooltip.
@@ -706,6 +711,28 @@ fn show_toolbar(
                             clip.0, clip.1, clip.2, picks, preset,
                         )));
                 }
+            }
+            let mut picked = None;
+            egui::ComboBox::from_id_salt("keyframe_easing")
+                .selected_text(t!("keyframes.easing"))
+                .show_ui(ui, |ui| {
+                    for easing in vv_core::Easing::ALL {
+                        if ui.selectable_label(false, easing_label(easing)).clicked() {
+                            picked = Some(easing);
+                        }
+                    }
+                });
+            if let Some(easing) = picked {
+                let picks = with_zoom_link(state.selection.iter().copied().collect(), zoom_link);
+                response
+                    .commands
+                    .push(Box::new(vv_core::SetKeyframeInterpolation::new(
+                        clip.0,
+                        clip.1,
+                        clip.2,
+                        picks,
+                        Interpolation::Curve(easing),
+                    )));
             }
         });
     });

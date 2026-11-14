@@ -562,6 +562,7 @@ pub(crate) fn apply_title_edit(
         rotation
     );
     copy_changed!(style: strokes, shadows, glows, extrude);
+    copy_changed!(anim);
     if before.style.fill != after.style.fill {
         out.style.fill = match (&target.style.fill, &after.style.fill) {
             (vv_core::TextFill::Gradient(t), vv_core::TextFill::Gradient(a)) => {
@@ -1711,7 +1712,29 @@ impl VenturiApp {
                                         && sub == properties_tabs::VideoSubTab::Mask;
                                     match tab {
                                         properties_tabs::ClipTab::Speed => self.show_speed_tab(ui, targets),
-                                        properties_tabs::ClipTab::Animation => properties_tabs::animation_tab(ui),
+                                        properties_tabs::ClipTab::Animation => match info.title.clone() {
+                                            Some(before) => {
+                                                let mut title = before.clone();
+                                                let words = self.transcript_word_ms(&primary, &title);
+                                                if text_anim_panel::show(ui, &mut title, timeline_size, words) {
+                                                    let tl = self.timeline_id.map(|id| &self.session.project.timelines[id]);
+                                                    for t in targets.iter().filter(|t| t.is_text) {
+                                                        let Some(current) = tl
+                                                            .and_then(|tl| tl.tracks.get(t.track_index))
+                                                            .and_then(|tr| tr.clip(t.clip_id))
+                                                            .and_then(|c| c.effects.title.as_ref())
+                                                        else {
+                                                            continue;
+                                                        };
+                                                        let edited = apply_title_edit(current, &before, &title);
+                                                        if edited != *current {
+                                                            pending_effects.push(set_title((t.timeline, t.track_index, t.clip_id), edited));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            None => properties_tabs::animation_tab(ui),
+                                        },
                                         _ => {}
                                     }
 

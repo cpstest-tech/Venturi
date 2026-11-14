@@ -1,0 +1,73 @@
+_version: 2
+
+easing.linear:
+  en: "Linear"
+  it: "Lineare"
+
+easing.quad_in:
+  en: "Ease in"
+  it: "Entrata morbida"
+
+easing.quad_out:
+  en: "Ease out"
+  it: "Uscita morbida"
+
+easing.quad_in_out:
+  en: "Ease in-out"
+  it: "Morbida"
+
+easing.cubic_in:
+  en: "Ease in (strong)"
+  it: "Entrata forte"
+
+easing.cubic_out:
+  en: "Ease out (strong)"
+  it: "Uscita forte"
+
+easing.cubic_in_out:
+  en: "Ease in-out (strong)"
+  it: "Morbida forte"
+
+easing.back_in:
+  en: "Back in"
+  it: "Rincorsa"
+
+easing.back_out:
+  en: "Overshoot"
+  it: "Overshoot"
+
+easing.back_in_out:
+  en: "Back in-out"
+  it: "Rincorsa e overshoot"
+
+easing.elastic_in:
+  en: "Elastic in"
+  it: "Elastico in"
+
+easing.elastic_out:
+  en: "Elastic out"
+  it: "Elastico out"
+
+easing.elastic_in_out:
+  en: "Elastic in-out"
+  it: "Elastico in-out"
+
+easing.bounce_in:
+  en: "Bounce in"
+  it: "Rimbalzo in"
+
+easing.bounce_out:
+  en: "Bounce out"
+  it: "Rimbalzo out"
+
+easing.bounce_in_out:
+  en: "Bounce in-out"
+  it: "Rimbalzo in-out"
+
+easing.spring:
+  en: "Spring"
+  it: "Molla"
+
+keyframes.easing:
+  en: "Easing"
+  it: "Easing"

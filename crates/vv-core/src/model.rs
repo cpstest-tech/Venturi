@@ -302,6 +302,9 @@ pub enum Interpolation {
         c1: [f32; 2],
         c2: [f32; 2],
     },
+    /// A curve of the shared library (`easing.rs`): back, elastic,
+    /// bounce and spring may overshoot the arrival value.
+    Curve(crate::easing::Easing),
 }
 
 impl Interpolation {
@@ -329,6 +332,7 @@ impl Interpolation {
             Self::EaseIn => t * t,
             Self::EaseOut => t * (2.0 - t),
             Self::Bezier { c1, c2 } => bezier_ease(c1, c2, t),
+            Self::Curve(easing) => easing.ease(t),
         }
     }
 
@@ -336,7 +340,7 @@ impl Interpolation {
     /// has no curve to manipulate.
     pub fn control_points(self) -> Option<([f32; 2], [f32; 2])> {
         match self {
-            Self::Hold => None,
+            Self::Hold | Self::Curve(_) => None,
             Self::Linear => Some(([1.0 / 3.0, 1.0 / 3.0], [2.0 / 3.0, 2.0 / 3.0])),
             Self::EaseInOut => Some(([0.5, 0.0], [0.5, 1.0])),
             Self::EaseIn => Some(([0.42, 0.0], [1.0, 1.0])),
@@ -899,6 +903,11 @@ pub struct TitleParams {
     pub background: TitleBackground,
     #[serde(default)]
     pub style: TextStyle,
+    #[serde(default)]
+    pub anim: crate::text_anim::TextAnimations,
+    /// Runtime only: where `anim` is at the frame being drawn.
+    #[serde(skip)]
+    pub anim_state: Option<crate::text_anim::AnimState>,
 }
 
 /// The shadow titles had before the Drop Shadow filter, which replaces it
@@ -981,6 +990,8 @@ struct StoredTitle {
     background: TitleBackground,
     #[serde(default)]
     style: TextStyle,
+    #[serde(default)]
+    anim: crate::text_anim::TextAnimations,
 }
 
 impl StoredTitle {
@@ -1002,6 +1013,8 @@ impl StoredTitle {
             position: self.position,
             background: self.background,
             style: self.style,
+            anim: self.anim,
+            anim_state: None,
         };
         (title, self.shadow)
     }
@@ -1080,11 +1093,22 @@ impl Default for TitleParams {
             position: [0.0, 0.0],
             background: TitleBackground::default(),
             style: TextStyle::default(),
+            anim: Default::default(),
+            anim_state: None,
         }
     }
 }
 
 impl TitleParams {
+    /// The title (already taken `at` a frame) with its animations placed
+    /// `secs` into a clip lasting `len_secs`.
+    pub fn animated(mut self, secs: f32, len_secs: f32) -> Self {
+        self.anim_state = self
+            .anim
+            .state_at(&self.display_text(), secs, len_secs);
+        self
+    }
+
     /// The title as shown at source frame `frame`: its text and gradient
     /// offset no longer animated.
     pub fn at(&self, frame: FrameIdx) -> Self {

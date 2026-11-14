@@ -1,6 +1,7 @@
 pub mod captions;
 pub mod clipboard;
 pub mod command;
+pub mod easing;
 pub mod edit;
 pub mod grade;
 pub mod id_map;
@@ -11,6 +12,8 @@ pub mod otio;
 pub mod persistence;
 pub mod pool;
 mod stable_hash;
+pub mod text_anim;
+pub mod text_anim_presets;
 pub mod text_style;
 pub mod workflow;
 
@@ -29,6 +32,7 @@ pub use command::{
     set_clip_assets, set_clip_blend_mode, set_clip_filters, set_clip_flip, set_clip_gain,
     set_clip_masks, set_clip_matte, set_clip_title, set_clip_transform_param, set_clip_transition,
 };
+pub use easing::Easing;
 pub use grade::*;
 pub use mask::*;
 pub mod fx;
@@ -45,6 +49,7 @@ pub use pool::{
     AddEntities, DeleteFolder, MoveFolder, RenameFolder, RenameTimeline, SetMediaFolder,
 };
 pub use stable_hash::{StableHasher, stable_hash};
+pub use text_anim::*;
 pub use text_style::*;
 
 #[cfg(test)]

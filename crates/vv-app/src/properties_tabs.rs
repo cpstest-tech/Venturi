@@ -252,7 +252,6 @@ pub(crate) fn animation_tab(ui: &mut egui::Ui) {
 
 pub(crate) fn text_placeholders(ui: &mut egui::Ui) {
     placeholder_section(ui, &t!("props.bubble_effects"), &[t!("props.strength")]);
-    placeholder_section(ui, &t!("props.text_animation"), &[t!("props.anim_speed")]);
 }
 
 pub(crate) fn adjust_placeholders(ui: &mut egui::Ui) {
@@ -493,6 +492,27 @@ impl VenturiApp {
                 }
             }
         }
+    }
+
+    /// Words of the timeline's subtitles that fall inside the text clip, when
+    /// they match the words of its text.
+    pub(crate) fn transcript_word_ms(
+        &self,
+        clip: &PanelTarget,
+        title: &vv_core::TitleParams,
+    ) -> Option<Vec<[u32; 2]>> {
+        let tid = self.timeline_id?;
+        let captions = self.session.project.captions.get(&tid)?;
+        let timeline = self.session.project.timelines.get(tid)?;
+        let c = timeline.tracks.get(clip.track_index)?.clip(clip.clip_id)?;
+        let ms = |frame: i64| (frame as f64 / timeline.fps.as_f64().max(1.0) * 1000.0).round() as u32;
+        let words = vv_core::split_units(&title.display_text(), vv_core::Granularity::Word).len();
+        vv_core::captions::clip_word_ms(
+            captions,
+            ms(c.timeline_start),
+            ms(c.timeline_start + c.timeline_len),
+            words,
+        )
     }
 
     /// Speed tab of a media clip: ×, resulting duration and pitch; committed

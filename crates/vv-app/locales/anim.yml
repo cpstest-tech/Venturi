@@ -1,0 +1,197 @@
+_version: 2
+
+anim.in:
+  en: "In"
+  it: "Entrata"
+
+anim.out:
+  en: "Out"
+  it: "Uscita"
+
+anim.loop:
+  en: "Loop"
+  it: "Continua"
+
+anim.none:
+  en: "None"
+  it: "Nessuna"
+
+anim.duration:
+  en: "Duration (s)"
+  it: "Durata (s)"
+
+anim.period:
+  en: "Cycle (s)"
+  it: "Ciclo (s)"
+
+anim.stagger:
+  en: "Stagger"
+  it: "Ritardo tra unità"
+
+anim.easing:
+  en: "Easing"
+  it: "Easing"
+
+anim.granularity:
+  en: "Split by"
+  it: "Suddividi per"
+
+anim.order:
+  en: "Order"
+  it: "Ordine"
+
+anim.grain_block:
+  en: "Whole block"
+  it: "Intero blocco"
+
+anim.grain_line:
+  en: "Line"
+  it: "Riga"
+
+anim.grain_word:
+  en: "Word"
+  it: "Parola"
+
+anim.grain_char:
+  en: "Character"
+  it: "Carattere"
+
+anim.order_forward:
+  en: "Forward"
+  it: "Avanti"
+
+anim.order_backward:
+  en: "Backward"
+  it: "Indietro"
+
+anim.order_random:
+  en: "Random"
+  it: "Casuale"
+
+anim.order_center:
+  en: "From center"
+  it: "Dal centro"
+
+anim.karaoke:
+  en: "Karaoke"
+  it: "Karaoke"
+
+anim.karaoke_on:
+  en: "Highlight the spoken word"
+  it: "Evidenzia la parola pronunciata"
+
+anim.karaoke_color:
+  en: "Highlight colour"
+  it: "Colore evidenziazione"
+
+anim.karaoke_scale:
+  en: "Word scale"
+  it: "Scala della parola"
+
+anim.karaoke_keep:
+  en: "Keep spoken words highlighted"
+  it: "Mantieni evidenziate le parole già dette"
+
+anim.karaoke_sync:
+  en: "Sync with transcription"
+  it: "Sincronizza con la trascrizione"
+
+anim.karaoke_even:
+  en: "No matching transcription: words are spread evenly."
+  it: "Nessuna trascrizione corrispondente: parole distribuite in modo uniforme."
+
+anim.preset.fade:
+  en: "Fade"
+  it: "Dissolvenza"
+
+anim.preset.slide:
+  en: "Slide"
+  it: "Scorrimento"
+
+anim.preset.pop:
+  en: "Pop"
+  it: "Pop"
+
+anim.preset.bounce:
+  en: "Bounce"
+  it: "Rimbalzo"
+
+anim.preset.typewriter:
+  en: "Typewriter"
+  it: "Macchina da scrivere"
+
+anim.preset.slam:
+  en: "Slam"
+  it: "Slam"
+
+anim.preset.mask_reveal:
+  en: "Mask reveal"
+  it: "Rivelazione a maschera"
+
+anim.preset.wave:
+  en: "Wave"
+  it: "Onda"
+
+anim.preset.blur_in:
+  en: "Blur"
+  it: "Sfocatura"
+
+anim.preset.flip_3d:
+  en: "Flip 3D"
+  it: "Flip 3D"
+
+anim.preset.glitch:
+  en: "Glitch"
+  it: "Glitch"
+
+anim.preset.underline:
+  en: "Underline"
+  it: "Sottolineatura"
+
+anim.preset.scribble:
+  en: "Scribble"
+  it: "Scarabocchio"
+
+anim.preset.bar_expand:
+  en: "Expanding bar"
+  it: "Barra che si espande"
+
+anim.preset.dissolve:
+  en: "Dissolve"
+  it: "Dissolvenza a particelle"
+
+anim.preset.fall:
+  en: "Fall"
+  it: "Caduta"
+
+anim.preset.pulse:
+  en: "Pulse"
+  it: "Pulsazione"
+
+anim.preset.float:
+  en: "Float"
+  it: "Fluttuazione"
+
+anim.preset.loop_wave:
+  en: "Wave"
+  it: "Onda"
+
+anim.preset.shake:
+  en: "Shake"
+  it: "Tremore"
+
+anim.preset.glow_pulse:
+  en: "Glow pulse"
+  it: "Bagliore pulsante"
+
+anim.preset.shimmer:
+  en: "Shimmer"
+  it: "Luccichio"
+
+anim.preset.flicker:
+  en: "Flicker"
+  it: "Sfarfallio"
+
+anim.preset.gradient_flow:
+  en: "Gradient flow"
+  it: "Scorrimento gradiente"

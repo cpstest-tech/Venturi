@@ -596,11 +596,13 @@ pub fn clip_layer(
     let layer = build_layer(
         project,
         clip,
+        frame,
         source_frame,
         transform,
         opacity,
         content,
         timeline_size,
+        fps as f32,
     );
     let amount = clip.fade_multiplier_at(frame)
         * (clip.effects.transform.value_at(source_frame).opacity / 100.0).clamp(0.0, 1.0);
@@ -647,11 +649,13 @@ enum ClipContent {
 fn build_layer(
     project: &Project,
     clip: &Clip,
+    frame: FrameIdx,
     source_frame: FrameIdx,
     transform: Transform,
     opacity: f32,
     content: ClipContent,
     timeline_size: (u32, u32),
+    fps: f32,
 ) -> Option<OwnedLayer> {
     let filters: Vec<vv_core::FilterValue> = clip
         .effects
@@ -678,7 +682,11 @@ fn build_layer(
                 .as_ref()
                 .map_or(Rgba::BLACK, |k| k.value_at(source_frame)),
         ),
-        ClipSource::Text => OwnedContent::Text(clip.effects.title.as_ref()?.at(source_frame)),
+        ClipSource::Text => {
+            let title = clip.effects.title.as_ref()?.at(source_frame);
+            let local = (frame - clip.timeline_start).max(0) as f32 / fps;
+            OwnedContent::Text(title.animated(local, clip.timeline_len as f32 / fps))
+        }
         ClipSource::Adjustment => OwnedContent::Adjustment,
         ClipSource::Media(_) => {
             let source_size = clip_source_size(project, clip, timeline_size);
@@ -749,11 +757,13 @@ fn crossing_side_layer(
     let layer = build_layer(
         project,
         clip,
+        frame,
         source_frame,
         transform,
         opacity,
         content,
         timeline_size,
+        fps as f32,
     );
     Ok(layer.map(|layer| {
         let passes = asset_passes(clip, frame, fps, 1.0);

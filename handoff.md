@@ -659,3 +659,68 @@ transform, ratio); only `TitleParams` grew.
 - OTIO export ignores the style (Resolve text has no equivalent).
 - Not run clean: `cargo clippy` flags dead code in `export_dialog.rs` /
   `export_modal.rs` and `vv-transcribe` (existing, untouched).
+
+## Phase 9 — Text animations
+
+Branch `feat/text-animations` (from `feat/text-style-model`). Engine
+(compositor, decoder, encoder) untouched.
+
+### Done
+
+- **Easing library** (`vv-core/src/easing.rs`, `Easing`): linear, quad/cubic
+  in/out/in-out, back, elastic, bounce (each in/out/in-out), spring.
+  `Interpolation::Curve(Easing)` plugs it into keyframes (old files unchanged);
+  the keyframe editor toolbar got an «Easing» dropdown (`locales/easing.yml`).
+- **Descriptors as data** (`vv-core/src/text_anim.rs`, `TitleParams::anim`,
+  serialised with the project, format version 2 -> 3, all fields default):
+  `TextAnimations { enter, exit, looped, karaoke }`. An `AnimDescriptor` has
+  duration, stagger (0-0.95 of the duration spread over the units), order
+  (forward / backward / random / from centre), granularity (block / line /
+  word / char), easing, a list of `PropTrack`s (position, scale, rotation,
+  flip, opacity, blur, tint, tracking, reveal, gradient offset, glow; `jitter`
+  and loop `wave`), an optional `Decor` (underline, scribble, bar, side bar,
+  trim-path) and `mirror` (Out = In played backwards). Presets are plain
+  descriptors built in `text_anim_presets.rs`: In fade, slide, pop, bounce,
+  typewriter, slam, mask reveal, wave, blur, flip 3D, glitch + underline,
+  scribble, expanding bar; Out = the same mirrored + dissolve, fall; Loop
+  pulse, float, wave, shake, glow pulse, shimmer, flicker, gradient flow.
+  Picking one copies the descriptor into the title (templates keep it).
+- **Evaluation** is a pure function: `plan(anims, text, AnimState)`; the state
+  comes from `TitleParams::animated(secs, clip_secs)` (called in
+  `frame_provider::build_layer`, so preview and export share it). Noise is a
+  hash of (unit, 1/24 s step): no RNG state. States stop changing once an
+  animation is over, so caches keep hitting.
+- **Rendering** (`vv-render/src/text_anim_render.rs`): each glyph group gets
+  its whole style (strokes, shadows, glow, 3D, gradient) as a cropped sprite,
+  cached; per frame the sprites are moved/scaled/rotated/blurred/wiped into
+  the usual layer stack (`TitleRender`). Layout is the same as the static
+  path, so the last frame of an In equals the plain title (tested).
+- **Karaoke**: `Karaoke { color, scale, keep_past, word_ms }`; `word_ms` are
+  the transcription words (`captions::clip_word_ms`, filled by «Sync with
+  transcription» in the panel); without a matching transcript the words are
+  spread evenly over the clip.
+- **Panel** (`text_anim_panel.rs`, Animation tab of a text clip): In / Out /
+  Loop sections with preset buttons, duration, stagger, easing, split-by and
+  order, a Karaoke section, and an animated preview box that plays the preset
+  under the pointer (or the current animations). Strings in `locales/anim.yml`.
+- **Tests**: `vv-core` `tests/easing.rs`, `tests/text_anim*.rs` (units, orders,
+  stagger, mirror, loop period, determinism for every preset, karaoke, RON
+  round trip); `vv-render` `tests/text_anim_render.rs` (same state = same
+  pixels after clearing the caches, finished In = static title, reveal,
+  typewriter, decor growth, karaoke tint, every preset renders).
+
+### Remains / known limits
+
+- Not tried by hand: the panel, hover preview and an export of an animated
+  title.
+- Gradient offset animation moves the whole block (not per unit) and rebuilds
+  the sprites each frame: heavy with character granularity at 4K.
+- The background pill fades with the mean opacity of the units but does not
+  move. Underline/strikethrough follow their glyphs.
+- Tracking is a per-unit shift around the line centre, not a re-layout.
+- Flip 3D is a squash (cos of the angle), not a real perspective.
+- Blur is limited to the sprite margin plus its own padding; glow pulse uses
+  its own halo in the tint colour (the style's Glow section is not touched).
+- Karaoke is not set up by the subtitle templates yet (`build_clips`); the
+  per-word times are copied when the user enables it in the panel.
+- Keyframe diamonds still cover transform keyframes only.

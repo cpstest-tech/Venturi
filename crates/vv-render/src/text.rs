@@ -160,7 +160,7 @@ pub fn render_title(
     mask
 }
 
-fn text_attrs(params: &TitleParams) -> (Attrs<'_>, Align) {
+pub(crate) fn text_attrs(params: &TitleParams) -> (Attrs<'_>, Align) {
     let family = if params.font_family.is_empty() {
         Family::SansSerif
     } else {
@@ -249,6 +249,15 @@ fn rasterize(
     timeline_size: (u32, u32),
     output_size: (u32, u32),
 ) -> TitleRender {
+    if params.anim_state.is_some() {
+        return crate::text_anim_render::rasterize(
+            font_system,
+            swash,
+            params,
+            timeline_size,
+            output_size,
+        );
+    }
     let (width, height) = (output_size.0.max(1), output_size.1.max(1));
     let mut data = vec![0u8; (width * height) as usize];
     let scale = width as f32 / timeline_size.0.max(1) as f32;
@@ -301,19 +310,35 @@ fn rasterize(
         },
     );
 
-    let scale_px = |v: f32| v * scale;
     let text = TextMask {
         width,
         height,
         data,
     };
-    let mut layers = Vec::new();
-    let style = &params.style;
     let block_center = (
         origin_x as f32 + block_w / 2.0,
         origin_y as f32 + block_h / 2.0,
     );
+    let mut layers = background_layers(
+        params,
+        (width, height),
+        scale,
+        (block_center, (block_w, block_h)),
+    );
+    layers.extend(style_layers(text, params, scale, block_center, (block_w, block_h)).0);
+    TitleRender { layers }
+}
 
+/// The background shape of a title (rounded rectangle or pill), if enabled.
+pub(crate) fn background_layers(
+    params: &TitleParams,
+    (width, height): (u32, u32),
+    scale: f32,
+    (block_center, (block_w, block_h)): ((f32, f32), (f32, f32)),
+) -> Vec<(TextMask, Rgba)> {
+    let scale_px = |v: f32| v * scale;
+    let font_size = (params.size * scale).max(1.0);
+    let mut layers = Vec::new();
     let bg = &params.background;
     if bg.enabled {
         let padding = font_size * bg.padding;
@@ -362,6 +387,21 @@ fn rasterize(
         }
     }
 
+    layers
+}
+
+/// Shadows, glows, extrusion, strokes and fill of `text`, bottom up, and
+/// the index where the fill layers start.
+pub(crate) fn style_layers(
+    text: TextMask,
+    params: &TitleParams,
+    scale: f32,
+    block_center: (f32, f32),
+    (block_w, block_h): (f32, f32),
+) -> (Vec<(TextMask, Rgba)>, usize) {
+    let scale_px = |v: f32| v * scale;
+    let style = &params.style;
+    let mut layers = Vec::new();
     // Widest stroke first: the narrower ones sit on top of it.
     let mut strokes: Vec<_> = style.strokes.iter().filter(|s| s.width > 0.0).collect();
     strokes.sort_by(|a, b| b.width.total_cmp(&a.width));
@@ -395,6 +435,7 @@ fn rasterize(
     }
     layers.extend(stroke_masks);
 
+    let fill_start = layers.len();
     match &style.fill {
         TextFill::Solid => layers.push((text, params.color)),
         TextFill::Gradient(g) => {
@@ -413,7 +454,7 @@ fn rasterize(
             }
         }
     }
-    TitleRender { layers }
+    (layers, fill_start)
 }
 
 /// Fill and (if `outline > 0`) inner border of a rounded rectangle, with
