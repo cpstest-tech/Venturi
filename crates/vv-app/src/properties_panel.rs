@@ -825,6 +825,37 @@ pub(crate) fn toggle_filter_commands(
         .collect()
 }
 
+/// Sets, or with `None` removes, the `Colorize` filter of the targets.
+pub(crate) fn set_tint_commands(
+    tl: Option<&vv_core::Timeline>,
+    targets: &[PanelTarget],
+    tint: Option<vv_core::Rgba>,
+) -> Vec<BoxedCommand> {
+    targets
+        .iter()
+        .filter_map(|t| {
+            let effects = target_effects(tl, t)?;
+            let mut filters = effects.filters.clone();
+            let at = filters
+                .iter()
+                .position(|f| f.kind == vv_core::FilterKind::Colorize);
+            match (at, tint) {
+                (Some(i), Some(color)) => filters[i].color = color,
+                (None, Some(color)) => {
+                    let mut filter = vv_core::ClipFilter::new(vv_core::FilterKind::Colorize);
+                    filter.color = color;
+                    filters.push(filter);
+                }
+                (Some(i), None) => {
+                    filters.remove(i);
+                }
+                (None, None) => return None,
+            }
+            Some(set_filters((t.timeline, t.track_index, t.clip_id), filters))
+        })
+        .collect()
+}
+
 /// The effects of a clip targeted by the panel.
 pub(crate) fn target_effects<'a>(
     tl: Option<&'a vv_core::Timeline>,
@@ -1504,6 +1535,21 @@ impl VenturiApp {
                 .collect(),
             blend_mode: clip.effects.blend_mode,
             matte: clip.effects.matte,
+            tintable: match clip.source {
+                vv_core::ClipSource::Media(id) => self
+                    .session
+                    .project
+                    .media_pool
+                    .get(id)
+                    .is_some_and(|m| crate::stickers::is_tintable_path(&m.path)),
+                _ => false,
+            },
+            tint: clip
+                .effects
+                .filters
+                .iter()
+                .find(|f| f.kind == vv_core::FilterKind::Colorize)
+                .map(|f| f.color),
         })
     }
 
@@ -2250,6 +2296,13 @@ impl VenturiApp {
                                             );
                                             rows.push((opacity_params, row));
                                             }
+                                            if info.tintable {
+                                                ui.add_space(6.0);
+                                                if let Some(choice) = crate::stickers_ui::sticker_color_section(ui, info.tint) {
+                                                    let tl = self.timeline_id.map(|id| &self.session.project.timelines[id]);
+                                                    pending_effects.extend(set_tint_commands(tl, targets, choice));
+                                                }
+                                            }
                                             properties_tabs::stabilize_section(ui);
                                             properties_tabs::canvas_section(ui);
                                             }
@@ -2435,6 +2488,14 @@ impl VenturiApp {
                                                         }
                                                         reset_direction |= row.reset;
                                                         goto = goto.or(row.goto);
+                                                    }
+                                                    if kind == vv_core::FilterKind::Colorize {
+                                                        let mut color = filter.color;
+                                                        let row = color_row(ui, &t!("props.color"), &mut color);
+                                                        if row.changed {
+                                                            new_color = Some(color);
+                                                        }
+                                                        reset_color |= row.reset;
                                                     }
                                                     if kind == vv_core::FilterKind::DropShadow {
                                                         let mut color = filter.color;

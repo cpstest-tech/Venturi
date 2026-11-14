@@ -1756,6 +1756,15 @@ impl MediaDrag {
         }
     }
 
+    /// A video kept for at most `secs`: an animated sticker is baked longer
+    /// than the length it gets by default.
+    pub fn capped_secs(media_id: vv_core::MediaId, meta: &vv_core::MediaMeta, secs: f64) -> Self {
+        Self {
+            source_out: ((meta.fps.as_f64() * secs).round() as FrameIdx).min(meta.duration_frames),
+            ..Self::whole(media_id, meta)
+        }
+    }
+
     pub fn takes_video(&self, meta: &vv_core::MediaMeta) -> bool {
         meta.has_video && self.streams != DragStreams::AudioOnly
     }
@@ -1860,7 +1869,7 @@ impl TimelineDrag {
 /// (no ghost on the empty zones, no new tracks). The type shared
 /// with `EffectStack::filters` (`vv_core::FilterKind`) remains the single source
 /// of truth on "which filters exist": here their entries and labels.
-pub const FILTER_ENTRIES: [FilterEntry; 6] = [
+pub const FILTER_ENTRIES: [FilterEntry; 7] = [
     FilterEntry::plain(vv_core::FilterKind::ColorCorrection),
     FilterEntry {
         kind: vv_core::FilterKind::ColorCorrection,
@@ -1870,6 +1879,7 @@ pub const FILTER_ENTRIES: [FilterEntry; 6] = [
     FilterEntry::plain(vv_core::FilterKind::BoxBlur),
     FilterEntry::plain(vv_core::FilterKind::GaussianBlur),
     FilterEntry::plain(vv_core::FilterKind::DropShadow),
+    FilterEntry::plain(vv_core::FilterKind::Colorize),
 ];
 
 /// A library preset dragged from the Effects panel: like a filter, it lands
@@ -1905,6 +1915,7 @@ pub fn filter_label(kind: vv_core::FilterKind) -> std::borrow::Cow<'static, str>
         vv_core::FilterKind::GaussianBlur => t!("filter.gaussian_blur"),
         vv_core::FilterKind::Exposure => t!("filter.exposure"),
         vv_core::FilterKind::DropShadow => t!("filter.drop_shadow"),
+        vv_core::FilterKind::Colorize => t!("filter.colorize"),
     }
 }
 

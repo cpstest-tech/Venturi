@@ -1172,6 +1172,9 @@ pub enum FilterKind {
     GaussianBlur,
     Exposure,
     DropShadow,
+    /// Multiplies the clip by `ClipFilter::color`: white stickers take any
+    /// color, keeping their alpha and the shading of the glyph.
+    Colorize,
 }
 
 impl FilterKind {
@@ -1188,6 +1191,11 @@ impl FilterKind {
     /// Whether `ClipFilter::grade` applies to it.
     pub fn has_grade(self) -> bool {
         self == Self::ColorCorrection
+    }
+
+    /// Whether `ClipFilter::color` applies to it.
+    pub fn has_color(self) -> bool {
+        matches!(self, Self::DropShadow | Self::Colorize)
     }
 }
 
@@ -1341,6 +1349,7 @@ enum StoredFilterKind {
     GaussianBlur,
     Exposure,
     DropShadow,
+    Colorize,
 }
 
 impl From<StoredClipFilter> for ClipFilter {
@@ -1355,6 +1364,7 @@ impl From<StoredClipFilter> for ClipFilter {
             StoredFilterKind::GaussianBlur => (FilterKind::GaussianBlur, stored.grade),
             StoredFilterKind::Exposure => (FilterKind::Exposure, stored.grade),
             StoredFilterKind::DropShadow => (FilterKind::DropShadow, stored.grade),
+            StoredFilterKind::Colorize => (FilterKind::Colorize, stored.grade),
         };
         Self {
             kind,
@@ -1397,8 +1407,23 @@ impl FilterValue {
             grade: GradeValue::NEUTRAL,
             offset: DEFAULT_SHADOW_OFFSET,
             grow: 0.0,
-            color: Rgba::BLACK,
+            color: default_filter_color(kind),
         }
+    }
+}
+
+/// Color of a new `Colorize`: a visible change from the white of a sticker.
+pub const DEFAULT_COLORIZE: Rgba = Rgba {
+    r: 0.12,
+    g: 0.78,
+    b: 0.84,
+    a: 1.0,
+};
+
+const fn default_filter_color(kind: FilterKind) -> Rgba {
+    match kind {
+        FilterKind::Colorize => DEFAULT_COLORIZE,
+        _ => Rgba::BLACK,
     }
 }
 
@@ -1420,7 +1445,7 @@ impl ClipFilter {
             grade: GradeTracks::default(),
             offset: default_shadow_offset(),
             grow: default_shadow_grow(),
-            color: Rgba::BLACK,
+            color: default_filter_color(kind),
         }
     }
 

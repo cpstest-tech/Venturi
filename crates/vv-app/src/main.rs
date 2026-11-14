@@ -55,6 +55,7 @@ mod settings_dialog;
 mod silence_dialog;
 mod slip_viewer;
 mod speed_dialog;
+mod sticker_anim;
 mod stickers;
 mod stickers_ui;
 mod subtitles;
@@ -257,6 +258,9 @@ struct ClipPanelInfo {
     filters: Vec<FilterPanelInfo>,
     blend_mode: vv_core::BlendMode,
     matte: Option<vv_core::MatteMode>,
+    /// A catalog sticker made to be recolored, and the color it has now.
+    tintable: bool,
+    tint: Option<vv_core::Rgba>,
 }
 
 /// A filter of `ClipPanelInfo`, its parameters evaluated at the panel's frame.

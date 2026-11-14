@@ -169,9 +169,10 @@ impl Decoder {
         let time_base = video_stream.time_base();
         let fps = crate::probe::media_fps(path, &video_stream);
 
+        let alpha_codec = crate::probe::libvpx_for_alpha(&video_stream);
         let mut decoder_ctx =
             ffmpeg::codec::context::Context::from_parameters(video_stream.parameters())?.decoder();
-        let lease = if hw.is_empty() || crate::hw::has_failed(path) {
+        let lease = if hw.is_empty() || alpha_codec.is_some() || crate::hw::has_failed(path) {
             None
         } else {
             // SAFETY: plain fields, filled from the stream parameters.
@@ -192,7 +193,10 @@ impl Decoder {
             kind: ffmpeg::threading::Type::Frame,
             count: if hw.is_some() { 1 } else { 0 },
         });
-        let decoder = decoder_ctx.video()?;
+        let decoder = match alpha_codec {
+            Some(codec) => decoder_ctx.open_as(codec)?.video()?,
+            None => decoder_ctx.video()?,
+        };
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -693,7 +697,7 @@ fn format_flags(format: Pixel) -> u64 {
 
 /// `true` if `format` carries a real alpha channel (PNG, WebM with alpha,
 /// ProRes 4444) and not a fourth padding channel.
-fn format_has_alpha(format: Pixel) -> bool {
+pub(crate) fn format_has_alpha(format: Pixel) -> bool {
     format_flags(format) & ffmpeg::ffi::AV_PIX_FMT_FLAG_ALPHA as u64 != 0
 }
 

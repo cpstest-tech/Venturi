@@ -44,23 +44,23 @@ fn emoji_groups_stay_in_range() {
 
 #[test]
 fn search_matches_every_word_of_the_query() {
-    let heart = find("shape:heart:red").unwrap();
-    assert!(heart.matches("heart red"));
-    assert!(heart.matches("RED"));
+    let heart = find("shape:heart").unwrap();
+    assert!(heart.matches("shape heart"));
+    assert!(heart.matches("HEART"));
     assert!(!heart.matches("heart blue"));
     assert!(heart.matches(""));
 }
 
 #[test]
-fn every_shape_renders_in_every_color() {
+fn every_shape_renders() {
     for sticker in all()
         .iter()
-        .filter(|s| matches!(s.source, Source::Shape { .. }))
+        .filter(|s| matches!(s.source, Source::Shape(_)))
     {
-        let Source::Shape { shape, color } = sticker.source else {
+        let Source::Shape(shape) = sticker.source else {
             unreachable!()
         };
-        let png = rasterize(&shape_svg(shape, color), 32, sticker.halo()).unwrap();
+        let png = rasterize(&shape_svg(shape), 32, sticker.halo()).unwrap();
         let (width, pixels) = decode(&png);
         assert_eq!(width, 32);
         assert!(
@@ -121,13 +121,13 @@ fn urls_point_at_the_requested_size() {
             .unwrap()
             .contains("/512/emoji_u1f600.png")
     );
-    assert!(find("shape:star:red").unwrap().url(Size::Full).is_none());
+    assert!(find("shape:star").unwrap().url(Size::Full).is_none());
 }
 
 #[test]
 fn shapes_are_produced_without_network() {
     let dir = std::env::temp_dir().join(format!("vv-stickers-{}", std::process::id()));
-    let sticker = find("shape:star:yellow").unwrap();
+    let sticker = find("shape:star").unwrap();
     produce(&dir, sticker, Size::Thumb).unwrap();
     assert!(image_path(&dir, sticker, Size::Thumb).is_file());
     let _ = std::fs::remove_dir_all(&dir);
@@ -152,5 +152,78 @@ fn downloads_each_source() {
             produce(&dir, sticker, size).unwrap_or_else(|e| panic!("{id}: {e}"));
             assert!(image_path(&dir, sticker, size).is_file());
         }
+    }
+}
+
+#[test]
+fn animated_stickers_are_videos_and_the_rest_images() {
+    let smile = find("noto:1f600").unwrap();
+    assert!(smile.animated);
+    assert_eq!(smile.file_name(), "noto-1f600.webm");
+    let arrow = find("anim:arrow-right-bounce").unwrap();
+    assert!(arrow.animated && arrow.matches("animated"));
+    assert_eq!(arrow.file_name(), "anim-arrow-right-bounce.webm");
+    let heart = find("shape:heart").unwrap();
+    assert!(!heart.animated);
+    assert_eq!(heart.file_name(), "shape-heart.png");
+    let dir = Path::new("/s");
+    assert_eq!(
+        image_path(dir, arrow, Size::Thumb),
+        Path::new("/s/thumb/anim-arrow-right-bounce.png")
+    );
+    assert_eq!(
+        image_path(dir, arrow, Size::Full),
+        Path::new("/s/full/anim-arrow-right-bounce.webm")
+    );
+}
+
+#[test]
+fn only_white_catalog_stickers_are_tintable() {
+    for name in [
+        "shape-star.png",
+        "lucide-heart.png",
+        "phosphor-heart.png",
+        "anim-ripple.webm",
+    ] {
+        assert!(
+            is_tintable_path(Path::new(&format!("/lib/{name}"))),
+            "{name}"
+        );
+    }
+    for name in ["noto-1f600.webm", "photo.png", "my-shape-star.png"] {
+        assert!(
+            !is_tintable_path(Path::new(&format!("/lib/{name}"))),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "needs network access"]
+fn animated_stickers_encode_to_looping_webm() {
+    let dir = std::env::var_os("VV_STICKER_TEST_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::temp_dir().join(format!("vv-stickers-anim-{}", std::process::id()))
+        });
+    for id in ["anim:arrow-draw-arc", "anim:bell-ring", "noto:1f600"] {
+        let sticker = find(id).unwrap();
+        let started = std::time::Instant::now();
+        produce(&dir, sticker, Size::Full).unwrap_or_else(|e| panic!("{id}: {e}"));
+        eprintln!("{id}: {:?}", started.elapsed());
+        let path = image_path(&dir, sticker, Size::Full);
+        assert!(vv_media::has_alpha(&path), "{id} lost its alpha");
+        let meta = vv_media::probe(&path).unwrap();
+        let secs = meta.duration_frames as f64 / meta.fps.as_f64();
+        assert!(secs >= 5.5, "{id} lasts {secs}");
+    }
+}
+
+#[test]
+#[ignore = "needs network access; writes every animated sticker still to VV_STICKER_TEST_DIR"]
+fn every_animated_sticker_has_a_still() {
+    let dir = PathBuf::from(std::env::var_os("VV_STICKER_TEST_DIR").expect("VV_STICKER_TEST_DIR"));
+    for sticker in all().iter().filter(|s| matches!(s.source, Source::Anim(_))) {
+        produce(&dir, sticker, Size::Thumb).unwrap_or_else(|e| panic!("{}: {e}", sticker.id));
     }
 }

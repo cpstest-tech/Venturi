@@ -263,3 +263,15 @@ fn filter_keyframes_follow_trims_and_shifts_like_the_others() {
     effects.shift_keyframes(5);
     assert_eq!(effects.filters[0].radius.keyframes().last().unwrap().0, 25);
 }
+
+#[test]
+fn a_colorize_filter_defaults_to_a_visible_color_and_round_trips() {
+    let filter = ClipFilter::new(FilterKind::Colorize);
+    assert_eq!(filter.color, DEFAULT_COLORIZE);
+    assert_eq!(filter.value_at(0).color, DEFAULT_COLORIZE);
+    assert!(FilterKind::Colorize.has_color());
+    assert!(!FilterKind::Exposure.has_color());
+    let json = serde_json::to_string(&filter).unwrap();
+    let back: ClipFilter = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, filter);
+}

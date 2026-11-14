@@ -352,6 +352,37 @@ pub fn is_media_path(path: &Path) -> bool {
 }
 
 /// `probe_image` or `probe`, by extension.
+/// The libvpx decoder for a VP8/VP9 stream that carries alpha: FFmpeg's own
+/// decoders ignore the side channel WebM keeps it in.
+pub(crate) fn libvpx_for_alpha(stream: &ffmpeg::format::stream::Stream) -> Option<ffmpeg::Codec> {
+    let name = match stream.parameters().id() {
+        ffmpeg::codec::Id::VP9 => "libvpx-vp9",
+        ffmpeg::codec::Id::VP8 => "libvpx",
+        _ => return None,
+    };
+    let flagged = stream.metadata().get("alpha_mode") == Some("1");
+    flagged.then(|| ffmpeg::decoder::find_by_name(name)).flatten()
+}
+
+/// Whether the video of `path` has an alpha channel: a PNG-like pixel
+/// format, or a WebM that declares it.
+pub fn has_alpha(path: &Path) -> bool {
+    ensure_init();
+    let Ok(input) = ffmpeg::format::input(&path) else {
+        return false;
+    };
+    let Some(stream) = video_stream(&input) else {
+        return false;
+    };
+    if stream.metadata().get("alpha_mode") == Some("1") {
+        return true;
+    }
+    ffmpeg::codec::context::Context::from_parameters(stream.parameters())
+        .ok()
+        .and_then(|ctx| ctx.decoder().video().ok())
+        .is_some_and(|decoder| crate::decode::format_has_alpha(decoder.format()))
+}
+
 pub fn probe_media(path: &Path) -> Result<MediaMeta, crate::MediaError> {
     if is_image_path(path) {
         probe_image(path)

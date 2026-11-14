@@ -185,8 +185,8 @@ ribbon.audio_empty:
   it: "Vuota. Importa file audio con Importa o trascinali qui."
 
 ribbon.sticker_empty:
-  en: "Empty. Import PNG or WebP images with Import or drop them here."
-  it: "Vuota. Importa immagini PNG o WebP con Importa o trascinale qui."
+  en: "Empty. Import PNG, WebP, GIF, SVG or WebM files with Import or drop them here."
+  it: "Vuota. Importa file PNG, WebP, GIF, SVG o WebM con Importa o trascinali qui."
 
 ribbon.templates_empty:
   en: "No templates yet. Use \"Save as template\" in the text properties."
@@ -204,9 +204,13 @@ ribbon.template_name:
   en: "Style %{number}"
   it: "Stile %{number}"
 
-ribbon.sticker_format_soon:
-  en: "%{name}: SVG and GIF stickers are coming soon"
-  it: "%{name}: gli sticker SVG e GIF saranno presto disponibili"
+ribbon.sticker_converting:
+  en: "Converting %{name}…"
+  it: "Conversione di %{name}…"
+
+ribbon.sticker_convert_failed:
+  en: "%{name}: conversion failed (%{error})"
+  it: "%{name}: conversione non riuscita (%{error})"
 
 ribbon.import_unsupported:
   en: "%{name}: format not supported here"

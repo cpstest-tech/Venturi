@@ -973,7 +973,7 @@ impl VenturiApp {
 
     pub(crate) fn import_to_category_dialog(&mut self, category: Category) {
         let extensions: Vec<&str> = if category.is_sticker() {
-            vec!["png", "webp", "svg", "gif"]
+            vec!["png", "webp", "svg", "gif", "webm"]
         } else {
             vv_media::AUDIO_EXTENSIONS.to_vec()
         };
@@ -994,7 +994,7 @@ impl VenturiApp {
             return;
         };
         let accepted: &[&str] = if category.is_sticker() {
-            vv_media::IMAGE_EXTENSIONS
+            &["png", "jpg", "jpeg", "bmp", "tif", "tiff", "webm"]
         } else {
             vv_media::AUDIO_EXTENSIONS
         };
@@ -1006,16 +1006,10 @@ impl VenturiApp {
         let mut warnings = Vec::new();
         let mut files = Vec::new();
         for path in paths {
-            if path.is_dir() || has_extension(&path, accepted) {
+            if category.is_sticker() && !path.is_dir() && crate::stickers::needs_conversion(&path) {
+                self.start_sticker_conversion(path);
+            } else if path.is_dir() || has_extension(&path, accepted) {
                 files.push(path);
-            } else if category.is_sticker() && has_extension(&path, &["svg", "gif"]) {
-                warnings.push(
-                    t!(
-                        "ribbon.sticker_format_soon",
-                        name = vv_session::file_label(&path)
-                    )
-                    .into_owned(),
-                );
             } else {
                 warnings.push(
                     t!(
@@ -1069,6 +1063,9 @@ impl VenturiApp {
                 Some(match image_secs {
                     Some(secs) if meta.is_image() => {
                         timeline_ui::MediaDrag::image_secs(id, meta, secs)
+                    }
+                    Some(secs) if meta.has_video => {
+                        timeline_ui::MediaDrag::capped_secs(id, meta, secs)
                     }
                     _ => timeline_ui::MediaDrag::whole(id, meta),
                 })

@@ -119,14 +119,35 @@ fn the_import_category_follows_the_tab() {
 }
 
 #[test]
-fn svg_and_gif_stickers_are_flagged_not_imported() {
-    let mut app = VenturiApp::default();
-    app.import_into_category(
-        vec![PathBuf::from("/x/a.svg"), PathBuf::from("/x/b.gif")],
-        Category::Sticker(StickerCategory::Yours),
+fn svg_gif_and_animated_webp_stickers_are_converted_before_import() {
+    let dir = TempDir::new("vv-ribbon-convert");
+    let gif = dir.join("a.gif");
+    ffmpeg(
+        &["-f", "lavfi", "-i", "testsrc=size=32x32:rate=10:duration=1"],
+        &gif,
     );
-    assert_eq!(app.import_warnings.len(), 2);
-    assert!(app.library.assets.is_empty());
+    let svg = dir.join("b.svg");
+    std::fs::write(
+        &svg,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="#f00"/></svg>"##,
+    )
+    .unwrap();
+    let mut app = VenturiApp::default();
+    app.import_into_category(vec![gif, svg], Category::Sticker(StickerCategory::Yours));
+    assert!(app.import_warnings.is_empty());
+    assert_eq!(app.stickers.conversions.len(), 2);
+    for _ in 0..500 {
+        app.poll_sticker_conversions();
+        let _ = app.library.poll();
+        if app.library.assets.len() == 2 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let mut names: Vec<_> = app.library.assets.iter().map(|a| a.name.clone()).collect();
+    names.sort();
+    assert_eq!(names, ["a.webm", "b.png"]);
+    assert!(app.import_warnings.is_empty(), "{:?}", app.import_warnings);
 }
 
 #[test]

@@ -27,6 +27,13 @@ pub(crate) struct StickerState {
     /// Catalog ids whose "+" waits for the image to reach the library.
     wants: Vec<String>,
     imported: HashSet<String>,
+    /// Imported files being converted in the background.
+    pub(crate) conversions: Vec<Conversion>,
+}
+
+pub(crate) struct Conversion {
+    name: String,
+    done: std::sync::mpsc::Receiver<Result<PathBuf, String>>,
 }
 
 enum Item {
@@ -97,8 +104,55 @@ fn load_texture(ctx: &egui::Context, name: &str, path: &Path) -> Option<egui::Te
 }
 
 impl VenturiApp {
+    /// Converts an imported SVG, GIF or WebP in the background; the result
+    /// is imported into Yours by `poll_sticker_conversions`.
+    pub(crate) fn start_sticker_conversion(&mut self, path: PathBuf) {
+        let dir = stickers::default_dir()
+            .unwrap_or_else(|| std::env::temp_dir().join("venturi-stickers"));
+        let (tx, done) = std::sync::mpsc::channel();
+        let name = vv_session::file_label(&path);
+        std::thread::spawn(move || {
+            let _ = tx.send(stickers::convert_for_import(&path, &dir));
+        });
+        self.stickers.conversions.push(Conversion { name, done });
+    }
+
+    pub(crate) fn poll_sticker_conversions(&mut self) {
+        let mut ready = Vec::new();
+        self.stickers
+            .conversions
+            .retain(|c| match c.done.try_recv() {
+                Ok(result) => {
+                    ready.push((c.name.clone(), result));
+                    false
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => true,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
+            });
+        for (name, result) in ready {
+            match result {
+                Ok(path) => {
+                    self.import_into_category(vec![path], Category::Sticker(StickerCategory::Yours))
+                }
+                Err(e) => self
+                    .import_warnings
+                    .push(t!("ribbon.sticker_convert_failed", name = name, error = e).into_owned()),
+            }
+        }
+    }
+
     pub(crate) fn show_sticker_tab(&mut self, ui: &mut egui::Ui, category: Category) {
         let ctx = ui.ctx().clone();
+        self.poll_sticker_conversions();
+        for conversion in &self.stickers.conversions {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(t!("ribbon.sticker_converting", name = conversion.name));
+            });
+        }
+        if !self.stickers.conversions.is_empty() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
         if self.stickers.store.is_none()
             && let Some(dir) = stickers::default_dir()
         {
@@ -220,7 +274,7 @@ impl VenturiApp {
         let Some(sticker) = stickers::find(id) else {
             return Some(id.to_owned());
         };
-        let name = format!("{}.png", sticker.file_stem());
+        let name = sticker.file_name();
         if let Some(asset) = self
             .library
             .assets
@@ -359,6 +413,9 @@ fn show_tile(
             theme::FAVORITE,
         );
     }
+    if matches!(item, Item::Catalog(sticker) if sticker.animated) {
+        paint_animated_badge(ui.painter(), rect);
+    }
     let name = match item {
         Item::Catalog(sticker) => sticker.name.as_str(),
         Item::Asset(entry) => entry.name.as_str(),
@@ -399,6 +456,21 @@ fn show_tile(
     }
 }
 
+/// A small play triangle in the corner of an animated sticker.
+fn paint_animated_badge(painter: &egui::Painter, rect: egui::Rect) {
+    let c = rect.right_bottom() - egui::vec2(11.0, 11.0);
+    painter.circle_filled(c, 7.0, egui::Color32::from_black_alpha(170));
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            c + egui::vec2(-2.0, -3.5),
+            c + egui::vec2(-2.0, 3.5),
+            c + egui::vec2(3.5, 0.0),
+        ],
+        egui::Color32::WHITE,
+        egui::Stroke::NONE,
+    ));
+}
+
 fn catalog_texture(
     ctx: &egui::Context,
     state: &mut StickerState,
@@ -417,3 +489,73 @@ fn catalog_texture(
     state.textures.insert(sticker.id.clone(), texture.clone());
     Some(texture)
 }
+
+const SWATCHES: [(&str, [u8; 3]); 10] = [
+    ("white", [255, 255, 255]),
+    ("red", [239, 68, 68]),
+    ("orange", [249, 115, 22]),
+    ("yellow", [250, 204, 21]),
+    ("green", [34, 197, 94]),
+    ("cyan", [6, 182, 212]),
+    ("blue", [59, 130, 246]),
+    ("purple", [168, 85, 247]),
+    ("pink", [236, 72, 153]),
+    ("black", [17, 17, 17]),
+];
+
+fn to_rgba([r, g, b]: [u8; 3]) -> vv_core::Rgba {
+    let f = |v: u8| f32::from(v) / 255.0;
+    vv_core::Rgba {
+        r: f(r),
+        g: f(g),
+        b: f(b),
+        a: 1.0,
+    }
+}
+
+fn same_color(a: vv_core::Rgba, b: vv_core::Rgba) -> bool {
+    let near = |x: f32, y: f32| (x - y).abs() < 0.5 / 255.0;
+    near(a.r, b.r) && near(a.g, b.g) && near(a.b, b.b)
+}
+
+/// Swatches and a free picker for the color of a sticker. `Some(None)`: back
+/// to white; `Some(Some(c))`: the new color; `None`: untouched.
+pub(crate) fn sticker_color_section(
+    ui: &mut egui::Ui,
+    current: Option<vv_core::Rgba>,
+) -> Option<Option<vv_core::Rgba>> {
+    let mut choice = None;
+    ui.label(egui::RichText::new(t!("props.sticker_color")).strong());
+    let shown = current.unwrap_or(vv_core::Rgba::WHITE);
+    ui.horizontal_wrapped(|ui| {
+        for (name, rgb) in SWATCHES {
+            let color = to_rgba(rgb);
+            let (rect, resp) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
+            let fill = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+            ui.painter().circle_filled(rect.center(), 8.0, fill);
+            let selected = same_color(shown, color);
+            let stroke = if selected {
+                egui::Stroke::new(2.0, theme::ACCENT)
+            } else {
+                egui::Stroke::new(1.0, theme::BORDER_SUBTLE)
+            };
+            ui.painter().circle_stroke(rect.center(), 9.5, stroke);
+            if resp
+                .on_hover_text(t!(format!("props.swatch_{name}")))
+                .clicked()
+            {
+                choice = Some((name != "white").then_some(color));
+            }
+        }
+        let mut rgba: [f32; 4] = shown.into();
+        if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+            rgba[3] = 1.0;
+            choice = Some(Some(rgba.into()));
+        }
+    });
+    choice
+}
+
+#[cfg(test)]
+#[path = "tests/stickers_ui.rs"]
+mod tests;

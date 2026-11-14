@@ -214,7 +214,12 @@ impl VenturiApp {
         }
         // An image has nothing to gain from a proxy, and its duration is
         // the `IMAGE_DURATION_FRAMES` sentinel.
-        if self.settings.proxy_enabled && item.meta.has_video && !item.meta.is_image() {
+        // A proxy has no alpha channel: stickers keep their transparency.
+        if self.settings.proxy_enabled
+            && item.meta.has_video
+            && !item.meta.is_image()
+            && !vv_media::has_alpha(&item.path)
+        {
             let frames = item.meta.duration_frames.max(0) as u64;
             let quality = self.settings.proxy_quality;
             self.proxy_worker

@@ -102,6 +102,10 @@ filter.drop_shadow:
   en: "Drop Shadow"
   it: "Drop Shadow"
 
+filter.colorize:
+  en: "Colorize"
+  it: "Colora"
+
 pool.drag_to_clip:
   en: "Drag onto a video clip"
   it: "Trascina su una clip video"

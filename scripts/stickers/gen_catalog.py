@@ -38,7 +38,7 @@ def emoji():
                 continue
             seen.add(code)
             short = (item["shortcodes"] or [":" + code + ":"])[0].strip(":")
-            rows.append(f"{code}\t{short}\t{group}")
+            rows.append(f"{code}\t{short}\t{group}\t{int(item.get('animated', False))}")
     (OUT / "emoji.tsv").write_text("\n".join(rows) + "\n")
     print("emoji", len(rows))
 

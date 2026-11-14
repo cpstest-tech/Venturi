@@ -686,6 +686,36 @@ fn exposure_scales_the_color_by_stops_in_linear_light() {
 }
 
 #[test]
+fn colorize_multiplies_white_by_its_color_and_keeps_black() {
+    let compositor = Compositor::new_headless();
+    let render = |source: vv_core::Rgba, color: vv_core::Rgba| {
+        let filters = [vv_core::FilterValue {
+            color,
+            ..vv_core::FilterValue::new(vv_core::FilterKind::Colorize)
+        }];
+        let out = compositor.render_layers(
+            &[Layer {
+                filters: &filters,
+                ..Layer::new(LayerContent::Solid(source), Transform::default())
+            }],
+            OutputFrame::exact(4, 4),
+        );
+        out.as_chunks::<4>().0[0]
+    };
+    let orange = vv_core::Rgba {
+        r: 1.0,
+        g: 0.5,
+        b: 0.0,
+        a: 1.0,
+    };
+    let [r, g, b, _] = render(vv_core::Rgba::WHITE, orange);
+    assert_eq!((r, b), (255, 0));
+    assert!((g as i32 - 128).abs() <= 1);
+    assert_eq!(render(vv_core::Rgba::BLACK, orange)[..3], [0, 0, 0]);
+    assert_eq!(render(vv_core::Rgba::WHITE, vv_core::Rgba::WHITE)[..3], [255, 255, 255]);
+}
+
+#[test]
 fn a_text_layer_paints_its_color_only_where_the_glyphs_are() {
     let compositor = Compositor::new_headless();
     let title = vv_core::TitleParams {

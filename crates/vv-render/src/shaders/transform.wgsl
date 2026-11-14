@@ -152,6 +152,15 @@ fn apply_filter(rgb: vec3<f32>, id: f32, param: f32) -> vec3<f32> {
         let linear = pow(rgb, vec3<f32>(2.2)) * exp2(param);
         return clamp(pow(linear, vec3<f32>(1.0 / 2.2)), vec3<f32>(0.0), vec3<f32>(1.0));
     }
+    if (id > 2.5 && id < 3.5) { // Colorize, `param` is r << 16 | g << 8 | b
+        let packed = u32(param);
+        let tint = vec3<f32>(
+            f32((packed >> 16u) & 255u),
+            f32((packed >> 8u) & 255u),
+            f32(packed & 255u),
+        ) / 255.0;
+        return rgb * tint;
+    }
     return rgb;
 }
 

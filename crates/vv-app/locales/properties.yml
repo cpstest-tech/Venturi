@@ -980,3 +980,47 @@ props.clip_anim_pulse:
 props.clip_anim_period:
   en: "Cycle duration"
   it: "Durata ciclo"
+
+props.sticker_color:
+  en: "Sticker color"
+  it: "Colore sticker"
+
+props.swatch_white:
+  en: "White"
+  it: "Bianco"
+
+props.swatch_red:
+  en: "Red"
+  it: "Rosso"
+
+props.swatch_orange:
+  en: "Orange"
+  it: "Arancione"
+
+props.swatch_yellow:
+  en: "Yellow"
+  it: "Giallo"
+
+props.swatch_green:
+  en: "Green"
+  it: "Verde"
+
+props.swatch_cyan:
+  en: "Cyan"
+  it: "Ciano"
+
+props.swatch_blue:
+  en: "Blue"
+  it: "Blu"
+
+props.swatch_purple:
+  en: "Purple"
+  it: "Viola"
+
+props.swatch_pink:
+  en: "Pink"
+  it: "Rosa"
+
+props.swatch_black:
+  en: "Black"
+  it: "Nero"

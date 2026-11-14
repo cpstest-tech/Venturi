@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex, OnceLock, mpsc};
 use std::time::Duration;
 
 use crate::library_ribbon::StickerCategory;
+use crate::sticker_anim;
 
 const EMOJI: &str = include_str!("../assets/stickers/emoji.tsv");
 const LUCIDE: &str = include_str!("../assets/stickers/lucide.txt");
@@ -17,22 +18,12 @@ const PHOSPHOR: &str = include_str!("../assets/stickers/phosphor.txt");
 pub(crate) const EMOJI_GROUPS: usize = 9;
 const WORKERS: usize = 4;
 
+const NOTO_ANIMATED_URL: &str = "https://fonts.gstatic.com/s/e/notoemoji/latest";
 const NOTO_URL: &str = "https://raw.githubusercontent.com/googlefonts/noto-emoji/main/3D/png";
 const LUCIDE_URL: &str = "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons";
 const PHOSPHOR_URL: &str = "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/fill";
 
-const SHAPE_COLORS: [(&str, &str); 10] = [
-    ("red", "#ef4444"),
-    ("orange", "#f97316"),
-    ("yellow", "#facc15"),
-    ("green", "#22c55e"),
-    ("cyan", "#06b6d4"),
-    ("blue", "#3b82f6"),
-    ("purple", "#a855f7"),
-    ("pink", "#ec4899"),
-    ("white", "#ffffff"),
-    ("black", "#111111"),
-];
+const SHAPE_COLOR: &str = "#ffffff";
 
 /// SVG bodies in a 100x100 box; `FILL` is the color.
 const SHAPES: &[(&str, &str)] = &[
@@ -176,10 +167,16 @@ const ARROW_PREFIXES: &[&str] = &[
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Source {
-    Noto { code: String, group: u8 },
+    Noto {
+        code: String,
+        group: u8,
+        animated: bool,
+    },
     Lucide(String),
     Phosphor(String),
-    Shape { shape: usize, color: usize },
+    Shape(usize),
+    /// Index in `sticker_anim::DEFS`.
+    Anim(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -189,6 +186,7 @@ pub(crate) struct Sticker {
     pub name: String,
     pub category: StickerCategory,
     pub source: Source,
+    pub animated: bool,
     search: String,
 }
 
@@ -216,14 +214,30 @@ impl Size {
 
 impl Sticker {
     fn new(id: String, name: String, category: StickerCategory, source: Source) -> Self {
-        let search = format!("{} {}", id, name).to_lowercase();
+        let animated = matches!(
+            source,
+            Source::Anim(_) | Source::Noto { animated: true, .. }
+        );
+        let search =
+            format!("{} {} {}", id, name, if animated { "animated" } else { "" }).to_lowercase();
         Self {
             id,
             name,
             category,
             source,
+            animated,
             search,
         }
+    }
+
+    /// Extension of the full-size file: animated stickers are videos.
+    pub fn full_extension(&self) -> &'static str {
+        if self.animated { "webm" } else { "png" }
+    }
+
+    /// Name of the library asset made from the full-size file.
+    pub fn file_name(&self) -> String {
+        format!("{}.{}", self.file_stem(), self.full_extension())
     }
 
     /// The file name stem of the full-size image, also the name of the
@@ -239,11 +253,7 @@ impl Sticker {
     }
 
     fn halo(&self) -> bool {
-        match &self.source {
-            Source::Shape { color, .. } => SHAPE_COLORS[*color].0 == "white",
-            Source::Lucide(_) | Source::Phosphor(_) => true,
-            Source::Noto { .. } => false,
-        }
+        !matches!(self.source, Source::Noto { .. })
     }
 
     fn url(&self, size: Size) -> Option<String> {
@@ -253,7 +263,18 @@ impl Sticker {
             }
             Source::Lucide(name) => Some(format!("{LUCIDE_URL}/{name}.svg")),
             Source::Phosphor(name) => Some(format!("{PHOSPHOR_URL}/{name}-fill.svg")),
-            Source::Shape { .. } => None,
+            Source::Shape(_) | Source::Anim(_) => None,
+        }
+    }
+
+    fn animated_noto_url(&self) -> Option<String> {
+        match &self.source {
+            Source::Noto {
+                code,
+                animated: true,
+                ..
+            } => Some(format!("{NOTO_ANIMATED_URL}/{code}/512.webp")),
+            _ => None,
         }
     }
 }
@@ -285,6 +306,17 @@ pub(crate) fn all() -> &'static [Sticker] {
     ALL.get_or_init(build)
 }
 
+/// Whether the media is a catalog sticker drawn in white to be recolored.
+pub(crate) fn is_tintable_path(path: &Path) -> bool {
+    let stem = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    ["shape-", "lucide-", "phosphor-", "anim-"]
+        .iter()
+        .any(|prefix| stem.starts_with(prefix))
+}
+
 pub(crate) fn find(id: &str) -> Option<&'static Sticker> {
     all().iter().find(|s| s.id == id)
 }
@@ -292,18 +324,26 @@ pub(crate) fn find(id: &str) -> Option<&'static Sticker> {
 fn build() -> Vec<Sticker> {
     let mut out = Vec::new();
     for (shape, (name, _)) in SHAPES.iter().enumerate() {
-        for (color, (color_name, _)) in SHAPE_COLORS.iter().enumerate() {
-            out.push(Sticker::new(
-                format!("shape:{}:{color_name}", name.replace(' ', "-")),
-                humanize(&format!("{name} {color_name}")),
-                StickerCategory::Shapes,
-                Source::Shape { shape, color },
-            ));
-        }
+        out.push(Sticker::new(
+            format!("shape:{}", name.replace(' ', "-")),
+            humanize(name),
+            StickerCategory::Shapes,
+            Source::Shape(shape),
+        ));
+    }
+    for (index, def) in sticker_anim::DEFS.iter().enumerate() {
+        out.push(Sticker::new(
+            format!("anim:{}", def.slug),
+            def.name.to_owned(),
+            def.category,
+            Source::Anim(index),
+        ));
     }
     for line in EMOJI.lines() {
         let mut parts = line.split('\t');
-        if let (Some(code), Some(name), Some(group)) = (parts.next(), parts.next(), parts.next()) {
+        if let (Some(code), Some(name), Some(group), Some(animated)) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        {
             out.push(Sticker::new(
                 format!("noto:{code}"),
                 humanize(name),
@@ -311,6 +351,7 @@ fn build() -> Vec<Sticker> {
                 Source::Noto {
                     code: code.to_owned(),
                     group: group.parse().unwrap_or(0),
+                    animated: animated == "1",
                 },
             ));
         }
@@ -334,8 +375,8 @@ fn build() -> Vec<Sticker> {
     out
 }
 
-fn shape_svg(shape: usize, color: usize) -> String {
-    let body = SHAPES[shape].1.replace("FILL", SHAPE_COLORS[color].1);
+fn shape_svg(shape: usize) -> String {
+    let body = SHAPES[shape].1.replace("FILL", SHAPE_COLOR);
     format!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">{body}</svg>"#)
 }
 
@@ -349,6 +390,23 @@ fn tint_icon(svg: &str) -> String {
 /// Renders `svg` into a `size` square PNG; icons get a dark halo so white
 /// glyphs stay visible on bright footage.
 pub(crate) fn rasterize(svg: &str, size: u32, halo: bool) -> Result<Vec<u8>, String> {
+    render_pixmap(svg, size, halo)?
+        .encode_png()
+        .map_err(|e| e.to_string())
+}
+
+/// The same as straight (not premultiplied) RGBA, for the video encoder.
+pub(crate) fn render_rgba(svg: &str, size: u32, halo: bool) -> Result<Vec<u8>, String> {
+    let pixmap = render_pixmap(svg, size, halo)?;
+    let mut rgba = Vec::with_capacity(pixmap.pixels().len() * 4);
+    for pixel in pixmap.pixels() {
+        let c = pixel.demultiply();
+        rgba.extend_from_slice(&[c.red(), c.green(), c.blue(), c.alpha()]);
+    }
+    Ok(rgba)
+}
+
+fn render_pixmap(svg: &str, size: u32, halo: bool) -> Result<resvg::tiny_skia::Pixmap, String> {
     use resvg::{tiny_skia, usvg};
     let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).map_err(|e| e.to_string())?;
     let margin = if halo { size / 32 + 1 } else { size / 64 };
@@ -366,7 +424,7 @@ pub(crate) fn rasterize(svg: &str, size: u32, halo: bool) -> Result<Vec<u8>, Str
     if halo {
         add_halo(&mut pixmap, margin as usize);
     }
-    pixmap.encode_png().map_err(|e| e.to_string())
+    Ok(pixmap)
 }
 
 /// Black shadow under the glyph, `radius` pixels wide.
@@ -434,18 +492,136 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     std::fs::rename(&part, path).map_err(|e| e.to_string())
 }
 
-fn svg_text(dir: &Path, sticker: &Sticker) -> Result<String, String> {
-    if let Source::Shape { shape, color } = sticker.source {
-        return Ok(shape_svg(shape, color));
-    }
-    let cached = dir.join("svg").join(format!("{}.svg", sticker.file_stem()));
+fn phosphor_svg(dir: &Path, name: &str) -> Result<String, String> {
+    let cached = dir.join("svg").join(format!("phosphor-{name}.svg"));
     if let Ok(text) = std::fs::read_to_string(&cached) {
-        return Ok(tint_icon(&text));
+        return Ok(text);
     }
-    let url = sticker.url(Size::Full).ok_or("no source")?;
-    let bytes = http_get(&url)?;
+    let bytes = http_get(&format!("{PHOSPHOR_URL}/{name}-fill.svg"))?;
     write_atomic(&cached, &bytes)?;
-    Ok(tint_icon(&String::from_utf8_lossy(&bytes)))
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+fn svg_text(dir: &Path, sticker: &Sticker) -> Result<String, String> {
+    match &sticker.source {
+        Source::Shape(shape) => Ok(shape_svg(*shape)),
+        Source::Phosphor(name) => phosphor_svg(dir, name).map(|svg| tint_icon(&svg)),
+        Source::Lucide(name) => {
+            let cached = dir.join("svg").join(format!("{}.svg", sticker.file_stem()));
+            if let Ok(text) = std::fs::read_to_string(&cached) {
+                return Ok(tint_icon(&text));
+            }
+            let bytes = http_get(&format!("{LUCIDE_URL}/{name}.svg"))?;
+            write_atomic(&cached, &bytes)?;
+            Ok(tint_icon(&String::from_utf8_lossy(&bytes)))
+        }
+        _ => Err("no svg".to_owned()),
+    }
+}
+
+/// Minimum length of an animated sticker, so that it can be stretched on the
+/// timeline beyond its default length.
+const ANIMATED_MIN_SECS: f64 = 6.0;
+const ANIMATED_SIZE: u32 = 512;
+
+fn encode_error(e: impl std::fmt::Display) -> String {
+    e.to_string()
+}
+
+/// The frames of one loop, rendered on all cores.
+fn render_loop(
+    def: &sticker_anim::AnimDef,
+    icon: Option<&str>,
+    frames: usize,
+) -> Result<Vec<Vec<u8>>, String> {
+    let threads = std::thread::available_parallelism()
+        .map_or(2, |n| n.get())
+        .min(frames.max(1));
+    let render = |i: usize| {
+        let svg = sticker_anim::frame(def, icon, i as f32 / frames as f32);
+        render_rgba(&svg, ANIMATED_SIZE, true)
+    };
+    let mut out: Vec<Result<Vec<u8>, String>> = Vec::with_capacity(frames);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..threads)
+            .map(|k| {
+                let render = &render;
+                scope.spawn(move || {
+                    (k..frames)
+                        .step_by(threads)
+                        .map(|i| (i, render(i)))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let mut indexed: Vec<_> = workers
+            .into_iter()
+            .flat_map(|w| w.join().unwrap_or_default())
+            .collect();
+        indexed.sort_by_key(|(i, _)| *i);
+        out.extend(indexed.into_iter().map(|(_, r)| r));
+    });
+    if out.len() != frames {
+        return Err("a render thread failed".to_owned());
+    }
+    out.into_iter().collect()
+}
+
+fn produce_animated(dir: &Path, sticker: &Sticker, target: &Path) -> Result<(), String> {
+    let part = target.with_extension("part.webm");
+    if let Some(parent) = part.parent() {
+        std::fs::create_dir_all(parent).map_err(encode_error)?;
+    }
+    let result = match &sticker.source {
+        Source::Noto { .. } => {
+            let url = sticker.animated_noto_url().ok_or("no animation")?;
+            let source = dir
+                .join("src")
+                .join(format!("{}.webp", sticker.file_stem()));
+            write_atomic(&source, &http_get(&url)?)?;
+            let animation = vv_media::anim::decode_animation(&source).map_err(encode_error)?;
+            let order = vv_media::anim::loop_indices(
+                &animation.delays,
+                sticker_anim::FRAME_RATE,
+                ANIMATED_MIN_SECS,
+            );
+            let frames = order.into_iter().map(|i| animation.frames[i].clone());
+            vv_media::anim::encode_alpha_webm(
+                &part,
+                animation.width,
+                animation.height,
+                sticker_anim::FRAME_RATE,
+                frames,
+            )
+            .map_err(encode_error)
+        }
+        Source::Anim(index) => {
+            let def = &sticker_anim::DEFS[*index];
+            let icon = match def.body {
+                sticker_anim::Body::Icon(name, _) => Some(phosphor_svg(dir, name)?),
+                sticker_anim::Body::Draw(_) => None,
+            };
+            let per_loop =
+                (f64::from(def.secs) * f64::from(sticker_anim::FRAME_RATE)).round() as usize;
+            let loops = (ANIMATED_MIN_SECS / f64::from(def.secs)).ceil() as usize;
+            let one_loop = render_loop(def, icon.as_deref(), per_loop)?;
+            let frames = (0..loops).flat_map(|_| one_loop.iter().cloned());
+            vv_media::anim::encode_alpha_webm(
+                &part,
+                ANIMATED_SIZE,
+                ANIMATED_SIZE,
+                sticker_anim::FRAME_RATE,
+                frames,
+            )
+            .map_err(encode_error)
+        }
+        _ => Err("not animated".to_owned()),
+    };
+    if let Err(e) = result {
+        let _ = std::fs::remove_file(&part);
+        return Err(e);
+    }
+    std::fs::rename(&part, target).map_err(encode_error)
 }
 
 fn produce(dir: &Path, sticker: &Sticker, size: Size) -> Result<(), String> {
@@ -453,19 +629,114 @@ fn produce(dir: &Path, sticker: &Sticker, size: Size) -> Result<(), String> {
     if target.is_file() {
         return Ok(());
     }
+    if sticker.animated && size == Size::Full {
+        return produce_animated(dir, sticker, &target);
+    }
     let png = match &sticker.source {
         Source::Noto { .. } => {
             let url = sticker.url(size).ok_or("no source")?;
             http_get(&url)?
+        }
+        Source::Anim(index) => {
+            let def = &sticker_anim::DEFS[*index];
+            let icon = match def.body {
+                sticker_anim::Body::Icon(name, _) => Some(phosphor_svg(dir, name)?),
+                sticker_anim::Body::Draw(_) => None,
+            };
+            rasterize(
+                &sticker_anim::frame(def, icon.as_deref(), def.still),
+                size.pixels(),
+                true,
+            )?
         }
         _ => rasterize(&svg_text(dir, sticker)?, size.pixels(), sticker.halo())?,
     };
     write_atomic(&target, &png)
 }
 
+/// Whether an imported sticker file needs converting first.
+pub(crate) fn needs_conversion(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+        ["svg", "gif", "webp"]
+            .iter()
+            .any(|x| x.eq_ignore_ascii_case(e))
+    })
+}
+
+const IMPORT_SVG_SIZE: u32 = 1024;
+
+/// Turns a user's SVG into a PNG and an animated GIF or WebP into a looping
+/// WebM, under `dir/imports`. A still WebP is returned as it is.
+pub(crate) fn convert_for_import(src: &Path, dir: &Path) -> Result<PathBuf, String> {
+    let stem = src
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("sticker");
+    let extension = src
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
+    let out = |ext: &str| dir.join("imports").join(format!("{stem}.{ext}"));
+    if extension == "svg" {
+        let text = std::fs::read_to_string(src).map_err(encode_error)?;
+        let png = rasterize(&text, IMPORT_SVG_SIZE, false)?;
+        let target = out("png");
+        write_atomic(&target, &png)?;
+        return Ok(target);
+    }
+    let animation = vv_media::anim::decode_animation(src).map_err(encode_error)?;
+    if animation.frames.len() < 2 {
+        return if extension == "webp" {
+            Ok(src.to_path_buf())
+        } else {
+            let png = {
+                let mut bytes = Vec::new();
+                let mut encoder = png::Encoder::new(&mut bytes, animation.width, animation.height);
+                encoder.set_color(png::ColorType::Rgba);
+                encoder.set_depth(png::BitDepth::Eight);
+                let mut writer = encoder.write_header().map_err(encode_error)?;
+                writer
+                    .write_image_data(&animation.frames[0])
+                    .map_err(encode_error)?;
+                writer.finish().map_err(encode_error)?;
+                bytes
+            };
+            let target = out("png");
+            write_atomic(&target, &png)?;
+            Ok(target)
+        };
+    }
+    let order = vv_media::anim::loop_indices(
+        &animation.delays,
+        sticker_anim::FRAME_RATE,
+        ANIMATED_MIN_SECS,
+    );
+    let frames = order.into_iter().map(|i| animation.frames[i].clone());
+    let target = out("webm");
+    let part = target.with_extension("part.webm");
+    if let Some(parent) = part.parent() {
+        std::fs::create_dir_all(parent).map_err(encode_error)?;
+    }
+    vv_media::anim::encode_alpha_webm(
+        &part,
+        animation.width,
+        animation.height,
+        sticker_anim::FRAME_RATE,
+        frames,
+    )
+    .map_err(encode_error)?;
+    std::fs::rename(&part, &target).map_err(encode_error)?;
+    Ok(target)
+}
+
 pub(crate) fn image_path(dir: &Path, sticker: &Sticker, size: Size) -> PathBuf {
+    let extension = match size {
+        Size::Thumb => "png",
+        Size::Full => sticker.full_extension(),
+    };
     dir.join(size.dir())
-        .join(format!("{}.png", sticker.file_stem()))
+        .join(format!("{}.{extension}", sticker.file_stem()))
 }
 
 pub(crate) fn default_dir() -> Option<PathBuf> {

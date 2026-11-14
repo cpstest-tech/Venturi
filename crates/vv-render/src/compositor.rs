@@ -169,10 +169,22 @@ fn filter_shader_id(kind: vv_core::FilterKind) -> f32 {
     match kind {
         vv_core::FilterKind::ColorCorrection => 1.0,
         vv_core::FilterKind::Exposure => 2.0,
+        vv_core::FilterKind::Colorize => 3.0,
         vv_core::FilterKind::BoxBlur
         | vv_core::FilterKind::GaussianBlur
         | vv_core::FilterKind::DropShadow => 0.0,
     }
+}
+
+/// The scalar the shader gets for a filter: a `Colorize` color as the integer
+/// `r << 16 | g << 8 | b`, which a f32 holds exactly.
+fn filter_param(filter: &vv_core::FilterValue) -> f32 {
+    if filter.kind != vv_core::FilterKind::Colorize {
+        return filter.amount;
+    }
+    let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u32;
+    let c = filter.color;
+    ((byte(c.r) << 16) | (byte(c.g) << 8) | byte(c.b)) as f32
 }
 
 /// Past that many taps per side a blur samples every few texels instead of
@@ -528,7 +540,7 @@ impl TransformUniform {
             extra: [opacity.clamp(0.0, 1.0), blend_shader_id(blend), 0.0, 0.0],
             planes,
             filters: pack_filter_slots(filters, |f| filter_shader_id(f.kind)),
-            filter_params: pack_filter_slots(filters, |f| f.amount),
+            filter_params: pack_filter_slots(filters, filter_param),
         }
     }
 }
