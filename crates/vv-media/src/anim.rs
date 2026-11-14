@@ -222,6 +222,89 @@ pub fn encode_alpha_webm(
     Ok(())
 }
 
+/// One loop of an animated sticker, small, for the tiles of the library.
+pub struct Preview {
+    pub width: u32,
+    pub height: u32,
+    pub fps: f64,
+    /// Straight RGBA, one loop.
+    pub frames: Vec<Vec<u8>>,
+}
+
+fn to_rgba(frame: &crate::decode::FrameYuv420) -> Vec<u8> {
+    let (kr, kb) = match frame.matrix {
+        crate::decode::ColorMatrix::Bt709 => (0.2126f32, 0.0722f32),
+        crate::decode::ColorMatrix::Bt2020 => (0.2627, 0.0593),
+        _ => (0.299, 0.114),
+    };
+    let kg = 1.0 - kr - kb;
+    let (y_off, y_scale, c_scale) = if frame.full_range {
+        (0.0, 1.0, 1.0)
+    } else {
+        (16.0, 255.0 / 219.0, 255.0 / 224.0)
+    };
+    let (w, h) = (frame.width as usize, frame.height as usize);
+    let mut out = Vec::with_capacity(w * h * 4);
+    for y in 0..h {
+        for x in 0..w {
+            let luma = (f32::from(frame.y[y * w + x]) - y_off) * y_scale;
+            let (u, v) = frame.chroma_at(x / 2, y / 2);
+            let cb = (f32::from(u) - 128.0) * c_scale;
+            let cr = (f32::from(v) - 128.0) * c_scale;
+            let r = luma + 2.0 * (1.0 - kr) * cr;
+            let b = luma + 2.0 * (1.0 - kb) * cb;
+            let g = (luma - kr * r - kb * b) / kg;
+            let alpha = frame.alpha.as_ref().map_or(255, |a| a[y * w + x]);
+            out.extend_from_slice(&[
+                r.clamp(0.0, 255.0) as u8,
+                g.clamp(0.0, 255.0) as u8,
+                b.clamp(0.0, 255.0) as u8,
+                alpha,
+            ]);
+        }
+    }
+    out
+}
+
+/// Length in frames of the loop that `frames` repeat (all of them if none).
+fn loop_length(frames: &[Vec<u8>]) -> usize {
+    let n = frames.len();
+    let differs = |a: &[u8], b: &[u8]| {
+        let total: u64 = a
+            .iter()
+            .zip(b)
+            .map(|(x, y)| u64::from(x.abs_diff(*y)))
+            .sum();
+        total as f64 / a.len().max(1) as f64 > 3.0
+    };
+    (6..=n / 2)
+        .find(|&p| (0..n - p).all(|i| !differs(&frames[i], &frames[i + p])))
+        .unwrap_or(n)
+}
+
+/// Decodes a sticker WebM at about `size` pixels, one loop of it.
+pub fn decode_preview(path: &Path, size: u32) -> Result<Preview, crate::MediaError> {
+    let mut decoder = crate::decode::Decoder::open(path)?;
+    decoder.set_max_size(Some((size, size)));
+    let fps = decoder.fps().as_f64();
+    let (mut width, mut height) = (0, 0);
+    let mut frames = Vec::new();
+    while let Some((_, frame)) = decoder.next_frame()? {
+        (width, height) = (frame.width, frame.height);
+        frames.push(to_rgba(&frame));
+    }
+    if frames.is_empty() {
+        return Err(crate::MediaError::NoStream(path.display().to_string()));
+    }
+    frames.truncate(loop_length(&frames));
+    Ok(Preview {
+        width,
+        height,
+        fps,
+        frames,
+    })
+}
+
 #[cfg(test)]
 #[path = "tests/anim.rs"]
 mod tests;

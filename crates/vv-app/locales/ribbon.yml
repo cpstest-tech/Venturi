@@ -236,3 +236,7 @@ ribbon.group_stickers:
 ribbon.editor_back:
   en: "Back to the library"
   it: "Torna alla libreria"
+
+ribbon.sticker_download_hint:
+  en: "Click to download and preview"
+  it: "Clicca per scaricare e vedere l'anteprima"

@@ -42,6 +42,16 @@ animations need no network, except the icon-based ones, which fetch their icon.
   of the file, so they keep working offline and when the cache is cleaned.
 - Favorites of catalog stickers are stored as `sticker:<id>` in the settings.
 
+## Previews
+
+An animated sticker's tile shows a download badge until its full file is on
+disk; a click downloads (or bakes) it, the badge turns into a spinner, and the
+tile then plays one loop of the sticker. The WebM is decoded at 96 px in a
+background thread (`vv_media::anim::decode_preview`, which also finds the
+length of the loop the file repeats), kept as frames and shown through one
+texture per tile; at most 40 tiles keep their loop. Adding the sticker to the
+timeline downloads it too, so the click is optional.
+
 ## Color
 
 Catalog stickers (`shape-`, `lucide-`, `phosphor-`, `anim-` files) are white.

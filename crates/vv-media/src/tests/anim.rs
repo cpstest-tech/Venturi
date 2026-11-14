@@ -30,7 +30,12 @@ fn a_webm_keeps_the_alpha_the_frames_had() {
     let (w, h) = (32u32, 32u32);
     let frames = (0..6).map(|_| {
         let mut rgba = pixel([255, 0, 0, 255], (w * h) as usize);
-        for px in rgba.as_chunks_mut::<4>().0.iter_mut().take((w * h / 2) as usize) {
+        for px in rgba
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .take((w * h / 2) as usize)
+        {
             px[3] = 0;
         }
         rgba
@@ -105,4 +110,46 @@ fn an_odd_size_is_padded_to_an_even_one() {
     encode_alpha_webm(&path, 31, 21, 30, frames).unwrap();
     let meta = crate::probe::probe(&path).unwrap();
     assert_eq!((meta.width, meta.height), (32, 22));
+}
+
+fn square(size: u32, offset: u32) -> Vec<u8> {
+    let mut rgba = vec![0u8; (size * size * 4) as usize];
+    for y in 0..size / 2 {
+        for x in offset..offset + size / 2 {
+            let i = ((y * size + x) * 4) as usize;
+            rgba[i..i + 4].copy_from_slice(&[255, 0, 0, 255]);
+        }
+    }
+    rgba
+}
+
+#[test]
+fn a_preview_is_one_small_loop_with_alpha_and_colors() {
+    let dir = TempDir::new("vv-media-anim-preview");
+    let path = dir.join("loop.webm");
+    // A square moving right in 8 steps, repeated 4 times.
+    let one: Vec<Vec<u8>> = (0..8).map(|i| square(64, i * 4)).collect();
+    let frames = (0..4).flat_map(|_| one.clone());
+    encode_alpha_webm(&path, 64, 64, 30, frames).unwrap();
+
+    let preview = decode_preview(&path, 32).unwrap();
+    assert_eq!((preview.width, preview.height), (32, 32));
+    assert_eq!(preview.frames.len(), 8, "one loop of the four");
+    let first = &preview.frames[0];
+    let at = |x: usize, y: usize| &first[(y * 32 + x) * 4..(y * 32 + x) * 4 + 4];
+    assert_eq!(at(28, 28)[3], 0, "outside is transparent");
+    let red = at(4, 4);
+    assert!(
+        red[3] > 240 && red[0] > 235 && red[1] < 20 && red[2] < 20,
+        "{red:?}"
+    );
+}
+
+#[test]
+fn a_clip_that_never_repeats_keeps_all_its_frames() {
+    let dir = TempDir::new("vv-media-anim-preview-once");
+    let path = dir.join("once.webm");
+    let frames = (0..12).map(|i| square(32, i));
+    encode_alpha_webm(&path, 32, 32, 30, frames).unwrap();
+    assert_eq!(decode_preview(&path, 32).unwrap().frames.len(), 12);
 }

@@ -129,3 +129,47 @@ fn swatches_are_distinct_colors() {
         }
     }
 }
+
+#[test]
+fn a_downloaded_animated_sticker_plays_one_loop_in_its_tile() {
+    let dir = TempDir::new("vv-sticker-ui-preview");
+    let mut app = app_with_store(&dir);
+    let sticker = stickers::find("anim:ripple").unwrap();
+    let store = app.stickers.store.as_mut().unwrap();
+    assert!(!store.has(sticker, Size::Full), "not downloaded yet");
+    assert!(animated_state(&mut app.stickers, sticker) == Download::Remote);
+
+    app.stickers
+        .store
+        .as_mut()
+        .unwrap()
+        .ensure(sticker, Size::Full);
+    for _ in 0..600 {
+        app.stickers.store.as_mut().unwrap().poll();
+        if animated_state(&mut app.stickers, sticker) == Download::Ready {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(animated_state(&mut app.stickers, sticker) == Download::Ready);
+
+    let ctx = egui::Context::default();
+    let path = app
+        .stickers
+        .store
+        .as_ref()
+        .unwrap()
+        .path(sticker, Size::Full);
+    app.stickers.previews.request(&sticker.id, path);
+    for _ in 0..600 {
+        app.stickers.previews.collect(&ctx, 0.0);
+        if app.stickers.previews.playing.contains_key(&sticker.id) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let playing = &app.stickers.previews.playing[&sticker.id];
+    assert_eq!(playing.frames.len(), 48, "the 1.6 s loop, not the 6 s file");
+    assert!(app.stickers.previews.frame(&sticker.id, 0.5).is_some());
+    assert_eq!(app.stickers.previews.playing[&sticker.id].shown, 15);
+}

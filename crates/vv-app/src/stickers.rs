@@ -835,6 +835,23 @@ impl Store {
         false
     }
 
+    /// Whether the image is on disk, without fetching it.
+    pub fn has(&mut self, sticker: &Sticker, size: Size) -> bool {
+        let key = (sticker.id.clone(), size);
+        if self.ready.contains(&key) {
+            return true;
+        }
+        let present = self.path(sticker, size).is_file();
+        if present {
+            self.ready.insert(key);
+        }
+        present
+    }
+
+    pub fn is_pending(&self, id: &str, size: Size) -> bool {
+        self.pending.contains(&(id.to_owned(), size))
+    }
+
     pub fn failed(&self, id: &str) -> bool {
         self.failed.contains(id)
     }

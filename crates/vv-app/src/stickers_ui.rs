@@ -27,8 +27,116 @@ pub(crate) struct StickerState {
     /// Catalog ids whose "+" waits for the image to reach the library.
     wants: Vec<String>,
     imported: HashSet<String>,
+    previews: PreviewCache,
     /// Imported files being converted in the background.
     pub(crate) conversions: Vec<Conversion>,
+}
+
+/// Tiles of animated stickers that play, once the sticker is downloaded.
+const PREVIEW_PIXELS: u32 = 96;
+const MAX_PREVIEWS: usize = 40;
+
+struct Playing {
+    frames: Vec<egui::ColorImage>,
+    texture: egui::TextureHandle,
+    fps: f64,
+    shown: usize,
+    last_used: f64,
+}
+
+struct PreviewCache {
+    playing: HashMap<String, Playing>,
+    loading: HashSet<String>,
+    jobs: std::sync::mpsc::Sender<(String, PathBuf)>,
+    done: std::sync::mpsc::Receiver<(String, Result<vv_media::anim::Preview, String>)>,
+}
+
+impl Default for PreviewCache {
+    fn default() -> Self {
+        let (jobs, job_rx) = std::sync::mpsc::channel::<(String, PathBuf)>();
+        let (done_tx, done) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            while let Ok((id, path)) = job_rx.recv() {
+                let result = vv_media::anim::decode_preview(&path, PREVIEW_PIXELS)
+                    .map_err(|e| e.to_string());
+                if done_tx.send((id, result)).is_err() {
+                    return;
+                }
+            }
+        });
+        Self {
+            playing: HashMap::new(),
+            loading: HashSet::new(),
+            jobs,
+            done,
+        }
+    }
+}
+
+impl PreviewCache {
+    fn request(&mut self, id: &str, path: PathBuf) {
+        if !self.playing.contains_key(id) && self.loading.insert(id.to_owned()) {
+            let _ = self.jobs.send((id.to_owned(), path));
+        }
+    }
+
+    /// Moves the decoded loops into textures.
+    fn collect(&mut self, ctx: &egui::Context, now: f64) {
+        while let Ok((id, result)) = self.done.try_recv() {
+            // A failed decode stays in `loading`, so it is not retried every frame.
+            let Ok(preview) = result else { continue };
+            self.loading.remove(&id);
+            let size = [preview.width as usize, preview.height as usize];
+            let frames: Vec<egui::ColorImage> = preview
+                .frames
+                .iter()
+                .map(|f| egui::ColorImage::from_rgba_unmultiplied(size, f))
+                .collect();
+            let Some(first) = frames.first().cloned() else {
+                continue;
+            };
+            let texture = ctx.load_texture(
+                format!("sticker-preview-{id}"),
+                first,
+                egui::TextureOptions::LINEAR,
+            );
+            self.playing.insert(
+                id,
+                Playing {
+                    frames,
+                    texture,
+                    fps: preview.fps.max(1.0),
+                    shown: 0,
+                    last_used: now,
+                },
+            );
+        }
+        if self.playing.len() > MAX_PREVIEWS {
+            let mut by_age: Vec<_> = self
+                .playing
+                .iter()
+                .map(|(k, p)| (p.last_used, k.clone()))
+                .collect();
+            by_age.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for (_, key) in by_age.into_iter().take(self.playing.len() - MAX_PREVIEWS) {
+                self.playing.remove(&key);
+            }
+        }
+    }
+
+    /// The texture of `id` showing the frame for `now`.
+    fn frame(&mut self, id: &str, now: f64) -> Option<egui::TextureHandle> {
+        let playing = self.playing.get_mut(id)?;
+        playing.last_used = now;
+        let index = (now * playing.fps) as usize % playing.frames.len();
+        if index != playing.shown {
+            playing.shown = index;
+            playing
+                .texture
+                .set(playing.frames[index].clone(), egui::TextureOptions::LINEAR);
+        }
+        Some(playing.texture.clone())
+    }
 }
 
 pub(crate) struct Conversion {
@@ -144,6 +252,8 @@ impl VenturiApp {
     pub(crate) fn show_sticker_tab(&mut self, ui: &mut egui::Ui, category: Category) {
         let ctx = ui.ctx().clone();
         self.poll_sticker_conversions();
+        let now = ui.input(|i| i.time);
+        self.stickers.previews.collect(&ctx, now);
         for conversion in &self.stickers.conversions {
             ui.horizontal(|ui| {
                 ui.spinner();
@@ -163,6 +273,7 @@ impl VenturiApp {
             self.stickers.search.clear();
             self.stickers.emoji_group = None;
             self.stickers.textures.clear();
+            self.stickers.previews.playing.clear();
             if let Some(store) = &mut self.stickers.store {
                 store.new_view();
             }
@@ -372,7 +483,28 @@ fn show_tile(
         theme::BG_RAISED
     };
     ui.painter().rect_filled(rect, 6.0, background);
+    let now = ui.input(|i| i.time);
+    let download = match item {
+        Item::Catalog(sticker) if sticker.animated => animated_state(state, sticker),
+        _ => Download::None,
+    };
+    let playing = match (item, download) {
+        (Item::Catalog(sticker), Download::Ready) => {
+            if let Some(store) = &state.store {
+                state
+                    .previews
+                    .request(&sticker.id, store.path(sticker, Size::Full));
+            }
+            state.previews.frame(&sticker.id, now)
+        }
+        _ => None,
+    };
+    if playing.is_some() {
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(16));
+    }
     let texture = match item {
+        Item::Catalog(_) if playing.is_some() => playing,
         Item::Catalog(sticker) => catalog_texture(ui.ctx(), state, sticker, budget),
         Item::Asset(entry) => match &entry.thumb {
             Thumb::Texture(texture) => Some(texture.clone()),
@@ -413,14 +545,20 @@ fn show_tile(
             theme::FAVORITE,
         );
     }
-    if matches!(item, Item::Catalog(sticker) if sticker.animated) {
-        paint_animated_badge(ui.painter(), rect);
+    match download {
+        Download::Remote => paint_download_badge(ui.painter(), rect),
+        Download::Fetching => paint_fetching_badge(ui, rect),
+        Download::Ready | Download::None => {}
     }
     let name = match item {
         Item::Catalog(sticker) => sticker.name.as_str(),
         Item::Asset(entry) => entry.name.as_str(),
     };
-    let resp = resp.on_hover_text(name);
+    let resp = if download == Download::Remote {
+        resp.on_hover_text(format!("{name} — {}", t!("ribbon.sticker_download_hint")))
+    } else {
+        resp.on_hover_text(name)
+    };
     let interact_id = ui.id().with("sticker_tile").with(id);
     if ui.rect_contains_pointer(rect) && !resp.dragged() {
         let (star, plus) = hover_buttons(ui, interact_id, rect, favorite);
@@ -431,11 +569,12 @@ fn show_tile(
             events.push(Event::Insert(id.to_owned()));
         }
     }
-    if failed
-        && resp.clicked()
+    if resp.clicked()
+        && (failed || download == Download::Remote)
         && let (Item::Catalog(sticker), Some(store)) = (item, &mut state.store)
     {
         store.retry(&sticker.id);
+        store.ensure(sticker, Size::Full);
     }
     if resp.double_clicked() && !failed {
         events.push(Event::Insert(id.to_owned()));
@@ -456,19 +595,66 @@ fn show_tile(
     }
 }
 
-/// A small play triangle in the corner of an animated sticker.
-fn paint_animated_badge(painter: &egui::Painter, rect: egui::Rect) {
-    let c = rect.right_bottom() - egui::vec2(11.0, 11.0);
-    painter.circle_filled(c, 7.0, egui::Color32::from_black_alpha(170));
-    painter.add(egui::Shape::convex_polygon(
-        vec![
-            c + egui::vec2(-2.0, -3.5),
-            c + egui::vec2(-2.0, 3.5),
-            c + egui::vec2(3.5, 0.0),
-        ],
-        egui::Color32::WHITE,
-        egui::Stroke::NONE,
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Download {
+    /// Not an animated sticker.
+    None,
+    /// Animated, not on this computer yet.
+    Remote,
+    Fetching,
+    Ready,
+}
+
+fn animated_state(state: &mut StickerState, sticker: &Sticker) -> Download {
+    let Some(store) = &mut state.store else {
+        return Download::Remote;
+    };
+    if store.has(sticker, Size::Full) {
+        Download::Ready
+    } else if store.is_pending(&sticker.id, Size::Full) {
+        Download::Fetching
+    } else {
+        Download::Remote
+    }
+}
+
+/// A circle with an arrow down in the corner of a sticker to download.
+fn paint_download_badge(painter: &egui::Painter, rect: egui::Rect) {
+    let c = rect.right_bottom() - egui::vec2(12.0, 12.0);
+    painter.circle_filled(c, 8.5, egui::Color32::from_black_alpha(190));
+    let stroke = egui::Stroke::new(1.6, egui::Color32::WHITE);
+    painter.line_segment(
+        [c + egui::vec2(0.0, -4.0), c + egui::vec2(0.0, 3.0)],
+        stroke,
+    );
+    painter.line_segment(
+        [c + egui::vec2(-3.0, 0.0), c + egui::vec2(0.0, 3.5)],
+        stroke,
+    );
+    painter.line_segment([c + egui::vec2(3.0, 0.0), c + egui::vec2(0.0, 3.5)], stroke);
+    painter.line_segment(
+        [c + egui::vec2(-4.0, 5.5), c + egui::vec2(4.0, 5.5)],
+        stroke,
+    );
+}
+
+fn paint_fetching_badge(ui: &egui::Ui, rect: egui::Rect) {
+    let c = rect.right_bottom() - egui::vec2(12.0, 12.0);
+    let painter = ui.painter();
+    painter.circle_filled(c, 8.5, egui::Color32::from_black_alpha(190));
+    let t = ui.input(|i| i.time) as f32;
+    let points: Vec<egui::Pos2> = (0..=10)
+        .map(|i| {
+            let a = t * 6.0 + i as f32 * 0.22;
+            c + egui::vec2(a.cos(), a.sin()) * 5.0
+        })
+        .collect();
+    painter.add(egui::Shape::line(
+        points,
+        egui::Stroke::new(1.8, theme::ACCENT),
     ));
+    ui.ctx()
+        .request_repaint_after(std::time::Duration::from_millis(16));
 }
 
 fn catalog_texture(
