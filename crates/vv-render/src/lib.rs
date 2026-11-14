@@ -12,6 +12,7 @@ mod smooth_cut;
 pub mod text;
 mod text_anim_render;
 mod text_fx;
+mod text_gpu;
 
 pub use compositor::{
     Compositor, Layer, LayerContent, OutputFrame, PooledTexture, YuvChroma, YuvFrame,

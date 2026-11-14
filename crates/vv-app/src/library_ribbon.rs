@@ -389,12 +389,19 @@ pub(crate) fn layers_preview_image(
     for title in titles {
         let title = title.at(0);
         let render = vv_render::text::render_title(&title, timeline_size, (width, height));
-        for (mask, color) in &render.layers {
+        for (placed, color) in &render.masks() {
             let rgb = [color.r, color.g, color.b].map(|c| c.clamp(0.0, 1.0) * 255.0);
-            for (pixel, &coverage) in pixels.iter_mut().zip(&mask.data) {
-                let alpha = f32::from(coverage) / 255.0 * color.a.clamp(0.0, 1.0);
-                for (dst, src) in pixel.iter_mut().zip(rgb) {
-                    *dst += (src - *dst) * alpha;
+            let mask = &placed.mask;
+            let (x0, y0) = (placed.x as usize, placed.y as usize);
+            let cols = (mask.width as usize).min((width as usize).saturating_sub(x0));
+            for row in 0..(mask.height as usize).min((height as usize).saturating_sub(y0)) {
+                let src = &mask.data[row * mask.width as usize..][..cols];
+                let dst = &mut pixels[(y0 + row) * width as usize + x0..][..cols];
+                for (pixel, &coverage) in dst.iter_mut().zip(src) {
+                    let alpha = f32::from(coverage) / 255.0 * color.a.clamp(0.0, 1.0);
+                    for (dst, src) in pixel.iter_mut().zip(rgb) {
+                        *dst += (src - *dst) * alpha;
+                    }
                 }
             }
         }

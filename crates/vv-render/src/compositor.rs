@@ -247,6 +247,8 @@ struct Recording {
     encoder: wgpu::CommandEncoder,
     planes: Vec<wgpu::Texture>,
     scratch: Vec<Option<wgpu::Texture>>,
+    /// Targets the layers of animated titles are drawn into.
+    text_targets: Vec<wgpu::Texture>,
     /// Placeholder for the backdrop slot of the Normal layers, which do not
     /// sample it (see `backdrop_tex` in the shader).
     no_backdrop: wgpu::Texture,
@@ -371,7 +373,8 @@ fn blend_shader_id(mode: BlendMode) -> f32 {
 enum Fill {
     Video,
     Solid(vv_core::Rgba),
-    Mask(vv_core::Rgba),
+    /// Coverage over the uv rectangle (x0, y0, x1, y1) of the frame, 0 elsewhere.
+    Mask(vv_core::Rgba, [f32; 4]),
     /// Already composed RGBA texture, with the color premultiplied by the alpha
     /// (it is the result of an `ALPHA_BLENDING` onto a transparent clear): the
     /// shader divides it out before putting it back into alpha-over.
@@ -464,11 +467,11 @@ impl TransformUniform {
         filters: &[vv_core::FilterValue],
         blend: BlendMode,
     ) -> Self {
-        let (mode, solid) = match fill {
-            Fill::Video => (0.0, None),
-            Fill::Solid(c) => (1.0, Some(c)),
-            Fill::Mask(c) => (2.0, Some(c)),
-            Fill::Rgba => (3.0, None),
+        let (mode, solid, planes) = match fill {
+            Fill::Video => (0.0, None, [0.0; 4]),
+            Fill::Solid(c) => (1.0, Some(c), [0.0; 4]),
+            Fill::Mask(c, rect) => (2.0, Some(c), rect),
+            Fill::Rgba => (3.0, None, [0.0; 4]),
         };
         // The `Transform` is in pixels — of the timeline for position and anchor,
         // of the media for the crop; the shader works in normalized
@@ -523,11 +526,22 @@ impl TransformUniform {
                 ]
             }),
             extra: [opacity.clamp(0.0, 1.0), blend_shader_id(blend), 0.0, 0.0],
-            planes: [0.0; 4],
+            planes,
             filters: pack_filter_slots(filters, |f| filter_shader_id(f.kind)),
             filter_params: pack_filter_slots(filters, |f| f.amount),
         }
     }
+}
+
+/// The uv rectangle of a frame of `frame` that `placed` covers.
+fn mask_rect(placed: &crate::text::PlacedMask, frame: (u32, u32)) -> [f32; 4] {
+    let (w, h) = (frame.0.max(1) as f32, frame.1.max(1) as f32);
+    [
+        placed.x as f32 / w,
+        placed.y as f32 / h,
+        (placed.x + placed.mask.width) as f32 / w,
+        (placed.y + placed.mask.height) as f32 / h,
+    ]
 }
 
 fn pack_filter_slots(
@@ -862,6 +876,7 @@ pub struct Compositor {
     /// Built on first use: most projects never need it.
     smooth_cut: std::sync::OnceLock<crate::smooth_cut::SmoothCut>,
     custom: crate::custom_shader::CustomShaders,
+    text: crate::text_gpu::TextGpu,
 }
 
 #[derive(Default)]
@@ -1122,6 +1137,7 @@ impl Compositor {
             adapter_name,
             smooth_cut: std::sync::OnceLock::new(),
             custom: crate::custom_shader::CustomShaders::new(&device_for_custom),
+            text: crate::text_gpu::TextGpu::new(&device_for_custom),
         };
         compositor.log_work_format();
         compositor
@@ -1661,6 +1677,7 @@ impl Compositor {
                 }),
             planes: Vec::new(),
             scratch: Vec::new(),
+            text_targets: Vec::new(),
             no_backdrop_view: no_backdrop.create_view(&wgpu::TextureViewDescriptor::default()),
             no_backdrop,
         }
@@ -1672,6 +1689,7 @@ impl Compositor {
             &mut self.scratch.lock().unwrap(),
             rec.scratch.into_iter().flatten(),
         );
+        self.text.recycle(rec.text_targets);
         let mut planes = rec.planes;
         planes.push(rec.no_backdrop);
         give_back(&mut self.pool.lock().unwrap().planes, planes);
@@ -1922,24 +1940,18 @@ impl Compositor {
                     (output.width, output.height),
                 );
                 let mut groups = Vec::with_capacity(render.layers.len());
-                for (mask, color) in &render.layers {
-                    let frame = YuvFrame {
-                        y: &mask.data,
-                        width: mask.width,
-                        height: mask.height,
-                        ..SOLID_PLACEHOLDER
-                    };
+                for (mask, fill) in self.title_masks(rec, &render) {
                     // Shadow, background and text are distinct passes: each one
                     // composes onto the earlier ones, backdrop included.
                     let view = backdrop_view(&mut rec.scratch);
-                    groups.push(self.layer_bind_group(
+                    groups.push(self.mask_bind_group(
                         &mut rec.planes,
-                        &frame,
+                        &mask,
                         transform,
                         output,
                         output.timeline_size,
                         output.timeline_size,
-                        Fill::Mask(*color),
+                        fill,
                         *opacity,
                         filters,
                         blend,
@@ -1950,6 +1962,16 @@ impl Compositor {
                 groups
             }
         };
+        // A title with nothing to show still leaves the stack cleared.
+        if bind_groups.is_empty() && *first {
+            self.pass(
+                &mut rec.encoder,
+                target_view,
+                wgpu::LoadOp::Clear(clear),
+                None,
+            );
+            *first = false;
+        }
         for (bind_group, backdrop) in bind_groups.iter().zip(&rec.scratch[backdrop_start..]) {
             if let Some(backdrop) = backdrop {
                 // The backdrop must be read from a copy: the target texture
@@ -2015,10 +2037,9 @@ impl Compositor {
         let frame = OutputFrame::exact(size.0, size.1);
         let identity = Transform::default();
         let leading = &chain.leading;
-        let planes = &mut rec.planes;
         let groups = match content {
             LayerContent::Video { frame: yuv, .. } => vec![self.layer_bind_group(
-                planes,
+                &mut rec.planes,
                 yuv,
                 &identity,
                 frame,
@@ -2032,7 +2053,7 @@ impl Compositor {
                 &[],
             )],
             LayerContent::Texture { texture, .. } => vec![self.texture_bind_group(
-                planes,
+                &mut rec.planes,
                 &texture.create_view(&wgpu::TextureViewDescriptor::default()),
                 size,
                 &identity,
@@ -2046,7 +2067,7 @@ impl Compositor {
                 &[],
             )],
             LayerContent::Adjustment => vec![self.texture_bind_group(
-                planes,
+                &mut rec.planes,
                 stack,
                 size,
                 &identity,
@@ -2060,7 +2081,7 @@ impl Compositor {
                 &[],
             )],
             LayerContent::Solid(color) => vec![self.layer_bind_group(
-                planes,
+                &mut rec.planes,
                 &SOLID_PLACEHOLDER,
                 &identity,
                 frame,
@@ -2079,24 +2100,17 @@ impl Compositor {
                     output.timeline_size,
                     (output.width, output.height),
                 );
-                render
-                    .layers
-                    .iter()
-                    .map(|(mask, color)| {
-                        let mask = YuvFrame {
-                            y: &mask.data,
-                            width: mask.width,
-                            height: mask.height,
-                            ..SOLID_PLACEHOLDER
-                        };
-                        self.layer_bind_group(
-                            planes,
+                self.title_masks(rec, &render)
+                    .into_iter()
+                    .map(|(mask, fill)| {
+                        self.mask_bind_group(
+                            &mut rec.planes,
                             &mask,
                             &identity,
                             frame,
                             size,
                             size,
-                            Fill::Mask(*color),
+                            fill,
                             1.0,
                             leading,
                             BlendMode::Normal,
@@ -2444,6 +2458,99 @@ impl Compositor {
         let out = read(&slice.get_mapped_range().expect("get_mapped_range failed"));
         buffer.unmap();
         out
+    }
+
+    /// The coverage of each layer of `render` that shows something, bottom
+    /// first, with its fill. The masks stay on the GPU from one frame to the
+    /// next; the sprites of an animated title are drawn into theirs here.
+    fn title_masks(
+        &self,
+        rec: &mut Recording,
+        render: &crate::text::TitleRender,
+    ) -> Vec<(wgpu::TextureView, Fill)> {
+        use crate::text::TitleLayer;
+        #[cfg(test)]
+        if crate::text::CPU_PARTS.get() {
+            let layers = render.masks().into_iter();
+            let flat = crate::text::TitleRender {
+                size: render.size,
+                layers: layers.map(|(m, c)| TitleLayer::Mask(m, c)).collect(),
+            };
+            crate::text::CPU_PARTS.set(false);
+            let masks = self.title_masks(rec, &flat);
+            crate::text::CPU_PARTS.set(true);
+            return masks;
+        }
+        render
+            .layers
+            .iter()
+            .filter_map(|layer| match layer {
+                TitleLayer::Mask(placed, _) if placed.is_nothing() => None,
+                TitleLayer::Mask(placed, color) => Some((
+                    self.text.mask_view(&self.device, &self.queue, &placed.mask),
+                    Fill::Mask(*color, mask_rect(placed, render.size)),
+                )),
+                TitleLayer::Parts(parts, color) => {
+                    let drawn = self.text.draw(
+                        &self.device,
+                        &self.queue,
+                        &mut rec.encoder,
+                        parts,
+                        render.size,
+                        &mut rec.text_targets,
+                    )?;
+                    Some((drawn.view, Fill::Mask(*color, drawn.rect)))
+                }
+            })
+            .collect()
+    }
+
+    /// Like `layer_bind_group` for a coverage mask already on the GPU, which
+    /// takes the Y plane slot (see `Fill::Mask`).
+    fn mask_bind_group(
+        &self,
+        planes: &mut Vec<wgpu::Texture>,
+        mask: &wgpu::TextureView,
+        transform: &Transform,
+        output: OutputFrame,
+        source_size: (u32, u32),
+        fit_size: (u32, u32),
+        fill: Fill,
+        opacity: f32,
+        filters: &[vv_core::FilterValue],
+        blend: BlendMode,
+        backdrop: &wgpu::TextureView,
+        masks: &[vv_core::MaskValue],
+    ) -> wgpu::BindGroup {
+        let u_texture = self.plane_texture(&[128], 1, 1);
+        let v_texture = self.plane_texture(&[128], 1, 1);
+        let a_texture = self.plane_texture(OPAQUE, 1, 1);
+        let u_view = u_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let v_view = v_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let a_view = a_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let uniform = TransformUniform::new(
+            transform,
+            SOLID_PLACEHOLDER.matrix,
+            SOLID_PLACEHOLDER.full_range,
+            fit_factors(
+                (fit_size.0.max(1) as f32, fit_size.1.max(1) as f32),
+                (output.width as f32, output.height as f32),
+            ),
+            output,
+            source_size,
+            fill,
+            opacity,
+            filters,
+            blend,
+        );
+        let bind_group = self.bind_group_for(
+            [mask, &u_view, &v_view, &a_view, backdrop],
+            &uniform,
+            &MaskUniform::new(masks, transform, output),
+            &GradeUniform::new(filters),
+        );
+        planes.extend([u_texture, v_texture, a_texture]);
+        bind_group
     }
 
     /// Uploads the three planes of the layer and the bind group ready for the pass:

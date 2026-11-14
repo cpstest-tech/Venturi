@@ -25,7 +25,8 @@ struct TransformUniform {
     // opacity). y: id of the compositing method (see `blend_shader_id`).
     // z: opacity of an adjustment layer (`x` is then 1). w: 1 if it is one.
     extra: vec4<f32>,
-    // x: 1 if U/V are interleaved in u_tex (NV12), v_tex then unused.
+    // Video: x is 1 if U/V are interleaved in u_tex (NV12), v_tex then
+    // unused. Text mask: the uv rectangle (x0, y0, x1, y1) the mask covers.
     planes: vec4<f32>,
     // Shader ids of the clip's active filters, in order of application
     // (0 = empty slot); see `filter_shader_id` in compositor.rs, the only
@@ -358,21 +359,23 @@ fn shade(in: VertexOutput) -> vec4<f32> {
         let texel = textureSample(y_tex, input_sampler, source_uv);
         rgb = clamp(texel.rgb / max(texel.a, 1.0 / 255.0), vec3<f32>(0.0), vec3<f32>(1.0));
         out_alpha = alpha * texel.a;
+    } else if (mode > 1.5) {
+        let rect = transform.planes;
+        let local = (source_uv - rect.xy) / max(rect.zw - rect.xy, vec2<f32>(1e-6));
+        let coverage = textureSample(y_tex, input_sampler, local).r;
+        let inside = all(local >= vec2<f32>(0.0)) && all(local <= vec2<f32>(1.0));
+        rgb = transform.solid.rgb;
+        out_alpha = select(0.0, alpha * transform.solid.a * coverage, inside);
     } else {
         let y_sample = textureSample(y_tex, input_sampler, source_uv).r;
-        if (mode > 1.5) {
-            rgb = transform.solid.rgb;
-            out_alpha = alpha * transform.solid.a * y_sample;
-        } else {
-            let u_texel = textureSample(u_tex, input_sampler, source_uv);
-            let v_planar = textureSample(v_tex, input_sampler, source_uv).r;
-            let u_sample = u_texel.r;
-            let v_sample = select(v_planar, u_texel.g, transform.planes.x > 0.5);
-            let matrix_id = i32(transform.color.x);
-            let full_range = transform.color.y > 0.5;
-            rgb = yuv_to_rgb(y_sample, u_sample, v_sample, matrix_id, full_range);
-            out_alpha = alpha;
-        }
+        let u_texel = textureSample(u_tex, input_sampler, source_uv);
+        let v_planar = textureSample(v_tex, input_sampler, source_uv).r;
+        let u_sample = u_texel.r;
+        let v_sample = select(v_planar, u_texel.g, transform.planes.x > 0.5);
+        let matrix_id = i32(transform.color.x);
+        let full_range = transform.color.y > 0.5;
+        rgb = yuv_to_rgb(y_sample, u_sample, v_sample, matrix_id, full_range);
+        out_alpha = alpha;
     }
     for (var slot = 0; slot < 8; slot = slot + 1) {
         let id = filter_id_at(transform.filters, slot);

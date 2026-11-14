@@ -1,4 +1,4 @@
-use crate::text::{TextMask, render_title};
+use crate::text::{TextMask, dense_title as render_title};
 use vv_core::{AnimState, TextAnimations, TitleParams, text_anim_presets as presets};
 
 const SIZE: (u32, u32) = (640, 360);
@@ -60,7 +60,14 @@ fn finished_in_matches_the_static_title() {
             ..Default::default()
         };
         let animated = render_title(&at(&params, done), SIZE, SIZE);
-        let plain = render_title(&TitleParams { anim_state: None, ..params }, SIZE, SIZE);
+        let plain = render_title(
+            &TitleParams {
+                anim_state: None,
+                ..params
+            },
+            SIZE,
+            SIZE,
+        );
         let diff: i64 = animated
             .text()
             .data
@@ -172,7 +179,12 @@ fn every_loop_and_out_preset_renders() {
             t_loop: 0.7,
             ..Default::default()
         };
-        assert!(!render_title(&at(&params, state), SIZE, SIZE).layers.is_empty(), "{id}");
+        assert!(
+            !render_title(&at(&params, state), SIZE, SIZE)
+                .layers
+                .is_empty(),
+            "{id}"
+        );
     }
     for id in presets::out_ids() {
         let params = TitleParams {
@@ -186,6 +198,87 @@ fn every_loop_and_out_preset_renders() {
             t_out: 0.3,
             ..Default::default()
         };
-        assert!(!render_title(&at(&params, state), SIZE, SIZE).layers.is_empty(), "{id}");
+        assert!(
+            !render_title(&at(&params, state), SIZE, SIZE)
+                .layers
+                .is_empty(),
+            "{id}"
+        );
+    }
+}
+
+fn looping(id: &str) -> TitleParams {
+    let mut params = TitleParams {
+        anim: TextAnimations {
+            looped: presets::loop_preset(id),
+            ..Default::default()
+        },
+        ..title("fade")
+    };
+    params.style.strokes = vec![vv_core::TextStroke {
+        width: 3.0,
+        ..Default::default()
+    }];
+    params.style.fill = vv_core::TextFill::Gradient(vv_core::Gradient::two_stops(
+        vv_core::GradientKind::Linear,
+        vv_core::Rgba::WHITE,
+        vv_core::Rgba::BLACK,
+    ));
+    params
+}
+
+#[test]
+fn a_flowing_gradient_matches_the_static_one_at_that_offset() {
+    let params = looping("gradient_flow");
+    let state = AnimState {
+        t_loop: 0.9,
+        ..Default::default()
+    };
+    let offset = vv_core::plan(&params.anim, &params.display_text(), &state).gradient_offset;
+    assert!(offset > 0.1, "the gradient moved");
+    let mut still = TitleParams {
+        anim: TextAnimations::default(),
+        ..params.clone()
+    };
+    if let vv_core::TextFill::Gradient(g) = &mut still.style.fill {
+        g.offset.default += offset;
+    }
+    let animated = render_title(&at(&params, state), SIZE, SIZE);
+    let plain = render_title(&still, SIZE, SIZE);
+    assert_eq!(animated.layers.len(), plain.layers.len());
+    assert!(ink(animated.text()) > 0);
+    for ((a, _), (b, _)) in animated.layers.iter().zip(&plain.layers) {
+        let diff: i64 = a
+            .data
+            .iter()
+            .zip(&b.data)
+            .map(|(a, b)| (i64::from(*a) - i64::from(*b)).abs())
+            .sum();
+        assert!(diff * 50 < ink(b) as i64, "diff {diff} of {}", ink(b));
+    }
+}
+
+#[test]
+fn masks_cover_only_the_title_not_the_frame() {
+    let frame = (1920, 1080);
+    for params in [title("pop"), looping("pulse")] {
+        let state = AnimState {
+            t_in: 0.1,
+            t_loop: 0.2,
+            ..Default::default()
+        };
+        for p in [
+            at(&params, state),
+            TitleParams {
+                anim_state: None,
+                ..params.clone()
+            },
+        ] {
+            let render = crate::text::render_title(&p, frame, frame);
+            for (placed, _) in &render.masks() {
+                let area = placed.mask.width * placed.mask.height;
+                assert!(area * 4 < frame.0 * frame.1, "{area} pixels");
+            }
+        }
     }
 }

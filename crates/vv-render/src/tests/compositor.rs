@@ -707,6 +707,34 @@ fn a_text_layer_paints_its_color_only_where_the_glyphs_are() {
 }
 
 #[test]
+fn a_cropped_text_mask_lands_where_the_full_frame_one_would() {
+    let compositor = Compositor::new_headless();
+    let title = vv_core::TitleParams {
+        content: vv_core::Keyframed::constant("Hi".into()),
+        color: RED,
+        size: 40.0,
+        position: [-30.0, 20.0],
+        ..Default::default()
+    };
+    let size = (160, 90);
+    let out = compositor.render_layers(
+        &[Layer::new(LayerContent::Text(&title), Transform::default())],
+        OutputFrame::exact(size.0, size.1),
+    );
+    let pixels = out.as_chunks::<4>().0;
+    let dense = crate::text::dense_title(&title, size, size);
+    let coverage = &dense.text().data;
+    assert!(coverage.contains(&255));
+    for (i, (px, &c)) in pixels.iter().zip(coverage).enumerate() {
+        if c == 255 {
+            assert_eq!(px, &[255, 0, 0, 255], "pixel {i}: full coverage");
+        } else if c == 0 {
+            assert_eq!(px, &[0, 0, 0, 255], "pixel {i}: no coverage");
+        }
+    }
+}
+
+#[test]
 fn a_text_shadow_darkens_the_layer_below() {
     let compositor = Compositor::new_headless();
     let title = vv_core::TitleParams {

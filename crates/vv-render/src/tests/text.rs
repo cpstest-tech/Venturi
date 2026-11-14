@@ -18,7 +18,7 @@ fn covered_bounds(mask: &TextMask) -> Option<(u32, u32, u32, u32)> {
 
 #[test]
 fn default_title_is_drawn_around_the_center() {
-    let render = render_title(&TitleParams::default(), (640, 360), (640, 360));
+    let render = dense_title(&TitleParams::default(), (640, 360), (640, 360));
     let (x0, y0, x1, y1) = covered_bounds(render.text()).expect("no pixel drawn");
     let (cx, cy) = ((x0 + x1) / 2, (y0 + y1) / 2);
     assert!((cx as i32 - 320).abs() < 20, "centro x {cx}");
@@ -31,7 +31,7 @@ fn left_anchor_starts_the_text_at_the_position() {
         anchor: (HAnchor::Left, VAnchor::Middle),
         ..Default::default()
     };
-    let render = render_title(&params, (640, 360), (640, 360));
+    let render = dense_title(&params, (640, 360), (640, 360));
     let (x0, ..) = covered_bounds(render.text()).unwrap();
     assert!((x0 as i32 - 320).abs() < 12, "start x {x0}");
 }
@@ -46,7 +46,7 @@ fn background_is_under_the_text_and_contains_it() {
         },
         ..Default::default()
     };
-    let render = render_title(&params, (640, 360), (640, 360));
+    let render = dense_title(&params, (640, 360), (640, 360));
     assert_eq!(render.layers.len(), 3, "background, outline, text");
     let (tx0, ty0, tx1, ty1) = covered_bounds(render.text()).unwrap();
     let (bx0, by0, bx1, by1) = covered_bounds(&render.layers[0].0).unwrap();
@@ -60,8 +60,8 @@ fn background_is_under_the_text_and_contains_it() {
 
 #[test]
 fn output_smaller_than_timeline_scales_the_text() {
-    let full = render_title(&TitleParams::default(), (640, 360), (640, 360));
-    let half = render_title(&TitleParams::default(), (640, 360), (320, 180));
+    let full = dense_title(&TitleParams::default(), (640, 360), (640, 360));
+    let half = dense_title(&TitleParams::default(), (640, 360), (320, 180));
     let width = |m: &TextMask| {
         let (x0, _, x1, _) = covered_bounds(m).unwrap();
         (x1 - x0) as f32
@@ -101,7 +101,7 @@ mod styles {
     }
 
     /// Layers stacked on a black frame, as the compositor does.
-    fn composite(render: &TitleRender) -> Vec<[f32; 3]> {
+    fn composite(render: &DenseRender) -> Vec<[f32; 3]> {
         let (w, h) = (render.layers[0].0.width, render.layers[0].0.height);
         let mut px = vec![[0.0f32; 3]; (w * h) as usize];
         for (mask, c) in &render.layers {
@@ -119,7 +119,7 @@ mod styles {
         px[(y * SIZE.0 + x) as usize]
     }
 
-    fn dump(name: &str, render: &TitleRender) {
+    fn dump(name: &str, render: &DenseRender) {
         let Ok(dir) = std::env::var("VV_TEXT_SHEET_DIR") else {
             return;
         };
@@ -144,8 +144,8 @@ mod styles {
         std::fs::write(format!("{dir}/{name}.ppm"), out).unwrap();
     }
 
-    fn render(name: &str, params: &TitleParams) -> Arc<TitleRender> {
-        let r = render_title(params, SIZE, SIZE);
+    fn render(name: &str, params: &TitleParams) -> DenseRender {
+        let r = dense_title(params, SIZE, SIZE);
         dump(name, &r);
         r
     }
@@ -225,7 +225,7 @@ mod styles {
         let mut g = Gradient::two_stops(GradientKind::Linear, RED, BLUE);
         g.angle = 0.0;
         p.style.fill = TextFill::Gradient(g.clone());
-        let a = composite(&render_title(&p, SIZE, SIZE));
+        let a = composite(&dense_title(&p, SIZE, SIZE));
         g.offset = vv_core::Keyframed::constant(0.5);
         p.style.fill = TextFill::Gradient(g);
         let b = render("gradient_offset", &p);
@@ -288,7 +288,7 @@ mod styles {
                 width: 14.0,
                 join,
             }];
-            let r = render_title(&p, SIZE, SIZE);
+            let r = dense_title(&p, SIZE, SIZE);
             r.layers[0].0.data.iter().map(|&v| v as u64).sum::<u64>()
         };
         let (round, miter, bevel) = (
@@ -356,7 +356,7 @@ mod styles {
         let strong = |m: &TextMask| m.data.iter().map(|&v| v as u64).sum::<u64>();
         let more = {
             p.style.glows[0].intensity = 3.0;
-            render_title(&p, SIZE, SIZE)
+            dense_title(&p, SIZE, SIZE)
         };
         assert!(strong(&more.layers[0].0) > strong(&r.layers[0].0));
     }
@@ -415,7 +415,7 @@ mod styles {
         };
         let (rx0, ry0, rx1, ry1) = covered_bounds(&r.layers[0].0).unwrap();
         p.background = flat;
-        let r0 = render_title(&p, SIZE, SIZE);
+        let r0 = dense_title(&p, SIZE, SIZE);
         let (fx0, fy0, fx1, fy1) = covered_bounds(&r0.layers[0].0).unwrap();
         assert!(ry1 - ry0 > fy1 - fy0 && rx1 - rx0 > fx1 - fx0 - 1);
     }
@@ -443,7 +443,7 @@ mod styles {
         p.font_family = "Anton".into();
         p.font_weight = 400;
         let with_anton = render("font_anton", &p);
-        let plain = render_title(
+        let plain = dense_title(
             &TitleParams {
                 font_weight: 400,
                 ..base()
@@ -463,7 +463,7 @@ mod styles {
                 font_weight: weight,
                 ..base()
             };
-            let r = render_title(&p, SIZE, SIZE);
+            let r = dense_title(&p, SIZE, SIZE);
             let (x0, _, x1, _) = covered_bounds(r.text()).unwrap();
             x1 - x0
         };

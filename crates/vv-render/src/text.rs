@@ -1,17 +1,20 @@
 //! Title rasterization (`ClipSource::Text`) via `cosmic-text`. Each element
 //! (background, outline, text) is a single color: an 8-bit coverage
 //! mask per element is enough, which the compositor colors and stacks
-//! (`LayerContent::Text`).
+//! (`LayerContent::Text`). Masks cover only the area they draw on, so
+//! their cost follows the size of the title rather than of the frame.
 
+use crate::text_anim_render::Part;
 use crate::text_fx;
 use cosmic_text::{
     Align, Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, Style, SwashCache,
     UnderlineStyle, Weight,
 };
-use std::sync::{Arc, Mutex, OnceLock};
+use rayon::prelude::*;
+use std::sync::{Arc, Mutex, OnceLock, mpsc};
 use vv_core::{BackgroundShape, HAnchor, Rgba, TextAlign, TextFill, TitleParams, VAnchor};
 
-/// Text coverage (0 = transparent), as large as the output frame.
+/// Text coverage (0 = transparent).
 #[derive(Clone)]
 pub struct TextMask {
     pub width: u32,
@@ -19,15 +22,125 @@ pub struct TextMask {
     pub data: Vec<u8>,
 }
 
-/// The masks of a title from bottom to top, with the color of each one
-/// (opacity already in the alpha).
+impl TextMask {
+    pub fn empty(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            data: vec![0; (width * height) as usize],
+        }
+    }
+}
+
+/// A mask covering part of the output frame, its top-left at (`x`, `y`).
+/// Outside it the coverage is 0. Shared: the compositor keeps its texture
+/// for as long as the mask lives.
+#[derive(Clone)]
+pub struct PlacedMask {
+    pub x: u32,
+    pub y: u32,
+    pub mask: Arc<TextMask>,
+}
+
+impl PlacedMask {
+    pub(crate) fn nothing() -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            mask: Arc::new(TextMask::empty(1, 1)),
+        }
+    }
+
+    pub(crate) fn is_nothing(&self) -> bool {
+        self.mask.data.len() == 1 && self.mask.data[0] == 0
+    }
+
+    /// `mask` with its top-left at `origin` (frame pixels, may be outside),
+    /// cut to the frame and to its covered pixels plus a blank border, so a
+    /// bilinear sampler sees the same edges as on a full-frame mask.
+    pub(crate) fn place(mask: &TextMask, origin: (i32, i32), frame: (u32, u32)) -> Self {
+        let Some(b) = text_fx::bounds(mask) else {
+            return Self::nothing();
+        };
+        let x0 = (origin.0 + b.x0 as i32 - 1).max(0);
+        let y0 = (origin.1 + b.y0 as i32 - 1).max(0);
+        let x1 = (origin.0 + b.x1 as i32 + 1).min(frame.0 as i32);
+        let y1 = (origin.1 + b.y1 as i32 + 1).min(frame.1 as i32);
+        if x1 <= x0 || y1 <= y0 {
+            return Self::nothing();
+        }
+        let (w, h) = ((x1 - x0) as u32, (y1 - y0) as u32);
+        let mut out = TextMask::empty(w, h);
+        let stride = mask.width as i32;
+        for row in 0..h as i32 {
+            let sy = y0 + row - origin.1;
+            if sy < 0 || sy >= mask.height as i32 {
+                continue;
+            }
+            let sx0 = (x0 - origin.0).max(0);
+            let sx1 = (x1 - origin.0).min(stride);
+            if sx1 <= sx0 {
+                continue;
+            }
+            let dx = (sx0 + origin.0 - x0) as usize;
+            let src = &mask.data[(sy * stride + sx0) as usize..(sy * stride + sx1) as usize];
+            let dst_row = row as usize * w as usize;
+            out.data[dst_row + dx..dst_row + dx + src.len()].copy_from_slice(src);
+        }
+        Self {
+            x: x0 as u32,
+            y: y0 as u32,
+            mask: Arc::new(out),
+        }
+    }
+
+    /// Coverage at frame pixel (`x`, `y`).
+    pub fn at(&self, x: u32, y: u32) -> u8 {
+        if x < self.x || y < self.y {
+            return 0;
+        }
+        let (lx, ly) = (x - self.x, y - self.y);
+        if lx >= self.mask.width || ly >= self.mask.height {
+            return 0;
+        }
+        self.mask.data[(ly * self.mask.width + lx) as usize]
+    }
+}
+
+/// The layers of a title from bottom to top, over an output frame of `size`.
 pub struct TitleRender {
-    pub layers: Vec<(TextMask, Rgba)>,
+    pub size: (u32, u32),
+    pub(crate) layers: Vec<TitleLayer>,
+}
+
+/// One color of a title (opacity already in its alpha) and where it goes.
+pub(crate) enum TitleLayer {
+    Mask(PlacedMask, Rgba),
+    /// Sprites of an animated title, which the compositor moves on the GPU.
+    Parts(Vec<Part>, Rgba),
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Makes the compositor take the layers of animated titles from
+    /// `TitleRender::masks` instead of drawing them itself.
+    pub(crate) static CPU_PARTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 impl TitleRender {
-    pub fn text(&self) -> &TextMask {
-        &self.layers.last().expect("the text is always there").0
+    /// The coverage mask and color of each layer, drawn on the CPU: for
+    /// whoever shows a title without the compositor.
+    pub fn masks(&self) -> Vec<(PlacedMask, Rgba)> {
+        self.layers
+            .iter()
+            .map(|layer| match layer {
+                TitleLayer::Mask(mask, color) => (mask.clone(), *color),
+                TitleLayer::Parts(parts, color) => (
+                    crate::text_anim_render::draw_parts(parts, self.size),
+                    *color,
+                ),
+            })
+            .collect()
     }
 }
 
@@ -43,11 +156,17 @@ type CacheKey = (TitleParams, (u32, u32), (u32, u32));
 struct TextState {
     font_system: FontSystem,
     swash: SwashCache,
-    /// Most recent last.
-    cache: Vec<(CacheKey, Arc<TitleRender>)>,
 }
 
-const CACHE_LEN: usize = 6;
+/// Most recent last.
+type RenderCache = Mutex<Vec<(CacheKey, Arc<TitleRender>)>>;
+
+pub(crate) fn render_cache() -> &'static RenderCache {
+    static CACHE: OnceLock<RenderCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+const CACHE_LEN: usize = 16;
 
 fn state() -> &'static Mutex<TextState> {
     static STATE: OnceLock<Mutex<TextState>> = OnceLock::new();
@@ -55,13 +174,20 @@ fn state() -> &'static Mutex<TextState> {
         Mutex::new(TextState {
             font_system: FontSystem::new(),
             swash: SwashCache::new(),
-            cache: Vec::new(),
         })
     })
 }
 
 fn lock() -> std::sync::MutexGuard<'static, TextState> {
     state().lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Runs `f` with the font system; only shaping and glyph rasterization
+/// need it, so the mask work after it does not hold other renders back.
+pub(crate) fn with_fonts<R>(f: impl FnOnce(&mut FontSystem, &mut SwashCache) -> R) -> R {
+    let mut state = lock();
+    let TextState { font_system, swash } = &mut *state;
+    f(font_system, swash)
 }
 
 /// Scanning the system fonts takes a while: doing it ahead of time
@@ -136,28 +262,65 @@ pub fn render_title(
     output_size: (u32, u32),
 ) -> Arc<TitleRender> {
     let key: CacheKey = (params.clone(), timeline_size, output_size);
-    let mut state = lock();
-    if let Some(pos) = state.cache.iter().position(|(k, _)| *k == key) {
-        let entry = state.cache.remove(pos);
-        let mask = entry.1.clone();
-        state.cache.push(entry);
-        return mask;
+    {
+        let mut cache = render_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(pos) = cache.iter().position(|(k, _)| *k == key) {
+            let entry = cache.remove(pos);
+            let render = entry.1.clone();
+            cache.push(entry);
+            return render;
+        }
     }
-    let TextState {
-        font_system, swash, ..
-    } = &mut *state;
-    let mask = Arc::new(rasterize(
-        font_system,
-        swash,
-        params,
-        timeline_size,
-        output_size,
-    ));
-    if state.cache.len() >= CACHE_LEN {
-        state.cache.remove(0);
+    let render = Arc::new(if params.anim_state.is_some() {
+        crate::text_anim_render::rasterize(params, timeline_size, output_size)
+    } else {
+        rasterize(params, timeline_size, output_size)
+    });
+    let mut cache = render_cache().lock().unwrap_or_else(|e| e.into_inner());
+    if cache.len() >= CACHE_LEN {
+        cache.remove(0);
     }
-    state.cache.push((key, mask.clone()));
-    mask
+    cache.push((key, render.clone()));
+    render
+}
+
+type Prewarm = (TitleParams, (u32, u32), (u32, u32));
+
+/// Prepares in the background what the first frame of a title costs more
+/// than the others for (glyphs, outlines, glows), so that frame is as cheap
+/// when playback reaches it. `params` as `render_title` will get them.
+pub fn prewarm(params: &TitleParams, timeline_size: (u32, u32), output_size: (u32, u32)) {
+    let ready = if params.anim_state.is_some() {
+        crate::text_anim_render::has_sprites(params, timeline_size, output_size)
+    } else {
+        let cache = render_cache().lock().unwrap_or_else(|e| e.into_inner());
+        cache
+            .iter()
+            .any(|(k, _)| k.1 == timeline_size && k.2 == output_size && k.0 == *params)
+    };
+    if ready {
+        return;
+    }
+    static WORKER: OnceLock<mpsc::Sender<Prewarm>> = OnceLock::new();
+    let worker = WORKER.get_or_init(|| {
+        let (tx, rx) = mpsc::channel::<Prewarm>();
+        let spawned = std::thread::Builder::new()
+            .name("vv-text-prewarm".into())
+            .spawn(move || {
+                for (params, timeline_size, output_size) in rx {
+                    if params.anim_state.is_some() {
+                        crate::text_anim_render::build(&params, timeline_size, output_size);
+                    } else {
+                        render_title(&params, timeline_size, output_size);
+                    }
+                }
+            });
+        if let Err(e) = spawned {
+            eprintln!("vv-render: no text prewarm thread: {e}");
+        }
+        tx
+    });
+    let _ = worker.send((params.clone(), timeline_size, output_size));
 }
 
 pub(crate) fn text_attrs(params: &TitleParams) -> (Attrs<'_>, Align) {
@@ -222,13 +385,13 @@ fn shape_block(
 /// text" (see `TitleBackground`). The OTIO export needs them separately,
 /// because Resolve has no such shorthand and shapes the text its own way.
 pub fn title_metrics(params: &TitleParams) -> vv_core::TitleMetrics {
-    let mut state = lock();
-    let TextState { font_system, .. } = &mut *state;
     let font_size = params.size.max(1.0);
     let line_height = (font_size * 1.2 + params.line_spacing).max(1.0);
     let (attrs, align) = text_attrs(params);
-    let mut buffer = Buffer::new(font_system, Metrics::new(font_size, line_height));
-    let block = shape_block(font_system, &mut buffer, params, &attrs, align);
+    let block = with_fonts(|font_system, _| {
+        let mut buffer = Buffer::new(font_system, Metrics::new(font_size, line_height));
+        shape_block(font_system, &mut buffer, params, &attrs, align)
+    });
     vv_core::TitleMetrics {
         block,
         padding: font_size * params.background.padding,
@@ -242,33 +405,144 @@ fn with_opacity(color: Rgba, opacity: f32) -> Rgba {
     }
 }
 
+/// Glyph coverage rectangles in frame pixels: x, y, width, height, coverage.
+pub(crate) type GlyphRect = (i32, i32, u32, u32, u8);
+
+pub(crate) fn rect_bounds(rects: &[GlyphRect]) -> Option<(i32, i32, i32, i32)> {
+    rects.iter().fold(None, |acc, &(x, y, w, h, _)| {
+        let (x1, y1) = (x + w as i32, y + h as i32);
+        Some(match acc {
+            None => (x, y, x1, y1),
+            Some((a, b, c, d)) => (a.min(x), b.min(y), c.max(x1), d.max(y1)),
+        })
+    })
+}
+
+/// `rects` drawn into a mask of `size` whose top-left is `origin`.
+pub(crate) fn coverage_mask(rects: &[GlyphRect], origin: (i32, i32), size: (u32, u32)) -> TextMask {
+    let mut mask = TextMask::empty(size.0, size.1);
+    for &(x, y, w, h, coverage) in rects {
+        let coverage = u32::from(coverage);
+        for py in (y - origin.1).max(0)..(y - origin.1 + h as i32).min(size.1 as i32) {
+            let row = py as usize * size.0 as usize;
+            for px in (x - origin.0).max(0)..(x - origin.0 + w as i32).min(size.0 as i32) {
+                let dst = &mut mask.data[row + px as usize];
+                // Overlapping glyphs (negative tracking): "over" between coverages.
+                *dst = (u32::from(*dst) + coverage * (255 - u32::from(*dst)) / 255) as u8;
+            }
+        }
+    }
+    mask
+}
+
+/// Pixels a style can reach beyond the glyphs.
+pub(crate) fn reach(params: &TitleParams, scale: f32, font_px: f32, halo: bool) -> i32 {
+    let style = &params.style;
+    let stroke = style.strokes.iter().map(|s| s.width).fold(0.0, f32::max);
+    let shadow = style
+        .shadows
+        .iter()
+        .map(|s| s.offset[0].abs().max(s.offset[1].abs()) + s.blur * 1.5)
+        .fold(0.0, f32::max);
+    // Grown by 0.35 radius, then blurred with sigma 0.65 radius (3 sigma).
+    let glow = style
+        .glows
+        .iter()
+        .map(|g| g.radius * 2.4)
+        .fold(0.0, f32::max);
+    let extrude = style.extrude.as_ref().map_or(0.0, |e| e.depth);
+    let mut total = (stroke + shadow + glow + extrude) * scale;
+    total += font_px * if halo { 0.6 } else { 0.2 };
+    total.ceil() as i32 + 2
+}
+
 fn rasterize(
-    font_system: &mut FontSystem,
-    swash: &mut SwashCache,
     params: &TitleParams,
     timeline_size: (u32, u32),
     output_size: (u32, u32),
 ) -> TitleRender {
-    if params.anim_state.is_some() {
-        return crate::text_anim_render::rasterize(
-            font_system,
-            swash,
-            params,
-            timeline_size,
-            output_size,
-        );
-    }
     let (width, height) = (output_size.0.max(1), output_size.1.max(1));
-    let mut data = vec![0u8; (width * height) as usize];
     let scale = width as f32 / timeline_size.0.max(1) as f32;
     let font_size = (params.size * scale).max(1.0);
     let line_height = (font_size * 1.2 + params.line_spacing * scale).max(1.0);
 
     let (attrs, align) = text_attrs(params);
+    let mut rects: Vec<GlyphRect> = Vec::new();
+    let (block_w, block_h, origin_x, origin_y) = with_fonts(|font_system, swash| {
+        let mut buffer = Buffer::new(font_system, Metrics::new(font_size, line_height));
+        let (block_w, block_h) = shape_block(font_system, &mut buffer, params, &attrs, align);
+        let (origin_x, origin_y) = block_origin(params, (width, height), scale, (block_w, block_h));
+        buffer.draw(
+            font_system,
+            swash,
+            Color::rgb(255, 255, 255),
+            |x, y, w, h, color| {
+                if color.a() != 0 {
+                    rects.push((x + origin_x, y + origin_y, w, h, color.a()));
+                }
+            },
+        );
+        (block_w, block_h, origin_x, origin_y)
+    });
 
-    let mut buffer = Buffer::new(font_system, Metrics::new(font_size, line_height));
-    let (block_w, block_h) = shape_block(font_system, &mut buffer, params, &attrs, align);
+    let block_center = (
+        origin_x as f32 + block_w / 2.0,
+        origin_y as f32 + block_h / 2.0,
+    );
+    let mut layers = background_layers(
+        params,
+        (width, height),
+        scale,
+        (block_center, (block_w, block_h)),
+    );
+    let margin = reach(params, scale, font_size, false);
+    // Off-frame ink still makes its layers (empty), so the stack is stable.
+    let (origin, text) = match rect_bounds(&rects) {
+        Some((x0, y0, x1, y1))
+            if x1 + margin > 0
+                && y1 + margin > 0
+                && x0 - margin < width as i32
+                && y0 - margin < height as i32 =>
+        {
+            let origin = (x0 - margin, y0 - margin);
+            let size = ((x1 - x0 + 2 * margin) as u32, (y1 - y0 + 2 * margin) as u32);
+            (origin, coverage_mask(&rects, origin, size))
+        }
+        _ => ((0, 0), TextMask::empty(1, 1)),
+    };
+    let local_center = (
+        block_center.0 - origin.0 as f32,
+        block_center.1 - origin.1 as f32,
+    );
+    let text_size = (text.width, text.height);
+    let (styled, _) = style_layers(text, params, scale, local_center, (block_w, block_h));
+    let placed: Vec<_> = styled
+        .into_par_iter()
+        .map(|layer| {
+            let mask = match layer.step {
+                1 => layer.mask,
+                step => text_fx::enlarged(&layer.mask, step, text_size),
+            };
+            (PlacedMask::place(&mask, origin, (width, height)), layer.color)
+        })
+        .collect();
+    layers.extend(placed);
+    TitleRender {
+        size: (width, height),
+        layers: layers
+            .into_iter()
+            .map(|(mask, color)| TitleLayer::Mask(mask, color))
+            .collect(),
+    }
+}
 
+/// Top-left of the text block in frame pixels.
+pub(crate) fn block_origin(
+    params: &TitleParams,
+    (width, height): (u32, u32),
+    scale: f32,
+    (block_w, block_h): (f32, f32),
+) -> (i32, i32) {
     let anchor_x = width as f32 / 2.0 + params.position[0] * scale;
     let anchor_y = height as f32 / 2.0 - params.position[1] * scale;
     let origin_x = anchor_x
@@ -283,50 +557,7 @@ fn rasterize(
             VAnchor::Middle => block_h / 2.0,
             VAnchor::Bottom => block_h,
         };
-    let (origin_x, origin_y) = (origin_x.round() as i32, origin_y.round() as i32);
-
-    buffer.draw(
-        font_system,
-        swash,
-        Color::rgb(255, 255, 255),
-        |x, y, w, h, color| {
-            let coverage = color.a() as u32;
-            if coverage == 0 {
-                return;
-            }
-            for py in y + origin_y..y + origin_y + h as i32 {
-                if py < 0 || py >= height as i32 {
-                    continue;
-                }
-                for px in x + origin_x..x + origin_x + w as i32 {
-                    if px < 0 || px >= width as i32 {
-                        continue;
-                    }
-                    let dst = &mut data[(py as u32 * width + px as u32) as usize];
-                    // Overlapping glyphs (negative tracking): "over" between coverages.
-                    *dst = (*dst as u32 + coverage * (255 - *dst as u32) / 255) as u8;
-                }
-            }
-        },
-    );
-
-    let text = TextMask {
-        width,
-        height,
-        data,
-    };
-    let block_center = (
-        origin_x as f32 + block_w / 2.0,
-        origin_y as f32 + block_h / 2.0,
-    );
-    let mut layers = background_layers(
-        params,
-        (width, height),
-        scale,
-        (block_center, (block_w, block_h)),
-    );
-    layers.extend(style_layers(text, params, scale, block_center, (block_w, block_h)).0);
-    TitleRender { layers }
+    (origin_x.round() as i32, origin_y.round() as i32)
 }
 
 /// The background shape of a title (rounded rectangle or pill), if enabled.
@@ -335,7 +566,7 @@ pub(crate) fn background_layers(
     (width, height): (u32, u32),
     scale: f32,
     (block_center, (block_w, block_h)): ((f32, f32), (f32, f32)),
-) -> Vec<(TextMask, Rgba)> {
+) -> Vec<(PlacedMask, Rgba)> {
     let scale_px = |v: f32| v * scale;
     let font_size = (params.size * scale).max(1.0);
     let mut layers = Vec::new();
@@ -361,7 +592,7 @@ pub(crate) fn background_layers(
             BackgroundShape::RoundedRect => bg.corner_radius.clamp(0.0, 0.5) * box_w.min(box_h),
         };
         let outline = scale_px(bg.outline_width).max(0.0);
-        let (fill, ring) = rounded_rect_masks(
+        let (origin, fill, ring) = rounded_rect_masks(
             width,
             height,
             center,
@@ -370,24 +601,48 @@ pub(crate) fn background_layers(
             outline,
             bg.rotation.to_radians(),
         );
+        let place = |mask: &TextMask| PlacedMask::place(mask, origin, (width, height));
         let opacity = (bg.opacity / 100.0).clamp(0.0, 1.0);
+        let local_center = (center.0 - origin.0 as f32, center.1 - origin.1 as f32);
         match &bg.gradient {
-            Some(g) => layers.extend(text_fx::gradient_layers(
-                &fill,
-                g,
-                center,
-                (box_w, box_h),
-                -bg.rotation,
-                opacity,
-            )),
-            None => layers.push((fill, with_opacity(bg.color, bg.opacity))),
+            Some(g) => layers.extend(
+                text_fx::gradient_layers(
+                    &fill,
+                    g,
+                    local_center,
+                    (box_w, box_h),
+                    -bg.rotation,
+                    opacity,
+                )
+                .iter()
+                .map(|(m, c)| (place(m), *c)),
+            ),
+            None => layers.push((place(&fill), with_opacity(bg.color, bg.opacity))),
         }
         if let Some(ring) = ring {
-            layers.push((ring, with_opacity(bg.outline_color, bg.opacity)));
+            layers.push((place(&ring), with_opacity(bg.outline_color, bg.opacity)));
         }
     }
 
     layers
+}
+
+/// One color of the style of a title, as large as its text mask.
+pub(crate) struct StyledLayer {
+    pub mask: TextMask,
+    /// Text mask pixels per texel: a blurred layer is kept smaller.
+    pub step: u32,
+    pub color: Rgba,
+}
+
+impl StyledLayer {
+    fn full(mask: TextMask, color: Rgba) -> Self {
+        Self {
+            mask,
+            step: 1,
+            color,
+        }
+    }
 }
 
 /// Shadows, glows, extrusion, strokes and fill of `text`, bottom up, and
@@ -398,46 +653,64 @@ pub(crate) fn style_layers(
     scale: f32,
     block_center: (f32, f32),
     (block_w, block_h): (f32, f32),
-) -> (Vec<(TextMask, Rgba)>, usize) {
+) -> (Vec<StyledLayer>, usize) {
     let scale_px = |v: f32| v * scale;
     let style = &params.style;
-    let mut layers = Vec::new();
     // Widest stroke first: the narrower ones sit on top of it.
     let mut strokes: Vec<_> = style.strokes.iter().filter(|s| s.width > 0.0).collect();
     strokes.sort_by(|a, b| b.width.total_cmp(&a.width));
-    let stroke_masks: Vec<_> = strokes
-        .iter()
-        .map(|s| (text_fx::grow(&text, scale_px(s.width), s.join), s.color))
+    let stroke_masks: Vec<StyledLayer> = strokes
+        .par_iter()
+        .map(|s| StyledLayer::full(text_fx::grow(&text, scale_px(s.width), s.join), s.color))
         .collect();
     // Shadow, glow and extrusion follow the outermost outline.
-    let silhouette = stroke_masks.first().map_or(&text, |(m, _)| m);
+    let silhouette = stroke_masks.first().map_or(&text, |l| &l.mask);
 
-    for shadow in &style.shadows {
-        let moved = text_fx::shifted(
-            silhouette,
-            scale_px(shadow.offset[0]).round() as i32,
-            (-scale_px(shadow.offset[1])).round() as i32,
-        );
-        let mask = text_fx::blur(&moved, scale_px(shadow.blur) / 2.0);
-        layers.push((mask, with_opacity(shadow.color, shadow.opacity)));
+    enum Under<'a> {
+        Shadow(&'a vv_core::TextShadow),
+        Glow(&'a vv_core::TextGlow),
+        Extrude(&'a vv_core::TextExtrude),
     }
-    for glow in &style.glows {
-        let radius = scale_px(glow.radius).max(0.0);
-        let core = text_fx::grow(silhouette, radius * 0.35, vv_core::StrokeJoin::Round);
-        let halo = text_fx::blur(&core, radius * 0.65);
-        layers.push((text_fx::scaled(&halo, glow.intensity.max(0.0)), glow.color));
-    }
-    if let Some(ex) = &style.extrude
-        && ex.depth > 0.0
-    {
-        let mask = text_fx::extruded(silhouette, scale_px(ex.depth), ex.angle);
-        layers.push((mask, ex.color));
-    }
+    let under: Vec<Under> = (style.shadows.iter().map(Under::Shadow))
+        .chain(style.glows.iter().map(Under::Glow))
+        .chain(style.extrude.iter().filter(|e| e.depth > 0.0).map(Under::Extrude))
+        .collect();
+    let mut layers: Vec<StyledLayer> = under
+        .par_iter()
+        .map(|item| match item {
+            Under::Shadow(shadow) => {
+                let (mask, step) = text_fx::soft_shadow(
+                    silhouette,
+                    scale_px(shadow.offset[0]).round() as i32,
+                    (-scale_px(shadow.offset[1])).round() as i32,
+                    scale_px(shadow.blur) / 2.0,
+                );
+                StyledLayer {
+                    mask,
+                    step,
+                    color: with_opacity(shadow.color, shadow.opacity),
+                }
+            }
+            Under::Glow(glow) => {
+                let radius = scale_px(glow.radius).max(0.0);
+                let (mask, step) = text_fx::glow(silhouette, radius, glow.intensity.max(0.0));
+                StyledLayer {
+                    mask,
+                    step,
+                    color: glow.color,
+                }
+            }
+            Under::Extrude(ex) => StyledLayer::full(
+                text_fx::extruded(silhouette, scale_px(ex.depth), ex.angle),
+                ex.color,
+            ),
+        })
+        .collect();
     layers.extend(stroke_masks);
 
     let fill_start = layers.len();
     match &style.fill {
-        TextFill::Solid => layers.push((text, params.color)),
+        TextFill::Solid => layers.push(StyledLayer::full(text, params.color)),
         TextFill::Gradient(g) => {
             let gradient = text_fx::gradient_layers(
                 &text,
@@ -448,17 +721,18 @@ pub(crate) fn style_layers(
                 params.color.a,
             );
             if gradient.is_empty() {
-                layers.push((text, params.color));
+                layers.push(StyledLayer::full(text, params.color));
             } else {
-                layers.extend(gradient);
+                layers.extend(gradient.into_iter().map(|(m, c)| StyledLayer::full(m, c)));
             }
         }
     }
     (layers, fill_start)
 }
 
-/// Fill and (if `outline > 0`) inner border of a rounded rectangle, with
-/// the edges antialiased from the signed distance.
+/// Top-left in the frame, fill and (if `outline > 0`) inner border of a
+/// rounded rectangle, with the edges antialiased from the signed distance.
+/// The masks cover only the rectangle's box, cut to the frame.
 fn rounded_rect_masks(
     width: u32,
     height: u32,
@@ -467,10 +741,7 @@ fn rounded_rect_masks(
     radius: f32,
     outline: f32,
     rotation: f32,
-) -> (TextMask, Option<TextMask>) {
-    let len = (width * height) as usize;
-    let mut fill = vec![0u8; len];
-    let mut ring = (outline > 0.0).then(|| vec![0u8; len]);
+) -> ((i32, i32), TextMask, Option<TextMask>) {
     let half = (size.0 / 2.0, size.1 / 2.0);
     let reach = if rotation == 0.0 {
         half
@@ -483,6 +754,11 @@ fn rounded_rect_masks(
         ..((center.0 + reach.0 + 1.0).ceil().clamp(0.0, width as f32) as u32);
     let y_range = ((center.1 - reach.1 - 1.0).floor().max(0.0) as u32)
         ..((center.1 + reach.1 + 1.0).ceil().clamp(0.0, height as f32) as u32);
+    let (box_w, box_h) = (x_range.len().max(1) as u32, y_range.len().max(1) as u32);
+    let (ox, oy) = (x_range.start, y_range.start);
+    let len = (box_w * box_h) as usize;
+    let mut fill = vec![0u8; len];
+    let mut ring = (outline > 0.0).then(|| vec![0u8; len]);
     let coverage = |d: f32| (0.5 - d).clamp(0.0, 1.0);
     for y in y_range {
         for x in x_range.clone() {
@@ -494,7 +770,7 @@ fn rounded_rect_masks(
             } else {
                 px.max(py) - radius
             };
-            let i = (y * width + x) as usize;
+            let i = ((y - oy) * box_w + x - ox) as usize;
             let inside = coverage(d);
             fill[i] = (inside * 255.0).round() as u8;
             if let Some(ring) = &mut ring {
@@ -503,11 +779,48 @@ fn rounded_rect_masks(
         }
     }
     let mask = |data| TextMask {
-        width,
-        height,
+        width: box_w,
+        height: box_h,
         data,
     };
-    (mask(fill), ring.map(mask))
+    ((ox as i32, oy as i32), mask(fill), ring.map(mask))
+}
+
+/// A title with its masks as large as the frame, as the tests read them.
+#[cfg(test)]
+pub(crate) struct DenseRender {
+    pub layers: Vec<(TextMask, Rgba)>,
+}
+
+#[cfg(test)]
+impl DenseRender {
+    pub fn text(&self) -> &TextMask {
+        &self.layers.last().expect("the text is always there").0
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn dense_title(
+    params: &TitleParams,
+    timeline_size: (u32, u32),
+    output_size: (u32, u32),
+) -> DenseRender {
+    let render = render_title(params, timeline_size, output_size);
+    let (w, h) = render.size;
+    let layers = render
+        .masks()
+        .iter()
+        .map(|(placed, color)| {
+            let mut mask = TextMask::empty(w, h);
+            for y in 0..h {
+                for x in 0..w {
+                    mask.data[(y * w + x) as usize] = placed.at(x, y);
+                }
+            }
+            (mask, *color)
+        })
+        .collect();
+    DenseRender { layers }
 }
 
 #[cfg(test)]

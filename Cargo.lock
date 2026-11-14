@@ -4938,6 +4938,7 @@ dependencies = [
  "bytemuck",
  "cosmic-text",
  "pollster 1.0.1",
+ "rayon",
  "serde",
  "serde_json",
  "vv-core",
