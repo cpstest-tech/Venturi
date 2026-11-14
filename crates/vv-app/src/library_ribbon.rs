@@ -385,6 +385,15 @@ pub(crate) fn layers_preview_image(
 ) -> egui::ColorImage {
     let width = PREVIEW_TEXTURE_WIDTH;
     let height = (width as f32 * TEXT_PREVIEW.y / TEXT_PREVIEW.x).round() as u32;
+    preview_image_in(titles, timeline_size, (width, height))
+}
+
+/// `layers_preview_image` on a texture of `size`.
+pub(crate) fn preview_image_in(
+    titles: &[vv_core::TitleParams],
+    timeline_size: (u32, u32),
+    (width, height): (u32, u32),
+) -> egui::ColorImage {
     // The frame keeps the timeline's aspect, centred in the card: text
     // anchored to a frame edge would fall outside a 16:9 one.
     let scale = (width as f32 / timeline_size.0.max(1) as f32)

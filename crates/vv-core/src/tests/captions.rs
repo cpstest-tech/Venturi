@@ -210,3 +210,14 @@ fn portrait_lines_are_shorter_than_landscape_ones() {
     assert!(longest((1080, 1920)) <= 14);
     assert!(longest((1080, 1920)) < longest((1920, 1080)));
 }
+
+#[test]
+fn a_long_word_shrinks_to_fit_the_frame() {
+    let spoken = words(&[("piccolissimamente", 0, 600)]);
+    let template = SubtitleTemplate::find("word_pop").unwrap();
+    let (mut project, timeline) = project();
+    project.timelines.get_mut(timeline).unwrap().resolution = (1080, 1920);
+    let clips = build_clips(&mut project, timeline, &spoken, template);
+    let size = clips[0].effects.title.as_ref().unwrap().size;
+    assert!(17.0 * size * 0.6 <= 1080.0 * 0.88 + 1.0, "size {size}");
+}

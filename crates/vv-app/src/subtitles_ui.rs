@@ -5,8 +5,26 @@ use crate::subtitles::{Message, Section, models_dir};
 use vv_core::captions::{TEMPLATES, TemplateCategory};
 use vv_transcribe::Stage;
 
-const CARD_SIZE: egui::Vec2 = egui::vec2(160.0, 112.0);
-const PREVIEW_SIZE: egui::Vec2 = egui::vec2(160.0, 90.0);
+const CARD_SIDE: f32 = 160.0;
+const CARD_LABEL: f32 = 24.0;
+const PREVIEW_TEXTURE: u32 = 320;
+/// Square frame the sample titles are built and drawn for.
+const PREVIEW_RES: (u32, u32) = (1080, 1080);
+
+/// The sample centred and enlarged to fill most of a square card.
+fn square_preview_image(title: &vv_core::TitleParams) -> egui::ColorImage {
+    let chars = title.content.default.chars().count().max(1) as f32;
+    let boost = (PREVIEW_RES.0 as f32 * 0.62 / (title.size.max(1.0) * 0.6 * chars)).clamp(1.0, 3.5);
+    let mut title = title.clone();
+    title.size *= boost;
+    title.position = [0.0, 0.0];
+    title.anchor = (vv_core::HAnchor::Center, vv_core::VAnchor::Middle);
+    library_ribbon::preview_image_in(
+        std::slice::from_ref(&title),
+        PREVIEW_RES,
+        (PREVIEW_TEXTURE, PREVIEW_TEXTURE),
+    )
+}
 const SIDEBAR: f32 = 112.0;
 
 fn section_label(section: Section) -> std::borrow::Cow<'static, str> {
@@ -179,10 +197,7 @@ impl VenturiApp {
     }
 
     fn show_templates_section(&mut self, ui: &mut egui::Ui) {
-        let resolution = self
-            .timeline_id
-            .and_then(|id| self.session.project.timelines.get(id))
-            .map_or((1920, 1080), |t| t.resolution);
+        let resolution = PREVIEW_RES;
         let applied = self
             .timeline_id
             .and_then(|id| self.session.project.captions.get(&id))
@@ -214,14 +229,7 @@ impl VenturiApp {
                             };
                             let title = template.title(&sample, resolution);
                             let name = template_name(template.id).into_owned();
-                            if self.template_card(
-                                ui,
-                                template.id,
-                                name,
-                                &title,
-                                resolution,
-                                selected,
-                            ) {
+                            if self.template_card(ui, template.id, name, &title, selected) {
                                 chosen = Some(template.id.to_owned());
                             }
                         }
@@ -240,7 +248,7 @@ impl VenturiApp {
                         let selected = self.subtitles.selected.as_deref() == Some(id.as_str())
                             || (self.subtitles.selected.is_none()
                                 && applied.as_deref() == Some(id.as_str()));
-                        if self.template_card(ui, &id, name, &title, resolution, selected) {
+                        if self.template_card(ui, &id, name, &title, selected) {
                             chosen = Some(id);
                         }
                     }
@@ -292,12 +300,11 @@ impl VenturiApp {
         id: &str,
         name: String,
         title: &vv_core::TitleParams,
-        resolution: (u32, u32),
         selected: bool,
     ) -> bool {
-        let key = format!("{id}-{}x{}", resolution.0, resolution.1);
+        let key = id.to_owned();
         if !self.subtitles.previews.contains_key(&key) {
-            let image = library_ribbon::title_preview_image(title, resolution);
+            let image = square_preview_image(title);
             let texture = ui.ctx().load_texture(
                 format!("subtitle-{key}"),
                 image,
@@ -305,7 +312,9 @@ impl VenturiApp {
             );
             self.subtitles.previews.insert(key.clone(), texture);
         }
-        let (rect, response) = ui.allocate_exact_size(CARD_SIZE, egui::Sense::click());
+        let side = CARD_SIDE.min(ui.available_width());
+        let (rect, response) =
+            ui.allocate_exact_size(egui::vec2(side, side + CARD_LABEL), egui::Sense::click());
         let fill = if response.hovered() {
             theme::BG_RAISED_HOVER
         } else {
@@ -316,7 +325,7 @@ impl VenturiApp {
         if let Some(texture) = self.subtitles.previews.get(&key) {
             painter.image(
                 texture.id(),
-                egui::Rect::from_min_size(rect.min, PREVIEW_SIZE),
+                egui::Rect::from_min_size(rect.min, egui::vec2(side, side)),
                 egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
                 egui::Color32::WHITE,
             );

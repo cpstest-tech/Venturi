@@ -343,6 +343,11 @@ pub fn build_clips_with(
         let mut clip =
             Clip::from_source_range(id, ClipSource::Text, 0, end - start, start, Rational::one());
         let mut styled = title(&text, resolution);
+        let estimated = text.chars().count() as f32 * styled.size * 0.6;
+        let room = resolution.0 as f32 * 0.88;
+        if estimated > room {
+            styled.size = (styled.size * room / estimated).floor().max(8.0);
+        }
         if let Some(karaoke) = &mut styled.anim.karaoke
             && let Some(times) =
                 words_within(words, start_ms, end_ms, text.split_whitespace().count())
