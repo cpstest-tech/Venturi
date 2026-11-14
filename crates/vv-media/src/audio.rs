@@ -4,7 +4,6 @@
 
 use ffmpeg::ChannelLayout;
 use ffmpeg::format::sample::{Sample, Type as SampleType};
-use ffmpeg::media::Type;
 use ffmpeg::software::resampling::context::Context as Resampler;
 use ffmpeg_next as ffmpeg;
 use std::ops::ControlFlow;
@@ -337,7 +336,7 @@ fn decode_streams(
     let mut ictx = ffmpeg::format::input(&path)?;
     let audio_streams: Vec<_> = ictx
         .streams()
-        .filter(|s| s.parameters().medium() == Type::Audio)
+        .filter(crate::probe::is_decodable_audio)
         .collect();
     // (index in the container, decoder) per slot.
     let mut decoders: Vec<Option<(usize, StreamDecoder)>> = stream_indices

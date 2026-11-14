@@ -172,7 +172,7 @@ pub fn probe(path: &Path) -> Result<MediaMeta, crate::MediaError> {
         None => None,
     };
 
-    let audio = input.streams().best(ffmpeg::media::Type::Audio);
+    let audio = input.streams().find(|s| is_decodable_audio(s));
     let (has_audio, sample_rate, channels) = match audio {
         Some(audio) => {
             let audio_decoder =
@@ -187,10 +187,7 @@ pub fn probe(path: &Path) -> Result<MediaMeta, crate::MediaError> {
         return Err(crate::MediaError::NoStream(path.display().to_string()));
     }
 
-    let audio_streams = input
-        .streams()
-        .filter(|s| s.parameters().medium() == ffmpeg::media::Type::Audio)
-        .count() as u16;
+    let audio_streams = input.streams().filter(is_decodable_audio).count() as u16;
     let (fps, width, height) = video.unwrap_or((AUDIO_ONLY_FPS, 0, 0));
     let duration_secs = input.duration() as f64 / f64::from(ffmpeg::ffi::AV_TIME_BASE);
     let nominal_duration_frames = (duration_secs * fps.as_f64()).round() as i64;
@@ -391,7 +388,7 @@ pub fn probe_image(path: &Path) -> Result<MediaMeta, crate::MediaError> {
 
 fn file_info(path: &Path, input: &ffmpeg::format::context::Input) -> MediaFileInfo {
     let codec_name = |s: &ffmpeg::format::stream::Stream| s.parameters().id().name().to_owned();
-    let audio = input.streams().best(ffmpeg::media::Type::Audio);
+    let audio = input.streams().find(|s| is_decodable_audio(s));
     let tag = |keys: &[&str]| {
         let find = |dict: ffmpeg::DictionaryRef| {
             dict.iter()
@@ -440,6 +437,14 @@ pub fn probe_tags(path: &Path) -> Result<Vec<(String, String)>, crate::MediaErro
     Ok(tags)
 }
 
+/// Audio stream with an available decoder. iPhone files carry a second
+/// Apple APAC (spatial) track that ffmpeg cannot decode; it is skipped
+/// everywhere so stream indices stay consistent.
+pub(crate) fn is_decodable_audio(stream: &ffmpeg::format::stream::Stream) -> bool {
+    stream.parameters().medium() == ffmpeg::media::Type::Audio
+        && ffmpeg::decoder::find(stream.parameters().id()).is_some()
+}
+
 /// Info on an audio stream of the container, for multi-track import
 /// (see `audio_streams`).
 pub struct AudioStreamInfo {
@@ -455,7 +460,7 @@ pub fn audio_streams(path: &Path) -> Result<Vec<AudioStreamInfo>, crate::MediaEr
     let input = ffmpeg::format::input(&path)?;
     let mut out = Vec::new();
     for stream in input.streams() {
-        if stream.parameters().medium() != ffmpeg::media::Type::Audio {
+        if !is_decodable_audio(&stream) {
             continue;
         }
         let decoder = ffmpeg::codec::context::Context::from_parameters(stream.parameters())?
