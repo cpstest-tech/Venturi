@@ -31,6 +31,14 @@ built-in replaces it. The asset id saved in projects is `<kind folder>/<name>`.
 others show capitalised). `default_secs` is the length of a transition or of an
 effect element (3 s if absent). At most 8 `params`.
 
+`curves` (optional, at most 32) animates values over the progress: each is a
+list of samples at even steps from progress 0 to 1, linearly interpolated on
+the CPU once per frame, so a keyframed animation costs nothing per pixel:
+
+```json
+"curves": [[0, 0.2, 1, 0.2, 0], [1, 1.5, 1]]
+```
+
 ## shader.wgsl
 
 Only `fn effect(uv: vec2<f32>) -> vec4<f32>`; `uv` is 0..1 from the top left.
@@ -43,10 +51,16 @@ The engine prelude (`vv-render/src/custom_shader.rs`) provides:
 | `fx_progress()` | 0..1: transition progress (already eased), or position inside the clip |
 | `fx_time()` | seconds since the start of the clip or transition |
 | `param(i)` | the manifest parameters, clamped to their range |
+| `curve(i)` | the manifest curves at the current progress (0 if absent) |
 | `straight(c)`, `premul(c)` | alpha conversions |
 
 Return premultiplied RGBA. The result is blended over `src` by the element's
 opacity (fades of an effect element), so no extra handling is needed.
+
+Every tap is a texture read per pixel: keep loops bounded, with a count that
+varies smoothly across the frame (better: only with the curves), and sample
+neighbouring pixels at neighbouring places. A pattern rotated per pixel
+looks smoother but defeats the texture cache and is several times slower.
 
 Avoid WGSL reserved words as identifiers (`active`, `filter`, `target`...).
 A shader that does not compile is reported on stderr once and skipped (the

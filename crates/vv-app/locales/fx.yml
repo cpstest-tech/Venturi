@@ -40,6 +40,10 @@ fx.cat_stylize:
   en: "Stylize"
   it: "Stilizzate"
 
+fx.cat_dynamic:
+  en: "Dynamic"
+  it: "Dinamiche"
+
 fx.no_favorites:
   en: "No favorites yet: tap the star on an item"
   it: "Nessun preferito: tocca la stella su un elemento"

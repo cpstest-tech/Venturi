@@ -5,7 +5,8 @@
 //! - `src(uv)` / `dst(uv)`: input A / B, premultiplied RGBA (`dst` is the
 //!   incoming clip of a transition, the same as `src` for effects);
 //! - `fx_size()` pixels, `fx_progress()` 0..1, `fx_time()` seconds,
-//!   `param(i)` for the manifest parameters;
+//!   `param(i)` for the manifest parameters, `curve(i)` for its curves at
+//!   the current progress;
 //! - `straight(c)` / `premul(c)` to convert.
 //!
 //! The result is blended with `src` by the element's amount (opacity/fades).
@@ -18,6 +19,7 @@ struct Fx {
     head: vec4<f32>,
     extra: vec4<f32>,
     p: array<vec4<f32>, 2>,
+    k: array<vec4<f32>, 8>,
 };
 @group(0) @binding(0) var fx_sampler: sampler;
 @group(0) @binding(1) var fx_a: texture_2d<f32>;
@@ -30,6 +32,7 @@ fn fx_size() -> vec2<f32> { return fx.head.xy; }
 fn fx_progress() -> f32 { return fx.head.z; }
 fn fx_time() -> f32 { return fx.head.w; }
 fn param(i: u32) -> f32 { return fx.p[i / 4u][i % 4u]; }
+fn curve(i: u32) -> f32 { return fx.k[i / 4u][i % 4u]; }
 fn straight(c: vec4<f32>) -> vec4<f32> {
     if (c.a <= 0.0001) { return vec4<f32>(0.0); }
     return vec4<f32>(c.rgb / c.a, c.a);
@@ -63,6 +66,7 @@ pub struct CustomPass<'a> {
     pub key: &'a str,
     pub source: &'a str,
     pub params: [f32; crate::assets::MAX_PARAMS],
+    pub curves: [f32; crate::assets::MAX_CURVES],
     pub progress: f32,
     pub time: f32,
     /// 0..1: how much of the effect shows over the input.
@@ -70,11 +74,12 @@ pub struct CustomPass<'a> {
 }
 
 impl CustomPass<'_> {
-    pub(crate) fn uniform(&self, size: (u32, u32)) -> [f32; 16] {
-        let mut u = [0.0; 16];
+    pub(crate) fn uniform(&self, size: (u32, u32)) -> [f32; 48] {
+        let mut u = [0.0; 48];
         u[..4].copy_from_slice(&[size.0 as f32, size.1 as f32, self.progress, self.time]);
         u[4] = self.amount;
-        u[8..].copy_from_slice(&self.params);
+        u[8..16].copy_from_slice(&self.params);
+        u[16..].copy_from_slice(&self.curves);
         u
     }
 }

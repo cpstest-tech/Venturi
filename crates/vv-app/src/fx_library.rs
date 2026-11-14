@@ -175,6 +175,7 @@ fn render_frame(
         key: &asset.id,
         source: &asset.shader,
         params: asset.shader_params(&asset.default_params()),
+        curves: asset.curve_values(progress),
         progress,
         time,
         amount: 1.0,
@@ -206,6 +207,7 @@ pub(crate) fn category_label(id: &str) -> String {
         "film" => t!("fx.cat_film").into_owned(),
         "bw" => t!("fx.cat_bw").into_owned(),
         "stylize" => t!("fx.cat_stylize").into_owned(),
+        "dynamic" => t!("fx.cat_dynamic").into_owned(),
         other => {
             let mut chars = other.chars();
             chars

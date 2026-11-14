@@ -24,6 +24,7 @@ fn pass<'a>(id: &'a str, source: &'a str, params: [f32; 8], progress: f32) -> Cu
         key: id,
         source,
         params,
+        curves: [0.0; crate::assets::MAX_CURVES],
         progress,
         time: 0.4,
         amount: 1.0,
@@ -53,8 +54,11 @@ fn every_builtin_shader_compiles_and_runs() {
     for kind in AssetKind::ALL {
         for asset in lib.of_kind(kind) {
             let params = asset.shader_params(&asset.default_params());
-            let result =
-                compositor.render_custom_pass(&pass(&asset.id, &asset.shader, params, 0.5), &a, &b);
+            let custom = CustomPass {
+                curves: asset.curve_values(0.5),
+                ..pass(&asset.id, &asset.shader, params, 0.5)
+            };
+            let result = compositor.render_custom_pass(&custom, &a, &b);
             assert!(result.is_some(), "{} does not compile", asset.id);
         }
     }
@@ -89,9 +93,11 @@ fn a_transition_is_the_first_side_at_zero_and_the_second_at_one() {
     for asset in lib.of_kind(AssetKind::Transition) {
         let params = asset.shader_params(&asset.default_params());
         for (progress, expect_red) in [(0.0, true), (1.0, false)] {
-            let out = compositor
-                .render_custom_pass(&pass(&asset.id, &asset.shader, params, progress), &a, &b)
-                .unwrap();
+            let custom = CustomPass {
+                curves: asset.curve_values(progress),
+                ..pass(&asset.id, &asset.shader, params, progress)
+            };
+            let out = compositor.render_custom_pass(&custom, &a, &b).unwrap();
             let [r, _, bl, _] = pixel(&compositor, &out, (4, 8));
             let ok = if expect_red {
                 r > 240 && bl < 15

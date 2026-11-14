@@ -367,6 +367,7 @@ impl FrameProvider for GpuCompounds<'_> {
                 key: &pass.id,
                 source: &asset.shader,
                 params: pass.params,
+                curves: asset.curve_values(pass.progress),
                 progress: pass.progress,
                 time: pass.time,
                 amount: pass.amount,

@@ -15,6 +15,9 @@ mod builtin {
 /// Parameters a shader can read (`param(0)`..`param(7)`).
 pub const MAX_PARAMS: usize = 8;
 
+/// Animation curves a shader can read (`curve(0)`..`curve(31)`).
+pub const MAX_CURVES: usize = 32;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AssetKind {
@@ -71,6 +74,10 @@ struct Manifest {
     /// Transitions and effect elements: length when added.
     #[serde(default)]
     default_secs: Option<f64>,
+    /// Values sampled at even steps of the progress, evaluated on the CPU
+    /// once per frame instead of per pixel.
+    #[serde(default)]
+    curves: Vec<Vec<f32>>,
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +89,7 @@ pub struct Asset {
     pub category: String,
     pub params: Vec<AssetParam>,
     pub default_secs: f64,
+    pub curves: Vec<Vec<f32>>,
     pub shader: String,
 }
 
@@ -103,12 +111,32 @@ impl Asset {
         }
         out
     }
+
+    /// Every curve at `progress` (0..1), linearly interpolated between
+    /// samples; unused slots are 0.
+    pub fn curve_values(&self, progress: f32) -> [f32; MAX_CURVES] {
+        let mut out = [0.0; MAX_CURVES];
+        for (slot, samples) in out.iter_mut().zip(&self.curves) {
+            let last = samples.len() - 1;
+            let x = progress.clamp(0.0, 1.0) * last as f32;
+            let i = (x.floor() as usize).min(last.saturating_sub(1));
+            let next = (i + 1).min(last);
+            *slot = samples[i] + (samples[next] - samples[i]) * (x - i as f32);
+        }
+        out
+    }
 }
 
 fn parse(id: &str, manifest: &str, shader: &str) -> Result<Asset, String> {
     let m: Manifest = serde_json::from_str(manifest).map_err(|e| format!("{id}: {e}"))?;
     if m.params.len() > MAX_PARAMS {
         return Err(format!("{id}: more than {MAX_PARAMS} params"));
+    }
+    if m.curves.len() > MAX_CURVES {
+        return Err(format!("{id}: more than {MAX_CURVES} curves"));
+    }
+    if m.curves.iter().any(Vec::is_empty) {
+        return Err(format!("{id}: empty curve"));
     }
     if !shader.contains("fn effect") {
         return Err(format!("{id}: shader has no `effect` function"));
@@ -123,6 +151,7 @@ fn parse(id: &str, manifest: &str, shader: &str) -> Result<Asset, String> {
             AssetKind::Transition => 0.5,
             _ => 3.0,
         }),
+        curves: m.curves,
         shader: shader.to_owned(),
     })
 }
