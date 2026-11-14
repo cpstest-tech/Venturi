@@ -339,3 +339,7 @@ impl VenturiApp {
         response.clicked()
     }
 }
+
+#[cfg(test)]
+#[path = "tests/subtitles_ui.rs"]
+mod tests;
