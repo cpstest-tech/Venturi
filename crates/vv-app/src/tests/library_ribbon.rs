@@ -435,7 +435,10 @@ fn a_bundled_template_keeps_its_animations_when_inserted() {
     assert_eq!(title.font_family, "Righteous");
     assert!(title.anim.enter.is_some() && title.anim.looped.is_some());
     let fps = timeline_of(&app).fps.as_f64();
-    assert_eq!(clips[0].1.timeline_len, (fps * 3.0).round() as vv_core::FrameIdx);
+    assert_eq!(
+        clips[0].1.timeline_len,
+        (fps * 3.0).round() as vv_core::FrameIdx
+    );
 }
 
 #[test]
@@ -565,4 +568,26 @@ fn a_text_template_styles_the_subtitles_without_new_transcription() {
     assert_eq!(title.font_family, "Poppins");
     let karaoke = title.anim.karaoke.expect("karaoke");
     assert_eq!(karaoke.word_ms.len(), 3);
+}
+
+#[test]
+fn subtitle_template_previews_show_text_in_any_aspect() {
+    let drawn = |title: &vv_core::TitleParams, res| {
+        let image = title_preview_image(title, res);
+        image
+            .pixels
+            .iter()
+            .filter(|p| p.r() != 34 && p.r() != 18)
+            .count()
+    };
+    for res in [(1920, 1080), (3840, 2160), (1080, 1920), (1080, 1080)] {
+        for template in vv_core::captions::TEMPLATES.iter() {
+            let title = template.title("Sample", res);
+            assert!(drawn(&title, res) > 50, "{} at {res:?}", template.id);
+        }
+        for def in crate::text_templates::all() {
+            let title = def.subtitle_title("Sample line", res);
+            assert!(drawn(&title, res) > 0, "{} at {res:?}", def.id);
+        }
+    }
 }

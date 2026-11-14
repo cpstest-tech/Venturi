@@ -188,8 +188,10 @@ impl VenturiApp {
             .and_then(|id| self.session.project.captions.get(&id))
             .map(|c| c.template.clone());
         let mut chosen = None;
+        let footer = theme::FIELD_HEIGHT + theme::SPACE_2;
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
+            .max_height((ui.available_height() - footer).max(0.0))
             .show(ui, |ui| {
                 for (category, title) in [
                     (TemplateCategory::WordByWord, t!("subtitles.category_word")),
@@ -212,7 +214,14 @@ impl VenturiApp {
                             };
                             let title = template.title(&sample, resolution);
                             let name = template_name(template.id).into_owned();
-                            if self.template_card(ui, template.id, name, &title, resolution, selected) {
+                            if self.template_card(
+                                ui,
+                                template.id,
+                                name,
+                                &title,
+                                resolution,
+                                selected,
+                            ) {
                                 chosen = Some(template.id.to_owned());
                             }
                         }
@@ -236,17 +245,17 @@ impl VenturiApp {
                         }
                     }
                 });
-                ui.add_space(theme::SPACE_2);
-                let can_generate = self.subtitles.selected.is_some()
-                    && self.timeline_id.is_some()
-                    && self.subtitles.job.is_none();
-                if primary_button(ui, t!("subtitles.generate").into_owned(), can_generate)
-                    .on_disabled_hover_text(t!("subtitles.pick_template"))
-                    .clicked()
-                {
-                    self.generate_subtitles();
-                }
             });
+        ui.add_space(theme::SPACE_2);
+        let can_generate = self.subtitles.selected.is_some()
+            && self.timeline_id.is_some()
+            && self.subtitles.job.is_none();
+        if primary_button(ui, t!("subtitles.generate").into_owned(), can_generate)
+            .on_disabled_hover_text(t!("subtitles.pick_template"))
+            .clicked()
+        {
+            self.generate_subtitles();
+        }
         if let Some(id) = chosen {
             self.choose_subtitle_template(&id);
         }

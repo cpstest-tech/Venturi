@@ -385,14 +385,29 @@ pub(crate) fn layers_preview_image(
 ) -> egui::ColorImage {
     let width = PREVIEW_TEXTURE_WIDTH;
     let height = (width as f32 * TEXT_PREVIEW.y / TEXT_PREVIEW.x).round() as u32;
-    let mut pixels = vec![[34.0f32, 34.0, 38.0]; (width * height) as usize];
+    // The frame keeps the timeline's aspect, centred in the card: text
+    // anchored to a frame edge would fall outside a 16:9 one.
+    let scale = (width as f32 / timeline_size.0.max(1) as f32)
+        .min(height as f32 / timeline_size.1.max(1) as f32);
+    let frame = (
+        ((timeline_size.0 as f32 * scale).round() as u32).clamp(1, width),
+        ((timeline_size.1 as f32 * scale).round() as u32).clamp(1, height),
+    );
+    let (left, top) = (
+        (width - frame.0) as usize / 2,
+        (height - frame.1) as usize / 2,
+    );
+    let mut pixels = vec![[18.0f32, 18.0, 20.0]; (width * height) as usize];
+    for row in top..top + frame.1 as usize {
+        pixels[row * width as usize + left..][..frame.0 as usize].fill([34.0, 34.0, 38.0]);
+    }
     for title in titles {
         let title = title.at(0);
-        let render = vv_render::text::render_title(&title, timeline_size, (width, height));
+        let render = vv_render::text::render_title(&title, timeline_size, frame);
         for (placed, color) in &render.masks() {
             let rgb = [color.r, color.g, color.b].map(|c| c.clamp(0.0, 1.0) * 255.0);
             let mask = &placed.mask;
-            let (x0, y0) = (placed.x as usize, placed.y as usize);
+            let (x0, y0) = (placed.x as usize + left, placed.y as usize + top);
             let cols = (mask.width as usize).min((width as usize).saturating_sub(x0));
             for row in 0..(mask.height as usize).min((height as usize).saturating_sub(y0)) {
                 let src = &mask.data[row * mask.width as usize..][..cols];
@@ -1052,7 +1067,10 @@ impl VenturiApp {
         let start = self.timeline_state.playhead.max(0);
         let resolution = self.timeline_resolution();
         let (clips, _) = self.text_template_clips(template, resolution);
-        let longest = clips.iter().map(|c| c.start_secs + c.length_secs).fold(0.0, f32::max);
+        let longest = clips
+            .iter()
+            .map(|c| c.start_secs + c.length_secs)
+            .fold(0.0, f32::max);
         let len = (self.timeline_fps() * f64::from(longest)).round() as FrameIdx;
         let target = self.overlay_target(start, len);
         self.insert_text_template(template, start, target);
@@ -1121,9 +1139,7 @@ impl VenturiApp {
                 &mut self.session.history,
                 timeline_id,
                 clip.title,
-                tracks
-                    .video
-                    .expect("text: video track always resolved"),
+                tracks.video.expect("text: video track always resolved"),
                 start + frames(clip.start_secs),
                 frames(clip.length_secs).max(1),
             );
