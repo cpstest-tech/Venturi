@@ -154,13 +154,19 @@ pub struct AssetPass {
 /// The enabled asset effects of `clip` as passes at timeline `frame`.
 /// `amount` scales how much of the effect shows (fades of an effect element).
 fn asset_passes(clip: &Clip, frame: FrameIdx, fps: f64, amount: f32) -> Vec<AssetPass> {
-    if clip.effects.assets.is_empty() {
+    let animations = &clip.effects.animations;
+    if clip.effects.assets.is_empty()
+        && animations.in_asset.is_none()
+        && animations.out_asset.is_none()
+        && animations.combo_asset.is_none()
+    {
         return Vec::new();
     }
     let library = vv_render::assets::library();
     let local = (frame - clip.timeline_start) as f32;
     let progress = (local / clip.timeline_len.max(1) as f32).clamp(0.0, 1.0);
-    clip.effects
+    let mut passes: Vec<_> = clip
+        .effects
         .assets
         .iter()
         .filter(|fx| fx.enabled)
@@ -174,7 +180,25 @@ fn asset_passes(clip: &Clip, frame: FrameIdx, fps: f64, amount: f32) -> Vec<Asse
                 amount,
             })
         })
-        .collect()
+        .collect();
+    for (id, progress, time) in clip.effects.animations.asset_times(
+        local as f64 / fps.max(1.0),
+        clip.timeline_len as f64 / fps.max(1.0),
+    ) {
+        if let Some(asset) = library
+            .get(id)
+            .filter(|a| a.kind == vv_render::assets::AssetKind::Animation)
+        {
+            passes.push(AssetPass {
+                id: id.to_owned(),
+                params: asset.shader_params(&[]),
+                progress,
+                time,
+                amount: 1.0,
+            });
+        }
+    }
+    passes
 }
 
 pub enum OwnedContent {
@@ -550,12 +574,34 @@ fn texture_layer(
 /// effect sees its transform, filters and masks but not its opacity and blend.
 fn with_assets(
     mut layer: OwnedLayer,
-    passes: Vec<AssetPass>,
+    mut passes: Vec<AssetPass>,
     provider: &mut dyn FrameProvider,
     timeline_size: (u32, u32),
 ) -> OwnedLayer {
     if passes.is_empty() {
         return layer;
+    }
+    let source_size = match &layer.content {
+        OwnedContent::Video { source_size, .. } | OwnedContent::Texture { source_size, .. } => {
+            *source_size
+        }
+        _ => timeline_size,
+    };
+    let (w, h) = (timeline_size.0 as f32, timeline_size.1 as f32);
+    let fit = (w / source_size.0.max(1) as f32).min(h / source_size.1.max(1) as f32);
+    for pass in &mut passes {
+        if pass.id.starts_with("animations/") {
+            pass.params = [
+                0.5 + layer.transform.position[0] / w,
+                0.5 - layer.transform.position[1] / h,
+                source_size.0 as f32 * fit * layer.transform.zoom[0] / w,
+                source_size.1 as f32 * fit * layer.transform.zoom[1] / h,
+                layer.transform.rotation.to_radians(),
+                0.0,
+                0.0,
+                0.0,
+            ];
+        }
     }
     if matches!(layer.content, OwnedContent::Adjustment) {
         layer.assets = passes;
@@ -585,6 +631,12 @@ pub fn clip_layer(
 ) -> Result<Option<OwnedLayer>, ExportError> {
     let source_frame = clip.source_frame_at(frame);
     let mut transform = clip.effects.transform.value_at(source_frame);
+    clip.effects.animations.apply(
+        &mut transform,
+        (frame - clip.timeline_start) as f64 / fps.max(1.0),
+        clip.timeline_len as f64 / fps.max(1.0),
+        timeline_size.0 as f32,
+    );
     let push = clip.transition_offset_at(
         frame,
         (timeline_size.0 as f32, timeline_size.1 as f32),
@@ -746,6 +798,12 @@ fn crossing_side_layer(
 ) -> Result<Option<OwnedLayer>, ExportError> {
     let source_frame = clip.source_frame_at(frame);
     let mut transform = clip.effects.transform.value_at(source_frame);
+    clip.effects.animations.apply(
+        &mut transform,
+        (frame - clip.timeline_start) as f64 / fps.max(1.0),
+        clip.timeline_len as f64 / fps.max(1.0),
+        timeline_size.0 as f32,
+    );
     transform.position[0] += extra_offset[0];
     transform.position[1] += extra_offset[1];
     let opacity = clip.fade_multiplier_at(frame) * extra_opacity;

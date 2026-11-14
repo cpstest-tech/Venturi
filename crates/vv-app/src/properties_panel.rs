@@ -1742,7 +1742,28 @@ impl VenturiApp {
                                                     }
                                                 }
                                             }
-                                            None => properties_tabs::animation_tab(ui),
+                                            None => {
+                                                let current = self.session.project.timelines[primary.timeline]
+                                                    .clip(primary.track_index, primary.clip_id)
+                                                    .map(|c| c.effects.animations.clone());
+                                                if let Some(mut animations) = current {
+                                                    let (changed, restart) = self.show_clip_animations(ui, &mut animations);
+                                                    if restart {
+                                                        pending_playhead = self.session.project.timelines[primary.timeline]
+                                                            .clip(primary.track_index, primary.clip_id)
+                                                            .map(|c| c.timeline_start);
+                                                    }
+                                                    if changed {
+                                                        for t in targets.iter().filter(|t| !t.is_text) {
+                                                            pending_effects.push(Box::new(vv_core::SetClipValue::new(
+                                                                t.timeline, t.track_index, t.clip_id,
+                                                                vv_core::CommandLabel::Transform,
+                                                                animations.clone(), |c| &mut c.effects.animations,
+                                                            )));
+                                                        }
+                                                    }
+                                                }
+                                            },
                                         },
                                         _ => {}
                                     }

@@ -254,24 +254,68 @@ strengths of about 1.5× the analytic value elsewhere too.
   needs improving, model S_Glow, AdjustGlow (threshold falling to 0.2) and
   BCC as separate stages.
 
-## 9. Clip animations (in / out / combo) — next step
+## 9. Clip animations (in / out / combo)
 
 CapCut builds clip animations with the same machinery: Lumi exports with
 `ae_effectType` "animation"/video animation, and `LumiManager` maps the
 animation's own time onto the comp. Everything above therefore applies, with
-these differences, which still need checking on a real export:
+these differences, checked against the clip-animation reference:
 
 - There is **one input**: only `src`, and `dst` is the same texture in
   Venturi.
 - Time runs over the **animation's duration**, not the clip's. An in
   animation runs from the clip start for its length, an out animation ends
-  at the clip end, and a combo spans the clip. Venturi has no such slot yet:
-  asset effects on a clip get progress over the whole clip
-  (`frame_provider::asset_passes`). Design the model and UI first, using the
-  In/Out/Loop text animations as the precedent (`vv-core/src/text_anim.rs`,
-  `text_anim_panel.rs`).
+  at the clip end, and a combo spans the clip. The slots are implemented in `clip_anim.rs`
+  and `frame_provider::asset_passes`, with the asset grid in `fx_library.rs`.
+  Ordinary asset effects still get progress over the whole clip.
 - The clip's pass works on the composed frame (the clip already
   transformed). Moving or scaling it exposes transparency, as CapCut does.
 - Ask the user for a test project with each animation on a photo clip, a
   rendered video, and the `Cache/effect` folders. Read `material_animations`
   in the draft to map names to `effect_id`, then repeat §2–§7.
+
+The `copazione animazioni` reference project supplies fourteen effects:
+Zoom 2, Stretch in/out, Side slide, Fade out, Flash in/out, Swing top left,
+Slide up, Blur slide in, Motion slide, Bounce 1, Zoom 1 and Distort and
+stretch. Their manifests keep the source effect ID. Regenerate them with:
+
+```sh
+python3 scripts/capcut/port_animations.py /path/to/draft_content.json /path/to/Cache/effect
+```
+
+`bake_animation.lua` evaluates the original Transform tween functions,
+the native AEAdapter tracks, embedded SeekMode AETools and the custom
+distortion parameter tweens. It does not need CapCut running. The Lumi
+effects still use `bake.lua`. Curves are sampled at 401 points; constant
+tracks are reduced to one sample. Do not normalize AEAdapter track names:
+spaces and underscores distinguish different exports.
+
+Important findings from the rendered reference:
+
+- The input photo is 1000×646 on a 1080×1920 canvas. Preserve its transparent
+  bars and composite it over the reference background only after the effect.
+- Side slide, Motion slide, Flash and Slide up render their effect inside
+  the fitted image rectangle. Running them directly in canvas coordinates
+  stretches the blur and moves the image's edges incorrectly. Animation
+  parameters 0..4 carry the rectangle and rotation from `with_assets`.
+- The older Transform animations mirror outside the source frame, with a
+  [-1, 2] cutoff. Dropping out-of-range samples loses Zoom 2's repeated
+  images at the top and bottom. Their rotation and vertical translation
+  signs were checked against the reference.
+- Stretch out reverses the Lumi curves. Motion slide samples the path
+  ahead by 1.66/30 s, rather than using the previous AE frame.
+- Compare actual reference frame timestamps. Rounding the last sample
+  to the next cut accidentally compares an outgoing animation with the
+  next clip's entrance.
+
+The single-pass shaders approximate the stacked Gaussian blurs, glow and
+perspective. Distort and stretch is the least exact: its noise hash is
+sensitive to GPU sine precision, and its late distortion is fitted to the
+reference. These effects are visual ports, not pixel-identical CapCut
+engine output.
+
+For an animation comparison, copy and build `fx_frames.rs` as in §7, supply
+an RGBA still with transparent bars, and set `CAPCUT_NATIVE=1000x646`.
+`CAPCUT_BACKGROUND=0,171,59` composites the result over the background used
+in this reference; omit it for the normal black background. In/out harness
+progress spans the slot duration; combo progress spans the clip.

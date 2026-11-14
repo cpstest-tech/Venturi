@@ -3,8 +3,8 @@
 Each one is a folder with a manifest and a shader, so new ones need no Rust.
 
 ```
-assets/<effects|filters|transitions>/<name>/manifest.json
-assets/<effects|filters|transitions>/<name>/shader.wgsl
+assets/<effects|filters|transitions|animations>/<name>/manifest.json
+assets/<effects|filters|transitions|animations>/<name>/shader.wgsl
 ```
 
 Built-ins live in `crates/vv-render/assets/` and are embedded by `build.rs`
@@ -30,6 +30,20 @@ built-in replaces it. The asset id saved in projects is `<kind folder>/<name>`.
 `category` groups the sidebar (known ids are translated in `locales/fx.yml`,
 others show capitalised). `default_secs` is the length of a transition or of an
 effect element (3 s if absent). At most 8 `params`.
+
+Clip animations use `"kind": "animation"` and category `in`, `out` or `combo`.
+They appear in the clip's Animation tab, with shader previews on hover.
+Clicking an animation, including the selected one, returns the playhead to
+the selected clip's start. Duration adjustments leave the playhead in place.
+In and out slots have independent durations, fitted proportionally when their
+sum exceeds the clip length. A combo spans the clip. Progress uses timeline
+time, including when a clip is trimmed or its playback speed changes.
+Old projects without animation slots keep their previous behavior.
+
+Animation shader parameter slots are reserved for the engine: 0/1 are the
+normalized image center, 2/3 its fitted width/height and 4 its rotation in
+radians. This lets effects whose CapCut pipeline runs at native image size
+work on letterboxed clips. A missing rectangle defaults to the whole frame.
 
 `curves` (optional, at most 32) animates values over the progress: each is a
 list of samples at even steps from progress 0 to 1, linearly interpolated on

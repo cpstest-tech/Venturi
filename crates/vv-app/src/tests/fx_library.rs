@@ -53,6 +53,87 @@ fn every_preview_renders_on_the_headless_compositor() {
     }
 }
 
+#[test]
+fn animation_tiles_request_restart_even_when_reselected() {
+    let mut app = VenturiApp::default();
+    let mut animations = vv_core::clip_anim::ClipAnimations::default();
+    let ctx = egui::Context::default();
+    let mut time = 0.0;
+    let mut frame =
+        |app: &mut VenturiApp, animations: &mut vv_core::clip_anim::ClipAnimations, events| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(600.0, 700.0),
+                )),
+                time: Some(time),
+                events,
+                ..Default::default()
+            };
+            time += 1.0 / 60.0;
+            let mut edit = (false, false);
+            let mut output = ctx.run_ui(input, |ui| {
+                edit = app.show_clip_animations(ui, animations);
+            });
+            output.textures_delta.clear();
+            (output, edit)
+        };
+    let position = |output: &egui::FullOutput, label: &str| {
+        output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == label => {
+                    Some(text.pos + text.galley.size() / 2.0)
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("animation tile {label} is visible"))
+    };
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    let library = assets::library();
+    for (slot, id) in [
+        (0usize, "animations/zoom_2"),
+        (1, "animations/fade_out"),
+        (2, "animations/bounce_1"),
+    ] {
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new(("segmented", "clip_animation_slot")), slot));
+        frame(&mut app, &mut animations, vec![]);
+        let (output, edit) = frame(&mut app, &mut animations, vec![]);
+        assert_eq!(edit, (false, false));
+        let label = library
+            .get(id)
+            .unwrap()
+            .name
+            .get(&rust_i18n::locale())
+            .to_owned();
+        let pos = position(&output, &label);
+        frame(
+            &mut app,
+            &mut animations,
+            vec![egui::Event::PointerMoved(pos), button(pos, true)],
+        );
+        let (_, edit) = frame(&mut app, &mut animations, vec![button(pos, false)]);
+        assert_eq!(edit, (true, true), "select {id}");
+        frame(&mut app, &mut animations, vec![button(pos, true)]);
+        let (output, edit) = frame(&mut app, &mut animations, vec![button(pos, false)]);
+        assert_eq!(edit, (false, true), "preview {id} again");
+        let none = position(&output, &t!("props.clip_anim_none"));
+        frame(
+            &mut app,
+            &mut animations,
+            vec![egui::Event::PointerMoved(none), button(none, true)],
+        );
+        let (_, edit) = frame(&mut app, &mut animations, vec![button(none, false)]);
+        assert_eq!(edit, (true, false), "remove {id}");
+    }
+}
+
 mod flow {
     use super::*;
     use vv_core::{Clip, ClipId, ClipSource, FrameIdx, Rational, Track, TrackKind};

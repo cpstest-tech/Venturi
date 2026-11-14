@@ -24,10 +24,16 @@ pub enum AssetKind {
     Effect,
     Filter,
     Transition,
+    Animation,
 }
 
 impl AssetKind {
-    pub const ALL: [Self; 3] = [Self::Effect, Self::Filter, Self::Transition];
+    pub const ALL: [Self; 4] = [
+        Self::Effect,
+        Self::Filter,
+        Self::Transition,
+        Self::Animation,
+    ];
 
     /// Folder (under the assets root) holding this kind.
     pub fn folder(self) -> &'static str {
@@ -35,6 +41,7 @@ impl AssetKind {
             Self::Effect => "effects",
             Self::Filter => "filters",
             Self::Transition => "transitions",
+            Self::Animation => "animations",
         }
     }
 }

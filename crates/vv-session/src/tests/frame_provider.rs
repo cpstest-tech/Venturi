@@ -5,6 +5,30 @@ use vv_core::{
 };
 
 struct NoMediaProvider;
+
+#[test]
+fn animation_asset_passes_follow_timeline_time_after_trim_and_speed() {
+    let mut clip = Clip::from_source_range(
+        ClipId(1),
+        ClipSource::SolidColor,
+        500,
+        700,
+        100,
+        Rational::one(),
+    );
+    clip.set_speed(Rational::new(2, 1), Rational::one());
+    clip.effects.animations.in_asset = Some("animations/zoom_2".into());
+    clip.effects.animations.out_asset = Some("animations/fade_out".into());
+    clip.effects.animations.in_seconds = 1.0;
+    clip.effects.animations.out_seconds = 1.0;
+    let passes = asset_passes(&clip, 110, 20.0, 0.2);
+    assert_eq!(passes.len(), 1);
+    assert_eq!(passes[0].id, "animations/zoom_2");
+    assert_eq!(passes[0].progress, 0.5);
+    assert_eq!(passes[0].amount, 1.0);
+    assert!(asset_passes(&clip, 140, 20.0, 1.0).is_empty());
+    assert_eq!(asset_passes(&clip, 190, 20.0, 1.0)[0].progress, 0.5);
+}
 impl FrameProvider for NoMediaProvider {
     fn frame_for(
         &mut self,
@@ -1111,4 +1135,22 @@ fn generated_pop_subtitles_pop_in_on_the_rendered_frames() {
             clip.timeline_start
         );
     }
+}
+
+#[test]
+fn clip_animation_reaches_the_shared_preview_export_layer() {
+    let project = Project::default();
+    let mut clip = solid_clip(1, 100, 50, [2.0, 2.0]);
+    clip.effects.animations.entrance = Some(vv_core::clip_anim::Entrance::FromLeft);
+    clip.effects.animations.pulse = true;
+    let mut provider = NoMediaProvider;
+    let first = clip_layer(&project, &clip, 100, (1920, 1080), 25.0, &mut provider)
+        .unwrap()
+        .unwrap();
+    assert_eq!(first.transform.position[0], -1920.0);
+    let middle = clip_layer(&project, &clip, 125, (1920, 1080), 25.0, &mut provider)
+        .unwrap()
+        .unwrap();
+    assert_eq!(middle.transform.position[0], 0.0);
+    assert_eq!(middle.transform.zoom, [2.0; 2]);
 }

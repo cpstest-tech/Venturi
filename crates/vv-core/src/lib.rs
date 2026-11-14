@@ -1,4 +1,5 @@
 pub mod captions;
+pub mod clip_anim;
 pub mod clipboard;
 pub mod command;
 pub mod easing;

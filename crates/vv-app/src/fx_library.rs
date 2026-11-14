@@ -69,7 +69,7 @@ fn mix(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
 }
 
 /// The two bundled sample pictures, drawn in code: a dusk and a meadow.
-fn sample_pixels(variant: u8) -> Vec<u8> {
+pub(crate) fn sample_pixels(variant: u8) -> Vec<u8> {
     let (w, h) = PREVIEW;
     let mut out = Vec::with_capacity((w * h * 4) as usize);
     for y in 0..h {
@@ -465,6 +465,172 @@ impl VenturiApp {
         }
     }
 
+    pub(crate) fn show_clip_animations(
+        &mut self,
+        ui: &mut egui::Ui,
+        animations: &mut vv_core::clip_anim::ClipAnimations,
+    ) -> (bool, bool) {
+        let before = animations.clone();
+        let slot = crate::properties_tabs::segmented(
+            ui,
+            "clip_animation_slot",
+            &[
+                (0, t!("props.anim_in")),
+                (1, t!("props.anim_out")),
+                (2, t!("props.anim_combo")),
+            ],
+        );
+        let category = match slot {
+            0 => "in",
+            1 => "out",
+            _ => "combo",
+        };
+        let selected = match slot {
+            0 => &animations.in_asset,
+            1 => &animations.out_asset,
+            _ => &animations.combo_asset,
+        }
+        .clone();
+        let library = assets::library();
+        let entries: Vec<_> = library
+            .of_kind(AssetKind::Animation)
+            .filter(|a| a.category == category)
+            .collect();
+        let lang = rust_i18n::locale().to_string();
+        let gap = theme::SPACE_2;
+        let columns = ((ui.available_width() + gap) / (CELL_TARGET + gap))
+            .floor()
+            .max(1.0);
+        let side = ((ui.available_width() - gap * (columns - 1.0)) / columns).floor();
+        let now = ui.input(|i| i.time);
+        let mut stills = 0;
+        let mut frames = 0;
+        let mut hovered = None;
+        let mut choice = None;
+        ui.add_space(gap);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(gap, gap);
+            for asset in std::iter::once(None).chain(entries.iter().copied().map(Some)) {
+                let (rect, response) = ui.allocate_exact_size(
+                    egui::vec2(side, side + LABEL_HEIGHT),
+                    egui::Sense::click(),
+                );
+                let image_rect = egui::Rect::from_min_size(rect.min, egui::vec2(side, side));
+                let painter = ui.painter().clone();
+                painter.rect_filled(image_rect, theme::RADIUS_CONTROL, theme::BG_INSET);
+                let label = asset.map_or_else(
+                    || t!("props.clip_anim_none").into_owned(),
+                    |a| a.name.get(&lang).to_owned(),
+                );
+                if let Some(asset) = asset {
+                    if response.hovered() {
+                        hovered = Some(asset.id.clone());
+                    }
+                    if let Some(texture) = self.fx_cell_texture(
+                        ui.ctx(),
+                        asset,
+                        response.hovered(),
+                        now,
+                        &mut stills,
+                        &mut frames,
+                    ) {
+                        painter.image(
+                            texture,
+                            image_rect,
+                            egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                            egui::Color32::WHITE,
+                        );
+                    }
+                } else {
+                    painter.text(
+                        image_rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "∅",
+                        egui::FontId::proportional(28.0),
+                        theme::TEXT_SECONDARY,
+                    );
+                }
+                if selected.as_deref() == asset.map(|a| a.id.as_str()) || response.hovered() {
+                    painter.rect_stroke(
+                        image_rect,
+                        theme::RADIUS_CONTROL,
+                        egui::Stroke::new(1.5, theme::ACCENT),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+                let text = truncated_label(&painter, &label, side, theme::TEXT_SECONDARY);
+                painter.galley(
+                    egui::pos2(rect.left(), image_rect.bottom() + 1.0),
+                    text,
+                    theme::TEXT_SECONDARY,
+                );
+                if response.on_hover_text(label).clicked() {
+                    choice = Some(asset);
+                }
+            }
+        });
+        let restart = matches!(choice, Some(Some(_)));
+        if let Some(asset) = choice {
+            let id = asset.map(|a| a.id.clone());
+            match slot {
+                0 => {
+                    animations.in_asset = id;
+                    animations.entrance = None;
+                    if let Some(a) = asset {
+                        animations.in_seconds = a.default_secs;
+                    }
+                }
+                1 => {
+                    animations.out_asset = id;
+                    animations.exit = None;
+                    if let Some(a) = asset {
+                        animations.out_seconds = a.default_secs;
+                    }
+                }
+                _ => {
+                    animations.combo_asset = id;
+                    animations.pulse = false;
+                }
+            }
+        }
+        if let Some(id) = hovered {
+            if self
+                .fx
+                .hover_since
+                .as_ref()
+                .is_none_or(|(current, _)| *current != id)
+            {
+                self.fx.hover_since = Some((id, now));
+            }
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(33));
+        } else {
+            self.fx.hover_since = None;
+        }
+        if stills >= STILLS_PER_UI_FRAME || frames > 0 {
+            ui.ctx().request_repaint();
+        }
+        ui.add_space(gap);
+        match slot {
+            0 if animations.in_asset.is_some() => {
+                ui.add(
+                    egui::Slider::new(&mut animations.in_seconds, 0.05..=5.0)
+                        .text(t!("props.anim_duration"))
+                        .suffix(" s"),
+                );
+            }
+            1 if animations.out_asset.is_some() => {
+                ui.add(
+                    egui::Slider::new(&mut animations.out_seconds, 0.05..=5.0)
+                        .text(t!("props.anim_duration"))
+                        .suffix(" s"),
+                );
+            }
+            _ => {}
+        }
+        (*animations != before, restart)
+    }
+
     /// The picture a cell shows: the running loop while hovered (built a few
     /// frames per UI frame so the first hover does not stall), else a still.
     fn fx_cell_texture(
@@ -564,6 +730,7 @@ impl VenturiApp {
             return;
         };
         match asset.kind {
+            AssetKind::Animation => {}
             AssetKind::Transition => {
                 let Some(pair) = self.transition_pair_for_add() else {
                     self.toast(t!("fx.no_adjacent_pair"));

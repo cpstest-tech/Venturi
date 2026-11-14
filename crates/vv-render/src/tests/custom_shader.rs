@@ -65,6 +65,27 @@ fn every_builtin_shader_compiles_and_runs() {
 }
 
 #[test]
+fn animation_rest_endpoints_preserve_the_input() {
+    let compositor = Compositor::new_headless();
+    let output = OutputFrame::exact(16, 16);
+    let a = compositor.render_layers_to_owned_texture_transparent(&[solid(RED)], output);
+    let lib = assets::library();
+    for asset in lib
+        .of_kind(AssetKind::Animation)
+        .filter(|a| a.category != "combo")
+    {
+        let progress = if asset.category == "in" { 1.0 } else { 0.0 };
+        let custom = CustomPass {
+            curves: asset.curve_values(progress),
+            ..pass(&asset.id, &asset.shader, asset.shader_params(&[]), progress)
+        };
+        let texture = compositor.render_custom_pass(&custom, &a, &a).unwrap();
+        let [r, g, b, _] = pixel(&compositor, &texture, (8, 8));
+        assert!(r >= 250 && g <= 1 && b <= 1, "{}: {r}, {g}, {b}", asset.id);
+    }
+}
+
+#[test]
 fn a_dissolve_at_half_mixes_both_sides() {
     let compositor = Compositor::new_headless();
     let output = OutputFrame::exact(16, 16);

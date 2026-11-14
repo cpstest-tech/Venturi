@@ -1670,6 +1670,8 @@ impl MatteMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(from = "StoredEffectStack")]
 pub struct EffectStack {
+    #[serde(default)]
+    pub animations: crate::clip_anim::ClipAnimations,
     pub transform: TransformTracks,
     pub gain_db: Keyframed<f32>,
     pub color: Option<Keyframed<Rgba>>,
@@ -1700,6 +1702,8 @@ pub struct EffectStack {
 /// `EffectStack` as saved, older files included.
 #[derive(Deserialize)]
 struct StoredEffectStack {
+    #[serde(default)]
+    animations: crate::clip_anim::ClipAnimations,
     transform: TransformTracks,
     gain_db: Keyframed<f32>,
     color: Option<Keyframed<Rgba>>,
@@ -1731,6 +1735,7 @@ impl From<StoredEffectStack> for EffectStack {
             filters.push(shadow.into_filter());
         }
         Self {
+            animations: stored.animations,
             transform: stored.transform,
             gain_db: stored.gain_db,
             color: stored.color,
@@ -1749,6 +1754,7 @@ impl From<StoredEffectStack> for EffectStack {
 impl Default for EffectStack {
     fn default() -> Self {
         Self {
+            animations: crate::clip_anim::ClipAnimations::default(),
             transform: TransformTracks::default(),
             gain_db: Keyframed::constant(0.0),
             color: None,

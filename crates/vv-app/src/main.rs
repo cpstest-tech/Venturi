@@ -4443,6 +4443,11 @@ impl VenturiApp {
         // its changes go into a single undo step, like a drag.
         let holding = ui.input(|i| i.pointer.any_down()) || preview_combo_open(ui.ctx());
         self.apply_effect_changes(pending_effects, holding);
+        if pending_playhead.is_some() {
+            self.ensure_active_clip_matches_playhead(true);
+            self.timeline_state.reveal_playhead = true;
+            ui.ctx().request_repaint();
+        }
         if let Some(request) = self.mixer_panel.editor_requested.take() {
             let current = self.timeline_id;
             self.timeline_audio();

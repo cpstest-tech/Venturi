@@ -5,6 +5,7 @@
 // The assets dir has the user layout (transitions/<name>/...), read at
 // startup, so shaders can be edited without rebuilding. Out dir "-" only
 // times the frames (worst one excludes the first, which compiles).
+// Optional: CAPCUT_NATIVE=1000x646 and CAPCUT_BACKGROUND=0,171,59.
 use vv_render::{Compositor, CustomPass, Layer, LayerContent, OutputFrame, assets, wgpu};
 
 fn upload(c: &Compositor, path: &str, w: u32, h: u32) -> wgpu::Texture {
@@ -42,6 +43,17 @@ fn main() {
     let frames: u32 = a[8].parse().unwrap();
     let (p0, p1): (f32, f32) = (a[9].parse().unwrap(), a[10].parse().unwrap());
     let c = Compositor::new_headless();
+    let mut params = asset.shader_params(&asset.default_params());
+    if let Ok(native) = std::env::var("CAPCUT_NATIVE") {
+        let (nw, nh) = native.split_once('x').expect("native WxH");
+        let (nw, nh): (f32, f32) = (nw.parse().unwrap(), nh.parse().unwrap());
+        let fit = (w as f32 / nw).min(h as f32 / nh);
+        params = [0.5, 0.5, nw * fit / w as f32, nh * fit / h as f32, 0.0, 0.0, 0.0, 0.0];
+    }
+    let background = std::env::var("CAPCUT_BACKGROUND").ok().map(|v| {
+        let values: Vec<f32> = v.split(',').map(|v| v.parse::<f32>().unwrap() / 255.0).collect();
+        vv_core::Rgba { r: values[0], g: values[1], b: values[2], a: 1.0 }
+    });
     let out = OutputFrame::exact(w, h);
     let ta = upload(&c, &a[3], w, h);
     let tb = upload(&c, &a[4], w, h);
@@ -55,7 +67,7 @@ fn main() {
         let pass = CustomPass {
             key: &asset.id,
             source: &asset.shader,
-            params: asset.shader_params(&asset.default_params()),
+            params,
             curves: asset.curve_values(p),
             progress: p,
             time: p * asset.default_secs as f32,
@@ -69,7 +81,12 @@ fn main() {
             }
             continue;
         }
-        let px = c.render_layers(&layer(&r, w, h), out);
+        let mut shown = Vec::new();
+        if let Some(color) = background {
+            shown.push(Layer::new(LayerContent::Solid(color), Default::default()));
+        }
+        shown.extend(layer(&r, w, h));
+        let px = c.render_layers(&shown, out);
         std::fs::write(format!("{}/{i:03}.rgba", a[7]), px).unwrap();
     }
     eprintln!("{frames} frames in {:?}, worst {:?} at {:.3}", t0.elapsed(), worst.0, worst.1);

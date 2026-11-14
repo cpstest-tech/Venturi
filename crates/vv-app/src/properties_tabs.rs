@@ -240,16 +240,6 @@ pub(crate) fn audio_placeholders(ui: &mut egui::Ui) {
     placeholder_checkbox_section(ui, &t!("props.voice_changer"));
 }
 
-pub(crate) fn animation_tab(ui: &mut egui::Ui) {
-    for title in [
-        t!("props.anim_in"),
-        t!("props.anim_out"),
-        t!("props.anim_combo"),
-    ] {
-        placeholder_section(ui, &title, &[t!("props.anim_duration")]);
-    }
-}
-
 pub(crate) fn text_placeholders(ui: &mut egui::Ui) {
     placeholder_section(ui, &t!("props.bubble_effects"), &[t!("props.strength")]);
 }

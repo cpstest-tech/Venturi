@@ -944,3 +944,31 @@ props.reset_section_hint:
 props.applies_to_first:
   en: "Shows the first selected element."
   it: "Mostra il primo elemento selezionato."
+
+props.clip_anim_none:
+  en: "None"
+  it: "Nessuna"
+
+props.clip_anim_zoom_in:
+  en: "Zoom in"
+  it: "Zoom in"
+
+props.clip_anim_zoom_out:
+  en: "Zoom out"
+  it: "Zoom out"
+
+props.clip_anim_left:
+  en: "From left"
+  it: "Da sinistra"
+
+props.clip_anim_right:
+  en: "To right"
+  it: "Verso destra"
+
+props.clip_anim_pulse:
+  en: "Pulse"
+  it: "Pulsazione"
+
+props.clip_anim_period:
+  en: "Cycle duration"
+  it: "Durata ciclo"
