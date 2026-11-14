@@ -213,6 +213,11 @@ fn ends_sentence(word: &str) -> bool {
 /// Splits the words where a viewer needs a new line: too long, a pause,
 /// the end of a sentence.
 pub fn caption_lines(words: &[CaptionWord]) -> Vec<CaptionLine> {
+    caption_lines_within(words, MAX_LINE_CHARS)
+}
+
+/// `caption_lines` with lines of at most `max_chars` characters.
+pub fn caption_lines_within(words: &[CaptionWord], max_chars: usize) -> Vec<CaptionLine> {
     let mut lines = Vec::new();
     let mut first = 0;
     let mut chars = 0;
@@ -220,7 +225,7 @@ pub fn caption_lines(words: &[CaptionWord]) -> Vec<CaptionLine> {
         let width = word.text.chars().count();
         if i > first {
             let previous = &words[i - 1];
-            let too_long = chars + 1 + width > MAX_LINE_CHARS
+            let too_long = chars + 1 + width > max_chars
                 || word.end_ms.saturating_sub(words[first].start_ms) > MAX_LINE_MS;
             let pause = word.start_ms.saturating_sub(previous.end_ms) > PAUSE_MS;
             if too_long || pause || ends_sentence(&previous.text) {
@@ -252,8 +257,8 @@ fn line_of(words: &[CaptionWord], range: std::ops::Range<usize>) -> CaptionLine 
 }
 
 /// `(start_ms, end_ms, text)` of every clip the template makes.
-fn cues(words: &[CaptionWord], reveal: Reveal) -> Vec<(u32, u32, String)> {
-    let lines = caption_lines(words);
+fn cues(words: &[CaptionWord], reveal: Reveal, max_chars: usize) -> Vec<(u32, u32, String)> {
+    let lines = caption_lines_within(words, max_chars);
     let mut cues = Vec::new();
     for (n, line) in lines.iter().enumerate() {
         let next_line_start = lines.get(n + 1).map(|l| l.start_ms);
@@ -330,7 +335,8 @@ pub fn build_clips_with(
     let (fps, resolution) = (t.fps, t.resolution);
     let mut clips: Vec<Clip> = Vec::new();
     let mut cursor: FrameIdx = 0;
-    for (start_ms, end_ms, text) in cues(words, reveal) {
+    let max_chars = max_chars_for(&title("0", resolution), resolution);
+    for (start_ms, end_ms, text) in cues(words, reveal, max_chars) {
         let start = to_frames(start_ms, fps).max(cursor);
         let end = to_frames(end_ms, fps).max(start + 1);
         let id = project.alloc_clip_id();
@@ -338,7 +344,8 @@ pub fn build_clips_with(
             Clip::from_source_range(id, ClipSource::Text, 0, end - start, start, Rational::one());
         let mut styled = title(&text, resolution);
         if let Some(karaoke) = &mut styled.anim.karaoke
-            && let Some(times) = words_within(words, start_ms, end_ms, text.split_whitespace().count())
+            && let Some(times) =
+                words_within(words, start_ms, end_ms, text.split_whitespace().count())
         {
             karaoke.word_ms = times;
         }
@@ -350,6 +357,12 @@ pub fn build_clips_with(
         clips.push(clip);
     }
     clips
+}
+
+/// Characters of a line that fit the frame width at the title's size.
+fn max_chars_for(title: &TitleParams, resolution: (u32, u32)) -> usize {
+    let fit = resolution.0 as f32 * 0.85 / (title.size.max(1.0) * 0.6);
+    (fit as usize).clamp(6, MAX_LINE_CHARS)
 }
 
 fn halo_filter(height: u32) -> ClipFilter {

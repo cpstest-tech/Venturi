@@ -183,3 +183,30 @@ fn captions_survive_a_save_and_old_files_load_without_them() {
             .is_empty()
     );
 }
+
+#[test]
+fn portrait_lines_are_shorter_than_landscape_ones() {
+    let spoken: Vec<_> = (0..12)
+        .map(|i| {
+            (
+                ["Ciao", "a", "tutti", "benvenuti"][i % 4],
+                i as u32 * 300,
+                i as u32 * 300 + 250,
+            )
+        })
+        .collect();
+    let spoken = words(&spoken);
+    let template = SubtitleTemplate::find("line_classic").unwrap();
+    let longest = |resolution: (u32, u32)| {
+        let (mut project, timeline) = project();
+        project.timelines.get_mut(timeline).unwrap().resolution = resolution;
+        build_clips(&mut project, timeline, &spoken, template)
+            .iter()
+            .filter_map(|c| c.effects.title.as_ref())
+            .map(|t| t.content.default.chars().count())
+            .max()
+            .unwrap()
+    };
+    assert!(longest((1080, 1920)) <= 14);
+    assert!(longest((1080, 1920)) < longest((1920, 1080)));
+}
