@@ -1,0 +1,34 @@
+{
+ "name": {
+  "en": "Shaky zoom",
+  "it": "Zoom tremolante"
+ },
+ "category": "dynamic",
+ "default_secs": 0.8,
+ "curves": [
+  "3 * (V('root/ADBE Position_30#0', 0) - 360) * (1 - v('fg/ADBE Opacity_22#0') / 100) / 720",
+  "3 * (V('root/ADBE Position_30#1', 0) - 640) / 720",
+  "3 * (V('root/ADBE Position_30#0', 1) - 360) * (1 - v('fg/ADBE Opacity_22#0') / 100) / 720",
+  "3 * (V('root/ADBE Position_30#1', 1) - 640) / 720",
+  "3 * (V('root/ADBE Position_30#0', 2) - 360) * (1 - v('fg/ADBE Opacity_22#0') / 100) / 720",
+  "3 * (V('root/ADBE Position_30#1', 2) - 640) / 720",
+  "3 * (V('root/ADBE Position_30#0', 3) - 360) * (1 - v('fg/ADBE Opacity_22#0') / 100) / 720",
+  "3 * (V('root/ADBE Position_30#1', 3) - 640) / 720",
+  "3 * (V('root/ADBE Position_30#0', 4) - 360) * (1 - v('fg/ADBE Opacity_22#0') / 100) / 720",
+  "3 * (V('root/ADBE Position_30#1', 4) - 640) / 720",
+  "3 * (V('root/ADBE Position_30#0', 5) - 360) * (1 - v('fg/ADBE Opacity_22#0') / 100) / 720",
+  "3 * (V('root/ADBE Position_30#1', 5) - 640) / 720",
+  "3 * (V('root/ADBE Position_30#0', 6) - 360) * (1 - v('fg/ADBE Opacity_22#0') / 100) / 720",
+  "3 * (V('root/ADBE Position_30#1', 6) - 640) / 720",
+  "3 * (V('root/ADBE Position_30#0', 7) - 360) * (1 - v('fg/ADBE Opacity_22#0') / 100) / 720",
+  "3 * (V('root/ADBE Position_30#1', 7) - 640) / 720",
+  "3 * (V('root/ADBE Position_30#0', 8) - 360) * (1 - v('fg/ADBE Opacity_22#0') / 100) / 720",
+  "3 * (V('root/ADBE Position_30#1', 8) - 640) / 720",
+  "v('fg/ADBE Scale_17#0') / 100",
+  "V('fg/ADBE Scale_17#0', 8) / 100",
+  "v('fg/ADBE Opacity_22#0') / 100",
+  "1.5 * 1.2 * math.sqrt(G * 1.328125) * v('root/ADBE Gaussian Blur 2-0001_2#0') / 720",
+  "2.25 * 1.2 * math.sqrt(3 * B) * v('root/ADBE Box Blur2-0001_17#0') / 720",
+  "2.25 * 1.2 * math.sqrt(3 * B) * v('root/ADBE Box Blur2-0001_23#0') / 720"
+ ]
+}

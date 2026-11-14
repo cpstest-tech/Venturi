@@ -1,0 +1,12 @@
+{"name": {"en": "Triple slide", "it": "Scorrimento triplo"}, "category": "dynamic", "default_secs": 1.33,
+ "curves": ["v('LumiMotionBlur2D_334-effect1#ae_pre_anchor#vector#1') - v('LumiMotionBlur2D_334-effect1#ae_pre_position#vector#1')",
+            "v('LumiMotionBlur2D_334-effect1#anchor#vector#1') - v('LumiMotionBlur2D_334-effect1#position#vector#1')",
+            "v('LumiMotionBlur2D_35-effect2#ae_pre_anchor#vector#1') - v('LumiMotionBlur2D_35-effect2#ae_pre_position#vector#1')",
+            "v('LumiMotionBlur2D_35-effect2#anchor#vector#1') - v('LumiMotionBlur2D_35-effect2#position#vector#1')",
+            "0.5 - v('LumiMotionBlur2D_311-effect1#ae_pre_position#vector#1')",
+            "0.5 - v('LumiMotionBlur2D_311-effect1#position#vector#1')",
+            "0.5 - v('LumiMotionBlur2D_339-effect2#ae_pre_position#vector#1')",
+            "0.5 - v('LumiMotionBlur2D_339-effect2#position#vector#1')",
+            "v('LumiLayer_311-trs#p0_position#vector#0') / 580 - 0.5",
+            "v('LumiLayer_311-trs#p0_position#vector#1') / 580 - 0.5",
+            "v('LumiLayer_311-trs#p0_scale#vector#0') / 100"]}

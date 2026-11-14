@@ -1,0 +1,24 @@
+{
+ "name": {
+  "en": "Light flash",
+  "it": "Flash luminoso"
+ },
+ "category": "dynamic",
+ "default_secs": 0.8,
+ "curves": [
+  "v('lumi_motion_blur_2d_18-effect1#scale_y#number#0')",
+  "v('LuaStrongSharpen_18-effect0#offsetX#number#0') * 0.2",
+  "v('LuaStrongSharpen_18-effect0#offsetY#number#0') * 0.2",
+  "v('lumi_motion_blur_2d_17-effect0#position#vector#1') - 0.5",
+  "v('lumi_motion_blur_2d_17-effect0#scale_x#number#0')",
+  "v('LuaStrongSharpen_17-effect1#offsetX#number#0') * 0.2",
+  "v('LuaStrongSharpen_17-effect1#offsetY#number#0') * 0.2",
+  "pin(v('LuaOpticsCompensation_17-effect2#fov#number#0'))[0]",
+  "pin(v('LuaOpticsCompensation_17-effect2#fov#number#0'))[1]",
+  "v('S_Glow_47-effect0#brightness#number#0')",
+  "2 * v('AdjustGlow_47-effect1#glowIntensity#number#0')",
+  "v('AdjustGlow_47-effect1#threshold#number#0')",
+  "2 * v('BCCGlow_47-effect2#glowIntensity#number#0')",
+  "4 / 15 * math.floor(v('LumiDirectionBlur_47-effect3#intensity#number#0')) / 720"
+ ]
+}

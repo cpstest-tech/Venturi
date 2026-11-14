@@ -1,0 +1,5 @@
+{"name": {"en": "Zoom flash", "it": "Zoom flash"}, "category": "dynamic", "default_secs": 2.0,
+ "curves": ["v('LumiAnimSeqLayout_43-effect0#scale#number#0')",
+  "v('LumiAnimSeqLayout_42-effect0#scale#number#0')",
+  "v('LumiExposure_1585-effect0#exposure#number#0') / 2.2",
+  "1.5 * box(v('LumiBoxBlur_1585-effect2#blurIntensity#number#0'), 3)"]}

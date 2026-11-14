@@ -1,0 +1,6 @@
+{"name": {"en": "Whirlpool", "it": "Idromassaggio"}, "category": "dynamic", "default_secs": 0.8,
+ "curves": ["math.radians(v('ADBE_Geometry2_0005_0_0'))",
+  "math.radians(v('ADBE_Geometry2_0006_0_1') - (0.01 if abs(math.fmod(v('ADBE_Geometry2_0006_0_1'), 90)) < 0.01 else 0))",
+  "v('ADBE_IE_e4f13d1013029536c197a80-0001_0_0')",
+  "0.225 * 7.9 * 0.5 * v('ADBE_Radial_Blur_0001_0_1')",
+  "4 / 15 * math.floor(0.5 * v('ADBE_Gaussian_Blur_2_0001_0_3')) / 720"]}

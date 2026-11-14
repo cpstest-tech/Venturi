@@ -1,0 +1,5 @@
+{"name": {"en": "Slice zoom", "it": "Zoom a fette"}, "category": "dynamic", "default_secs": 2.0,
+ "curves": ["v('LumiLayer_45-trs#scale#vector#0') / 100",
+  "(v('LumiLayer_43-trs-blend#position#vector#0') - 540) / 1080",
+  "(v('LumiLayer_44-trs-blend#position#vector#0') - 540) / 1080",
+  "v('LumiDropShadow_44-effect1#shadowOpacity#number#0')"]}

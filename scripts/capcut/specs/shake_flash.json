@@ -1,0 +1,6 @@
+{"name": {"en": "Shake flash", "it": "Scossa e flash"}, "category": "dynamic", "default_secs": 1.2,
+ "curves": ["v('LumiExposure_66-effect0#exposure#number#0') / 2.2",
+            "v('LumiExposure_62-effect0#exposure#number#0') / 2.2",
+            "v('LumiSShake_62-effect1#ampRatio#number#0')",
+            "v('LumiChromaticAberration_62-effect2#offsetX#number#0') * 0.2",
+            "v('LumiChromaticAberration_62-effect2#offsetY#number#0') * 0.2"]}
