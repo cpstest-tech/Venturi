@@ -576,6 +576,19 @@ pub fn insert_title(
     start: FrameIdx,
 ) -> ClipId {
     let len = Generator::Text.default_len(project.timelines[timeline_id].fps);
+    insert_title_len(project, history, timeline_id, title, track_index, start, len)
+}
+
+/// `insert_title` lasting `len` frames.
+pub fn insert_title_len(
+    project: &mut Project,
+    history: &mut History,
+    timeline_id: TimelineId,
+    title: TitleParams,
+    track_index: usize,
+    start: FrameIdx,
+    len: FrameIdx,
+) -> ClipId {
     let id = project.alloc_clip_id();
     let mut clip = Clip::from_source_range(id, ClipSource::Text, 0, len, start, Rational::one());
     clip.effects.title = Some(title);

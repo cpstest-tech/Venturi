@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "id": "neon_pulse",
+  "name": "Neon Pulse",
+  "category": "titles",
+  "tags": [
+    "neon",
+    "glow",
+    "night",
+    "club"
+  ],
+  "duration": 3.0,
+  "layers": [
+    {
+      "text": "NEON PULSE",
+      "font": "Righteous",
+      "size": 150,
+      "color": "#FFFFFF",
+      "tracking": 60,
+      "case": "upper",
+      "strokes": [
+        {
+          "color": "#FF2BD6",
+          "width": 3
+        }
+      ],
+      "glows": [
+        {
+          "color": "#FF2BD6",
+          "radius": 34,
+          "intensity": 1.6
+        },
+        {
+          "color": "#00E5FF",
+          "radius": 70,
+          "intensity": 0.9
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "blur_in",
+          "duration": 0.7
+        },
+        "out": {
+          "preset": "dissolve",
+          "duration": 0.6
+        },
+        "loop": {
+          "preset": "glow_pulse",
+          "duration": 1.6,
+          "tint": "#FF2BD6"
+        }
+      }
+    }
+  ]
+}

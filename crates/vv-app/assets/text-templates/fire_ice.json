@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "id": "fire_ice",
+  "name": "Fire & Ice",
+  "category": "titles",
+  "tags": [
+    "fire",
+    "ice",
+    "gradient",
+    "epic"
+  ],
+  "duration": 4.0,
+  "layers": [
+    {
+      "text": "FIRE & ICE",
+      "font": "Anton",
+      "size": 230,
+      "color": "#FFFFFF",
+      "case": "upper",
+      "tracking": 30,
+      "fill": {
+        "angle": 0,
+        "stops": [
+          [
+            0.0,
+            "#FF3D00"
+          ],
+          [
+            0.25,
+            "#FFC400"
+          ],
+          [
+            0.5,
+            "#00D4FF"
+          ],
+          [
+            0.75,
+            "#FFC400"
+          ],
+          [
+            1.0,
+            "#FF3D00"
+          ]
+        ]
+      },
+      "strokes": [
+        {
+          "color": "#0A0A14",
+          "width": 6
+        }
+      ],
+      "glows": [
+        {
+          "color": "#FF5A00",
+          "radius": 36,
+          "intensity": 0.9
+        },
+        {
+          "color": "#00B8FF",
+          "radius": 60,
+          "intensity": 0.6
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "blur_in",
+          "duration": 0.8
+        },
+        "out": {
+          "preset": "dissolve",
+          "duration": 0.6
+        },
+        "loop": {
+          "preset": "gradient_flow",
+          "duration": 3.0
+        }
+      }
+    }
+  ]
+}

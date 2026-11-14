@@ -8,9 +8,10 @@ use crate::media_pool::PoolState;
 use crate::pool_view::{
     self, HoverActions, MenuChoice, PoolEntry, PoolEvent, PoolMenus, PoolView, Thumb,
 };
-use crate::settings::Settings;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::sync::Arc;
+use vv_core::text_template::{TemplateCategory as TextCategory, TemplateClip};
 
 pub(crate) const STICKER_SECS: f64 = 3.0;
 const TEXT_SECS: f64 = 3.0;
@@ -76,7 +77,9 @@ impl RibbonTab {
             Self::Media => categories.push(Category::Project),
             Self::Audio => categories.extend([Category::Music, Category::Sfx]),
             Self::Text => {
-                categories.extend([Category::AddText, Category::TextEffects, Category::Yours])
+                categories.push(Category::AddText);
+                categories.extend(TextCategory::ALL.map(Category::Template));
+                categories.push(Category::Yours);
             }
             Self::Sticker => {
                 categories.extend(StickerCategory::ALL.map(Category::Sticker));
@@ -147,7 +150,7 @@ pub(crate) enum Category {
     Music,
     Sfx,
     AddText,
-    TextEffects,
+    Template(TextCategory),
     Yours,
     Sticker(StickerCategory),
 }
@@ -160,7 +163,7 @@ impl Category {
             Self::Music => t!("ribbon.audio_music"),
             Self::Sfx => t!("ribbon.audio_sfx"),
             Self::AddText => t!("ribbon.text_add"),
-            Self::TextEffects => t!("ribbon.text_effects"),
+            Self::Template(category) => t!(format!("ribbon.text_cat_{}", category.id())),
             Self::Yours => t!("ribbon.text_yours"),
             Self::Sticker(category) => category.label(),
         }
@@ -214,6 +217,10 @@ pub struct TextTemplate {
     pub title: vv_core::TitleParams,
 }
 
+/// Layers, frame size and texture of a card at rest.
+type StaticPreview = (Vec<vv_core::TitleParams>, (u32, u32), egui::TextureHandle);
+type SizedClips = ((u32, u32), Arc<Vec<TemplateClip>>);
+
 #[derive(Default)]
 pub(crate) struct RibbonState {
     pub tab: RibbonTab,
@@ -231,7 +238,12 @@ pub(crate) struct RibbonState {
     pub autoplay: bool,
     /// The template whose card is being dragged to the timeline.
     dragged_template: Option<String>,
-    text_previews: HashMap<String, (vv_core::TitleParams, (u32, u32), egui::TextureHandle)>,
+    text_previews: HashMap<String, StaticPreview>,
+    text_clips: HashMap<String, SizedClips>,
+    text_search: String,
+    /// The text card under the pointer and when the pointer arrived.
+    text_hover: Option<(String, f64)>,
+    text_hover_texture: Option<egui::TextureHandle>,
 }
 
 impl RibbonState {
@@ -246,13 +258,8 @@ impl RibbonState {
     }
 
     /// The template of the text drag that just landed, if any.
-    fn take_dragged_title(&mut self, settings: &Settings) -> Option<vv_core::TitleParams> {
-        let id = self.dragged_template.take()?;
-        settings
-            .text_templates
-            .iter()
-            .find(|t| t.id == id)
-            .map(|t| t.title.clone())
+    fn take_dragged_template(&mut self) -> Option<String> {
+        self.dragged_template.take()
     }
 }
 
@@ -297,14 +304,69 @@ impl PoolMenus<String, String> for PathMenus {
 enum TextAction {
     Toggle(String),
     Insert(Option<String>),
+    AsSubtitles(String),
     Delete(String),
+}
+
+enum CardSource {
+    Bundled(&'static vv_core::TextTemplateDef),
+    /// The default text or a template saved by the user: one layer.
+    Plain(Box<vv_core::TitleParams>),
 }
 
 struct TextCard {
     id: String,
     name: String,
     user: bool,
-    title: vv_core::TitleParams,
+    source: CardSource,
+}
+
+impl RibbonState {
+    /// Layers and duration of a card, cached per frame size.
+    fn card_clips(&mut self, card: &TextCard, size: (u32, u32)) -> (Arc<Vec<TemplateClip>>, f32) {
+        match &card.source {
+            CardSource::Plain(title) => (
+                Arc::new(vec![TemplateClip {
+                    title: (**title).clone(),
+                    start_secs: 0.0,
+                    length_secs: TEXT_SECS as f32,
+                }]),
+                TEXT_SECS as f32,
+            ),
+            CardSource::Bundled(def) => {
+                let entry = self
+                    .text_clips
+                    .entry(card.id.clone())
+                    .or_insert_with(|| (size, Arc::new(def.clips(size))));
+                if entry.0 != size {
+                    *entry = (size, Arc::new(def.clips(size)));
+                }
+                (entry.1.clone(), def.duration)
+            }
+        }
+    }
+}
+
+/// The layers `time` seconds into a looping preview of a template lasting
+/// `duration`: In, hold, Out, then a short pause.
+fn hover_titles(clips: &[TemplateClip], duration: f32, time: f32) -> Vec<vv_core::TitleParams> {
+    let t = time.rem_euclid(duration + 0.6).min(duration);
+    clips
+        .iter()
+        .filter_map(|clip| {
+            let local = t - clip.start_secs;
+            if local < 0.0 {
+                return None;
+            }
+            let mut title = clip.title.clone();
+            title.anim_state = title.anim.state_at(
+                &title.display_text(),
+                local.min(clip.length_secs),
+                clip.length_secs,
+            );
+            Some(title)
+        })
+        .collect()
 }
 
 /// The title as the compositor draws it, over a dark frame of the timeline's
@@ -313,17 +375,27 @@ pub(crate) fn title_preview_image(
     title: &vv_core::TitleParams,
     timeline_size: (u32, u32),
 ) -> egui::ColorImage {
+    layers_preview_image(std::slice::from_ref(title), timeline_size)
+}
+
+/// Several titles stacked, the first at the bottom.
+pub(crate) fn layers_preview_image(
+    titles: &[vv_core::TitleParams],
+    timeline_size: (u32, u32),
+) -> egui::ColorImage {
     let width = PREVIEW_TEXTURE_WIDTH;
     let height = (width as f32 * TEXT_PREVIEW.y / TEXT_PREVIEW.x).round() as u32;
-    let title = title.at(0);
-    let render = vv_render::text::render_title(&title, timeline_size, (width, height));
     let mut pixels = vec![[34.0f32, 34.0, 38.0]; (width * height) as usize];
-    for (mask, color) in &render.layers {
-        let rgb = [color.r, color.g, color.b].map(|c| c.clamp(0.0, 1.0) * 255.0);
-        for (pixel, &coverage) in pixels.iter_mut().zip(&mask.data) {
-            let alpha = f32::from(coverage) / 255.0 * color.a.clamp(0.0, 1.0);
-            for (dst, src) in pixel.iter_mut().zip(rgb) {
-                *dst += (src - *dst) * alpha;
+    for title in titles {
+        let title = title.at(0);
+        let render = vv_render::text::render_title(&title, timeline_size, (width, height));
+        for (mask, color) in &render.layers {
+            let rgb = [color.r, color.g, color.b].map(|c| c.clamp(0.0, 1.0) * 255.0);
+            for (pixel, &coverage) in pixels.iter_mut().zip(&mask.data) {
+                let alpha = f32::from(coverage) / 255.0 * color.a.clamp(0.0, 1.0);
+                for (dst, src) in pixel.iter_mut().zip(rgb) {
+                    *dst += (src - *dst) * alpha;
+                }
             }
         }
     }
@@ -968,19 +1040,90 @@ impl VenturiApp {
         self.insert_at_playhead(&[media], false);
     }
 
-    /// Text at the playhead, with the saved template `template` if given.
+    /// Text at the playhead, with the template `template` if given.
     pub(crate) fn insert_text_at_playhead(&mut self, template: Option<&str>) {
         let start = self.timeline_state.playhead.max(0);
-        let title = template.and_then(|id| {
-            self.settings
-                .text_templates
-                .iter()
-                .find(|t| t.id == id)
-                .map(|t| t.title.clone())
-        });
-        let len = (self.timeline_fps() * TEXT_SECS).round() as FrameIdx;
+        let resolution = self.timeline_resolution();
+        let (clips, _) = self.text_template_clips(template, resolution);
+        let longest = clips.iter().map(|c| c.start_secs + c.length_secs).fold(0.0, f32::max);
+        let len = (self.timeline_fps() * f64::from(longest)).round() as FrameIdx;
         let target = self.overlay_target(start, len);
-        self.add_generator_with_title(timeline_ui::Generator::Text, title, start, target);
+        self.insert_text_template(template, start, target);
+    }
+
+    fn timeline_resolution(&self) -> (u32, u32) {
+        self.timeline_id
+            .and_then(|id| self.session.project.timelines.get(id))
+            .map_or((1920, 1080), |t| t.resolution)
+    }
+
+    /// The clips of template `id` (bundled or the user's; the plain default
+    /// text without it) for a frame of `resolution`, and its duration.
+    fn text_template_clips(
+        &self,
+        id: Option<&str>,
+        resolution: (u32, u32),
+    ) -> (Vec<TemplateClip>, f32) {
+        let plain = |title: vv_core::TitleParams| {
+            (
+                vec![TemplateClip {
+                    title,
+                    start_secs: 0.0,
+                    length_secs: TEXT_SECS as f32,
+                }],
+                TEXT_SECS as f32,
+            )
+        };
+        let Some(id) = id else {
+            return plain(vv_core::TitleParams::default());
+        };
+        if let Some(def) = crate::text_templates::find(id) {
+            return (def.clips(resolution), def.duration);
+        }
+        match self.settings.text_templates.iter().find(|t| t.id == id) {
+            Some(user) => plain(user.title.clone()),
+            None => plain(vv_core::TitleParams::default()),
+        }
+    }
+
+    /// Puts the layers of a template on the timeline at `start`, the first on
+    /// `target` and each next one on a new track above, in one undo step.
+    pub(crate) fn insert_text_template(
+        &mut self,
+        template: Option<&str>,
+        start: FrameIdx,
+        target: timeline_ui::MediaDropTarget,
+    ) {
+        let group = self.session.history.begin_group();
+        let timeline_id = self.ensure_timeline();
+        let timeline = &self.session.project.timelines[timeline_id];
+        let (fps, resolution) = (timeline.fps, timeline.resolution);
+        let (clips, _) = self.text_template_clips(template, resolution);
+        for (n, clip) in clips.into_iter().enumerate() {
+            let target = if n == 0 {
+                target
+            } else {
+                timeline_ui::MediaDropTarget::NewVideoTrack
+            };
+            let Some(tracks) = self.resolve_drop_tracks(timeline_id, target, true, false) else {
+                continue;
+            };
+            let frames = |secs: f32| (fps.as_f64() * f64::from(secs)).round() as FrameIdx;
+            vv_core::edit::insert_title_len(
+                &mut self.session.project,
+                &mut self.session.history,
+                timeline_id,
+                clip.title,
+                tracks
+                    .video
+                    .expect("text: video track always resolved"),
+                start + frames(clip.start_secs),
+                frames(clip.length_secs).max(1),
+            );
+        }
+        self.session
+            .history
+            .end_group_as(group, vv_core::CommandLabel::InsertClips);
     }
 
     /// The style of a text clip becomes a template of the user's.
@@ -997,99 +1140,178 @@ impl VenturiApp {
         self.persist_settings();
     }
 
-    fn show_text_tab(&mut self, ui: &mut egui::Ui, category: Category) {
-        if category == Category::TextEffects {
-            ui.add_enabled_ui(false, |ui| {
-                ui.label(t!("ribbon.text_effects_soon"));
-            })
-            .response
-            .on_disabled_hover_text(t!("common.coming_soon"));
-            return;
-        }
+    /// The cards of `category`; a search covers every template.
+    fn text_cards(&self, category: Category) -> Vec<TextCard> {
+        let query = self.library_ribbon.text_search.trim();
         let favorites = &self.settings.favorites;
+        let bundled = |def: &'static vv_core::TextTemplateDef| TextCard {
+            id: def.id.clone(),
+            name: def.name.clone(),
+            user: false,
+            source: CardSource::Bundled(def),
+        };
+        let users = self.settings.text_templates.iter().map(|t| TextCard {
+            id: t.id.clone(),
+            name: t.name.clone(),
+            user: true,
+            source: CardSource::Plain(Box::new(t.title.clone())),
+        });
         let default_card = TextCard {
             id: DEFAULT_TEXT_ID.to_owned(),
             name: t!("ribbon.text_default").into_owned(),
             user: false,
-            title: vv_core::TitleParams::default(),
+            source: CardSource::Plain(Box::default()),
         };
-        let template_cards = self.settings.text_templates.iter().map(|t| TextCard {
-            id: t.id.clone(),
-            name: t.name.clone(),
-            user: true,
-            title: t.title.clone(),
-        });
-        let cards: Vec<TextCard> = match category {
-            Category::AddText => vec![default_card],
-            Category::Yours => template_cards.collect(),
+        if !query.is_empty() {
+            let label = |c: TextCategory| t!(format!("ribbon.text_cat_{}", c.id())).into_owned();
+            let lowered = query.to_lowercase();
+            return crate::text_templates::all()
+                .iter()
+                .filter(|d| crate::text_templates::matches(d, &label(d.category), query))
+                .map(bundled)
+                .chain(users.filter(|c| c.name.to_lowercase().contains(&lowered)))
+                .collect();
+        }
+        match category {
+            Category::AddText => std::iter::once(default_card)
+                .chain(crate::text_templates::all().iter().map(bundled))
+                .collect(),
+            Category::Template(c) => crate::text_templates::in_category(c).map(bundled).collect(),
+            Category::Yours => users.collect(),
             _ => std::iter::once(default_card)
-                .chain(template_cards)
+                .chain(crate::text_templates::all().iter().map(bundled))
+                .chain(users)
                 .filter(|c| is_favorite(favorites, &text_key(&c.id)))
                 .collect(),
-        };
+        }
+    }
+
+    fn show_text_tab(&mut self, ui: &mut egui::Ui, category: Category) {
+        ui.add(
+            egui::TextEdit::singleline(&mut self.library_ribbon.text_search)
+                .hint_text(t!("ribbon.text_search"))
+                .desired_width(ui.available_width()),
+        );
+        ui.add_space(theme::SPACE_1);
+        let cards = self.text_cards(category);
         if cards.is_empty() {
-            let hint = match category {
-                Category::Yours => t!("ribbon.templates_empty"),
-                _ => t!("ribbon.favorites_empty"),
+            let hint = if !self.library_ribbon.text_search.trim().is_empty() {
+                t!("ribbon.text_no_match")
+            } else if category == Category::Yours {
+                t!("ribbon.templates_empty")
+            } else {
+                t!("ribbon.favorites_empty")
             };
             ui.weak(hint);
             return;
         }
-        let mut actions = Vec::new();
         let favorite_flags: Vec<bool> = cards
             .iter()
             .map(|c| is_favorite(&self.settings.favorites, &text_key(&c.id)))
             .collect();
-        let timeline_size = self
-            .timeline_id
-            .and_then(|id| self.session.project.timelines.get(id))
-            .map_or((1920, 1080), |t| t.resolution);
+        let timeline_size = self.timeline_resolution();
+        let now = ui.input(|i| i.time);
+        let mut actions = Vec::new();
+        let mut hovered_card = None;
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for (card, favorite) in cards.iter().zip(&favorite_flags) {
-                        let key = card.id.clone();
-                        let stale = self.library_ribbon.text_previews.get(&key).is_none_or(
-                            |(title, size, _)| *title != card.title || *size != timeline_size,
-                        );
-                        if stale {
-                            let image = title_preview_image(&card.title, timeline_size);
-                            let texture = ui.ctx().load_texture(
-                                format!("text-preview-{key}"),
-                                image,
-                                egui::TextureOptions::LINEAR,
-                            );
-                            self.library_ribbon
-                                .text_previews
-                                .insert(key.clone(), (card.title.clone(), timeline_size, texture));
-                        }
-                        let preview = self
-                            .library_ribbon
-                            .text_previews
-                            .get(&key)
-                            .map(|(_, _, texture)| texture.id());
-                        text_card(
+                        let (clips, duration) = self.library_ribbon.card_clips(card, timeline_size);
+                        let hover_time = match &self.library_ribbon.text_hover {
+                            Some((id, since)) if *id == card.id => Some((now - since) as f32),
+                            _ => None,
+                        };
+                        let texture = match hover_time {
+                            Some(time) => {
+                                let titles = hover_titles(&clips, duration, time);
+                                let image = layers_preview_image(&titles, timeline_size);
+                                let handle = self.library_ribbon.text_hover_texture.insert(
+                                    ui.ctx().load_texture(
+                                        "text-hover",
+                                        image,
+                                        egui::TextureOptions::LINEAR,
+                                    ),
+                                );
+                                Some(handle.id())
+                            }
+                            None => self.static_preview(ui.ctx(), card, &clips, timeline_size),
+                        };
+                        let hovered = text_card(
                             ui,
                             card,
-                            preview,
+                            duration,
+                            texture,
                             *favorite,
                             &mut self.library_ribbon.dragged_template,
                             &mut actions,
                         );
+                        if hovered {
+                            hovered_card = Some(card.id.clone());
+                        }
                     }
                 });
             });
+        self.update_text_hover(ui.ctx(), hovered_card, now);
         for action in actions {
             match action {
                 TextAction::Toggle(id) => self.toggle_favorite_key(&text_key(&id)),
                 TextAction::Insert(template) => self.insert_text_at_playhead(template.as_deref()),
+                TextAction::AsSubtitles(id) => {
+                    let id = format!("{}{id}", crate::text_templates::SUBTITLE_PREFIX);
+                    self.choose_subtitle_template(&id);
+                }
                 TextAction::Delete(id) => {
                     self.settings.text_templates.retain(|t| t.id != id);
                     self.settings.favorites.retain(|f| *f != text_key(&id));
                     self.persist_settings();
                 }
             }
+        }
+    }
+
+    /// The card at rest: every layer as it looks once its In has played.
+    fn static_preview(
+        &mut self,
+        ctx: &egui::Context,
+        card: &TextCard,
+        clips: &[TemplateClip],
+        timeline_size: (u32, u32),
+    ) -> Option<egui::TextureId> {
+        let titles: Vec<vv_core::TitleParams> = clips.iter().map(|c| c.title.clone()).collect();
+        let stale = self
+            .library_ribbon
+            .text_previews
+            .get(&card.id)
+            .is_none_or(|(old, size, _)| *old != titles || *size != timeline_size);
+        if stale {
+            let image = layers_preview_image(&titles, timeline_size);
+            let texture = ctx.load_texture(
+                format!("text-preview-{}", card.id),
+                image,
+                egui::TextureOptions::LINEAR,
+            );
+            self.library_ribbon
+                .text_previews
+                .insert(card.id.clone(), (titles, timeline_size, texture));
+        }
+        self.library_ribbon
+            .text_previews
+            .get(&card.id)
+            .map(|(_, _, texture)| texture.id())
+    }
+
+    fn update_text_hover(&mut self, ctx: &egui::Context, card: Option<String>, now: f64) {
+        let ribbon = &mut self.library_ribbon;
+        match card {
+            Some(id) => {
+                if ribbon.text_hover.as_ref().is_none_or(|(old, _)| *old != id) {
+                    ribbon.text_hover = Some((id, now));
+                }
+                ctx.request_repaint();
+            }
+            None => ribbon.text_hover = None,
         }
     }
 
@@ -1359,8 +1581,8 @@ impl VenturiApp {
     }
 
     /// Carries out what the text drop on the timeline was dragging.
-    pub(crate) fn dropped_text_title(&mut self) -> Option<vv_core::TitleParams> {
-        self.library_ribbon.take_dragged_title(&self.settings)
+    pub(crate) fn dropped_text_template(&mut self) -> Option<String> {
+        self.library_ribbon.take_dragged_template()
     }
 }
 
@@ -1382,11 +1604,12 @@ fn missing_meta() -> vv_core::MediaMeta {
 fn text_card(
     ui: &mut egui::Ui,
     card: &TextCard,
+    duration: f32,
     preview: Option<egui::TextureId>,
     favorite: bool,
     dragged_template: &mut Option<String>,
     actions: &mut Vec<TextAction>,
-) {
+) -> bool {
     let (rect, response) = ui.allocate_exact_size(TEXT_CARD, egui::Sense::click_and_drag());
     let visuals = ui.visuals();
     let fill = if response.hovered() {
@@ -1413,7 +1636,16 @@ fn text_card(
         egui::FontId::proportional(11.0),
         weak_color,
     );
-    let template = card.user.then(|| card.id.clone());
+    if !response.hovered() {
+        painter.text(
+            preview_rect.right_top() + egui::vec2(-4.0, 3.0),
+            egui::Align2::RIGHT_TOP,
+            format!("{duration:.0}s"),
+            egui::FontId::proportional(10.0),
+            egui::Color32::from_white_alpha(170),
+        );
+    }
+    let template = (card.id != DEFAULT_TEXT_ID).then(|| card.id.clone());
     if response.drag_started() {
         egui::DragAndDrop::set_payload(ui.ctx(), timeline_ui::Generator::Text);
         *dragged_template = template.clone();
@@ -1421,9 +1653,13 @@ fn text_card(
     if response.dragged() {
         media_pool_ui::show_drag_ghost(ui, response.id, &card.name);
     }
-    if card.user {
+    if template.is_some() {
         response.context_menu(|ui| {
-            if ui.button(t!("ribbon.remove")).clicked() {
+            if ui.button(t!("ribbon.use_as_subtitles")).clicked() {
+                actions.push(TextAction::AsSubtitles(card.id.clone()));
+                ui.close();
+            }
+            if card.user && ui.button(t!("ribbon.remove")).clicked() {
                 actions.push(TextAction::Delete(card.id.clone()));
                 ui.close();
             }
@@ -1434,10 +1670,11 @@ fn text_card(
         if star {
             actions.push(TextAction::Toggle(card.id.clone()));
         }
-        if plus {
+        if plus || (response.clicked() && !star) {
             actions.push(TextAction::Insert(template));
         }
     }
+    response.hovered()
 }
 
 #[cfg(test)]

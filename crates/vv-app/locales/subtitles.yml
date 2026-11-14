@@ -116,6 +116,14 @@ subtitles.tpl_line_yellow:
   en: "Yellow"
   it: "Giallo"
 
+subtitles.tpl_custom:
+  en: "Custom style"
+  it: "Stile personalizzato"
+
+subtitles.category_text_styles:
+  en: "Text styles"
+  it: "Stili di testo"
+
 subtitles.lang_it:
   en: "Italian"
   it: "Italiano"

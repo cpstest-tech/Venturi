@@ -32,7 +32,7 @@ pub enum TemplateCategory {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Reveal {
+pub enum Reveal {
     /// One clip per line.
     Line,
     /// One clip per word, showing that word alone.
@@ -304,20 +304,46 @@ pub fn build_clips(
     words: &[CaptionWord],
     template: &SubtitleTemplate,
 ) -> Vec<Clip> {
+    build_clips_with(
+        project,
+        timeline,
+        words,
+        template.reveal,
+        template.halo,
+        &|text, resolution| template.title(text, resolution),
+    )
+}
+
+/// `build_clips` with any look: `title` styles the text of each clip. A
+/// title with karaoke gets the times of its words.
+pub fn build_clips_with(
+    project: &mut Project,
+    timeline: TimelineId,
+    words: &[CaptionWord],
+    reveal: Reveal,
+    halo: bool,
+    title: &dyn Fn(&str, (u32, u32)) -> TitleParams,
+) -> Vec<Clip> {
     let Some(t) = project.timelines.get(timeline) else {
         return Vec::new();
     };
     let (fps, resolution) = (t.fps, t.resolution);
     let mut clips: Vec<Clip> = Vec::new();
     let mut cursor: FrameIdx = 0;
-    for (start_ms, end_ms, text) in cues(words, template.reveal) {
+    for (start_ms, end_ms, text) in cues(words, reveal) {
         let start = to_frames(start_ms, fps).max(cursor);
         let end = to_frames(end_ms, fps).max(start + 1);
         let id = project.alloc_clip_id();
         let mut clip =
             Clip::from_source_range(id, ClipSource::Text, 0, end - start, start, Rational::one());
-        clip.effects.title = Some(template.title(&text, resolution));
-        if template.halo {
+        let mut styled = title(&text, resolution);
+        if let Some(karaoke) = &mut styled.anim.karaoke
+            && let Some(times) = words_within(words, start_ms, end_ms, text.split_whitespace().count())
+        {
+            karaoke.word_ms = times;
+        }
+        clip.effects.title = Some(styled);
+        if halo {
             clip.effects.filters.push(halo_filter(resolution.1));
         }
         cursor = end;
@@ -347,8 +373,16 @@ pub fn clip_word_ms(
     end_ms: u32,
     expected: usize,
 ) -> Option<Vec<[u32; 2]>> {
-    let words: Vec<[u32; 2]> = captions
-        .words
+    words_within(&captions.words, start_ms, end_ms, expected)
+}
+
+fn words_within(
+    all: &[CaptionWord],
+    start_ms: u32,
+    end_ms: u32,
+    expected: usize,
+) -> Option<Vec<[u32; 2]>> {
+    let words: Vec<[u32; 2]> = all
         .iter()
         .filter(|w| w.start_ms >= start_ms && w.start_ms < end_ms)
         .map(|w| [w.start_ms - start_ms, w.end_ms.saturating_sub(start_ms)])

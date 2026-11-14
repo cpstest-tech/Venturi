@@ -15,6 +15,7 @@ mod stable_hash;
 pub mod text_anim;
 pub mod text_anim_presets;
 pub mod text_style;
+pub mod text_template;
 pub mod workflow;
 
 pub use captions::{CaptionWord, Captions, SetCaptions, SubtitleTemplate};
@@ -51,6 +52,7 @@ pub use pool::{
 pub use stable_hash::{StableHasher, stable_hash};
 pub use text_anim::*;
 pub use text_style::*;
+pub use text_template::{TemplateClip, TextTemplateDef};
 
 #[cfg(test)]
 #[path = "tests/test_support.rs"]

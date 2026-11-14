@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "id": "karaoke_pop",
+  "name": "Karaoke Pop",
+  "category": "karaoke",
+  "tags": [
+    "karaoke",
+    "lyrics",
+    "captions",
+    "words"
+  ],
+  "duration": 4.0,
+  "layers": [
+    {
+      "text": "Sing along with me",
+      "font": "Poppins",
+      "size": 120,
+      "color": "#FFFFFF",
+      "weight": 900,
+      "case": "upper",
+      "line_spacing": 6,
+      "strokes": [
+        {
+          "color": "#000000",
+          "width": 12
+        }
+      ],
+      "shadows": [
+        {
+          "color": "#000000",
+          "offset": [
+            0,
+            -8
+          ],
+          "blur": 10,
+          "opacity": 70
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "pop",
+          "duration": 0.5
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.3
+        },
+        "karaoke": {
+          "color": "#FFE600",
+          "scale": 1.15,
+          "keep_past": true
+        }
+      }
+    }
+  ],
+  "subtitle": {
+    "word_by_word": false,
+    "size": 0.07
+  }
+}

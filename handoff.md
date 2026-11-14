@@ -29,7 +29,7 @@ the magnet packs clips to the start by default.
 - **Text previews**: cards in Add text, Yours and Favorites show the title as
   the compositor draws it (`vv_render::text::render_title`, project
   proportions, dark frame), cached per template and refreshed when the
-  template or timeline size changes. Text effects is still disabled.
+  template or timeline size changes.
 
 Spec: `docs/spec-workflow.md` · gap analysis: `docs/gap-analysis.md`.
 
@@ -267,9 +267,9 @@ Status: **compiled and tested** (see "Build status" below).
   join the pool when inserted or dragged.
 - **Audio**: Musica / Sound effect; a click previews (plays) the sound through
   the pool preview; Import / drop / Ctrl+I add files to the category shown.
-- **Testo**: «Aggiungi testo», «Text effects» (disabled, «Presto disponibile»),
-  «Tuoi» (templates in `settings.text_templates`; «Salva come template» button
-  under the text properties; right click removes one).
+- **Testo**: «Aggiungi testo», the template categories (Phase 10), «Tuoi»
+  (templates in `settings.text_templates`; «Salva come template» button under
+  the text properties; right click removes one).
 - **Sticker**: Forme, Emoji, Frecce, Social, Altro; user content only.
 - Strings in `locales/ribbon.yml` (en/it).
 - Tests: `tests/first_media.rs`, `tests/library_ribbon.rs`, two cases in
@@ -308,7 +308,7 @@ Status: **compiled and tested** (see "Build status" below).
 - «+» of a video goes to the first free video track at the playhead like a
   drop does: it overwrites what is under it on the Main Track.
 - The «Tuoi» template keeps the text style only (not the Drop Shadow filter).
-- Text effects, SVG/animated stickers and sticker packs are placeholders.
+- SVG/animated stickers and sticker packs are placeholders.
 - A removed category folder in the raw Library tab moves its assets to the
   library root (they leave the ribbon).
 - `MediaDrag` payloads of favorites are imported into the pool (a pool step
@@ -574,7 +574,7 @@ code read plus three small fixes. Expect a first round of compiler errors
 Stabilize, Canvas (blur/colour), Chroma Key, Auto Cutout, Enhance, Noise
 Reduction, Voice Changer, Speed curve, Animation In/Out/Combo, text
 Bubble/Effects/Animation, LUT/Basic/HSL/RGB curves, masks Split/Filmstrip/Star/
-Heart, Reverse, safe zones, Text effects (library), «Aggiungi sottotitoli»
+Heart, Reverse, safe zones, «Aggiungi sottotitoli»
 (manual), SVG/GIF stickers and sticker packs, Frame Rate and colour space in
 «Dettagli», HEVC/AV1 export.
 
@@ -647,8 +647,7 @@ transform, ratio); only `TitleParams` grew.
 ### Remains / known limits
 
 - Not tried by hand: the panel, live preview and an export of a styled title.
-- Library «Text effects» still empty: no ready-made social presets yet (the
-  model can now express them; «Salva come template» keeps the whole style).
+- (Done in Phase 10: the library now ships 16 ready-made text templates.)
 - The old Drop Shadow filter (Text properties) and the new Shadow section are
   independent; both can be on.
 - Gradient stop alpha is honoured only per layer (no alpha interpolation
@@ -724,3 +723,75 @@ Branch `feat/text-animations` (from `feat/text-style-model`). Engine
 - Karaoke is not set up by the subtitle templates yet (`build_clips`); the
   per-word times are copied when the user enables it in the panel.
 - Keyframe diamonds still cover transform keyframes only.
+
+## Phase 10 — Text template library
+
+Branch `feat/text-templates` (from `feat/text-animations`). Engine
+(compositor, decoder, encoder) untouched. The «Text effects» placeholder is
+gone.
+
+### Done
+
+- **Format** (`vv-core/src/text_template.rs`, `TextTemplateDef`): versioned
+  JSON (`version` 1; a newer file is refused). Fields: `id`, `name`,
+  `category` (titles, social, lower_third, karaoke, retro, elegant), `tags`,
+  `duration` (s), `layers[]`, `subtitle` (`word_by_word`, `size`). A layer is
+  text + font + colour + position/anchor + `fill` gradient + `strokes`,
+  `shadows`, `glows`, `extrude`, `background` (pill / rounded) + `anim`
+  (`in` / `out` / `loop` = a preset id from `text_anim_presets` with optional
+  `duration`, `stagger`, `granularity`, `tint`; `karaoke`) + `start` / `length`
+  inside the template. Colours are `#RRGGBB[AA]`. Measures are for a 1080-px
+  frame and scale with the timeline height. Several layers = title +
+  subtitle + pill and so on.
+- **The 16 templates** (`crates/vv-app/assets/text-templates/*.json`,
+  embedded by `text_templates.rs`): Neon Pulse, Bubble Pop, Hype Impact (3
+  layers), Sticker Pack, Gradient Wave, Retro 80s (2), Handwritten Marker,
+  Glitch RGB, Karaoke Pop, Comic Boom, Elegant Serif (2), Pixel Game, Fire &
+  Ice, Sunset Script, Outline Hollow, Lower Third Bold (2). **The table with
+  fonts/colours/effects was not in the prompt (the placeholder was left in),
+  so look and animations are my own design from the names**: check them
+  against the real table and edit the JSON. Only bundled fonts are used
+  (Permanent Marker is not OFL, so Handwritten Marker uses Caveat).
+- **Text tab** (`library_ribbon.rs`): sidebar Favorites, Add text (default +
+  all), Titles, Social, Lower thirds, Karaoke, Retro, Elegant, Yours. A search
+  box (name, tags, category; searches every template) sits above the grid.
+  A card shows the layers at rest; **under the pointer it plays In, hold, Out
+  in a loop** (all layers, with their `start` offsets). Star = favorite
+  (`text:<id>` key, bundled and user alike), «+» or a click inserts at the
+  playhead, dragging onto the timeline inserts there. Right click: «Usa come
+  stile dei sottotitoli» (and Remove for the user's).
+- **Insertion** (`insert_text_template`, `edit::insert_title_len`): one clip
+  per layer, same start, the first on the overlay track found free, each next
+  one on a new video track above; one undo step. The clips are ordinary text
+  clips: content, colours, font, style and the Animation tab stay editable;
+  «Salva come template» (text properties) keeps working (single layer).
+- **Subtitles**: `Captions::template` may be `text:<id>` (bundled or a user
+  template). `captions::build_clips_with` builds the clips from the saved
+  words with that look (first layer, bottom of the frame, size from
+  `subtitle.size`); no new transcription. A template with karaoke gets the
+  word times of each line. The Subtitles tab lists them under «Stili di
+  testo». Karaoke Pop is the one that uses karaoke.
+- **Tests**: `vv-core/src/tests/text_template.rs` (colours, scaling,
+  presets, bad files, round trip, subtitle look);
+  `vv-app/src/tests/text_templates.rs` (16 load, fonts registered, every
+  layer has In and Out and renders ink, search; set `VV_TEXT_SHEET_DIR=<dir>`
+  to dump a PPM per template);
+  `tests/library_ribbon.rs` (categories, multi-layer insert and undo, drop,
+  hover timeline, search, subtitle styling).
+
+### Remains / known limits
+
+- Not tried by hand: the grid, the hover animation, dragging, and an export of
+  a template.
+- **Hollow text is not possible** with this model: a stroke is a dilated
+  mask, so a transparent fill still shows the stroke inside. Outline Hollow
+  uses a near-black fill instead.
+- Positions are in 1080-px units from the centre: Lower Third Bold sits at
+  the bottom left of a 16:9 frame; on a portrait timeline its x offset is
+  too far to the left.
+- «Salva come template» saves the selected clip only: a multi-layer template
+  cannot be saved from several clips yet. User templates last 3 s.
+- Subtitles from a template use its first layer only (no pill / second line).
+  Word-by-word reveal is supported by the format but no bundled template sets
+  it.
+- Names are not translated (brand-style names); categories are.

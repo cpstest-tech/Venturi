@@ -1,4 +1,5 @@
 use super::*;
+use crate::settings::Settings;
 use vv_media::test_support::{TempDir, ffmpeg};
 
 fn video(dir: &TempDir, name: &str, size: &str, rate: u32) -> PathBuf {
@@ -403,4 +404,165 @@ fn the_new_ribbon_tabs_have_no_categories_to_show() {
         };
         assert_eq!(state.category(), Category::Favorites);
     }
+}
+
+fn text_clips(app: &VenturiApp) -> Vec<(usize, vv_core::Clip)> {
+    timeline_of(app)
+        .tracks
+        .iter()
+        .enumerate()
+        .flat_map(|(i, t)| t.clips.iter().map(move |c| (i, c.clone())))
+        .filter(|(_, c)| matches!(c.source, vv_core::ClipSource::Text))
+        .collect()
+}
+
+#[test]
+fn the_text_tab_lists_the_six_template_categories() {
+    let categories = RibbonTab::Text.categories();
+    for c in TextCategory::ALL {
+        assert!(categories.contains(&Category::Template(c)), "{c:?}");
+        assert!(!Category::Template(c).label().starts_with("ribbon."));
+    }
+}
+
+#[test]
+fn a_bundled_template_keeps_its_animations_when_inserted() {
+    let mut app = VenturiApp::default();
+    app.insert_text_at_playhead(Some("neon_pulse"));
+    let clips = text_clips(&app);
+    assert_eq!(clips.len(), 1);
+    let title = clips[0].1.effects.title.as_ref().unwrap();
+    assert_eq!(title.font_family, "Righteous");
+    assert!(title.anim.enter.is_some() && title.anim.looped.is_some());
+    let fps = timeline_of(&app).fps.as_f64();
+    assert_eq!(clips[0].1.timeline_len, (fps * 3.0).round() as vv_core::FrameIdx);
+}
+
+#[test]
+fn a_multi_layer_template_makes_one_clip_per_layer_in_one_undo_step() {
+    let mut app = VenturiApp::default();
+    app.insert_text_at_playhead(Some("hype_impact"));
+    let clips = text_clips(&app);
+    assert_eq!(clips.len(), 3);
+    let tracks: std::collections::HashSet<usize> = clips.iter().map(|(t, _)| *t).collect();
+    assert_eq!(tracks.len(), 3);
+    let starts: Vec<_> = clips.iter().map(|(_, c)| c.timeline_start).collect();
+    assert!(starts.iter().any(|&s| s > 0), "{starts:?}");
+    app.session.history.undo(&mut app.session.project);
+    let left = app
+        .session
+        .project
+        .timelines
+        .values()
+        .flat_map(|t| t.tracks.iter())
+        .flat_map(|t| t.clips.iter())
+        .count();
+    assert_eq!(left, 0);
+}
+
+#[test]
+fn dropping_a_bundled_card_inserts_its_layers() {
+    let mut app = VenturiApp::default();
+    app.library_ribbon.dragged_template = Some("lower_third_bold".into());
+    app.add_generator_to_timeline_at(
+        timeline_ui::Generator::Text,
+        10,
+        timeline_ui::MediaDropTarget::Default,
+    );
+    assert!(app.library_ribbon.dragged_template.is_none());
+    let clips = text_clips(&app);
+    assert_eq!(clips.len(), 2);
+    assert!(clips.iter().all(|(_, c)| c.timeline_start >= 10));
+}
+
+#[test]
+fn an_inserted_template_text_stays_editable() {
+    let mut app = VenturiApp::default();
+    app.insert_text_at_playhead(Some("bubble_pop"));
+    let (track, clip) = text_clips(&app).remove(0);
+    let mut title = clip.effects.title.clone().unwrap();
+    title.content = vv_core::Keyframed::constant("Edited".into());
+    title.color = vv_core::Rgba::BLACK;
+    app.save_text_template(title.clone());
+    assert_eq!(title.display_text(), "Edited");
+    assert_eq!(title.font_family, "Fredoka");
+    assert!(title.anim.enter.is_some());
+    let saved = &app.settings.text_templates[0];
+    assert_eq!(saved.title, title);
+    let _ = track;
+}
+
+#[test]
+fn search_finds_templates_across_categories() {
+    let mut app = VenturiApp::default();
+    app.library_ribbon.text_search = "glow".into();
+    let ids: Vec<String> = app
+        .text_cards(Category::Template(TextCategory::Retro))
+        .into_iter()
+        .map(|c| c.id)
+        .collect();
+    assert!(ids.contains(&"neon_pulse".to_owned()), "{ids:?}");
+    app.library_ribbon.text_search = "zzzz".into();
+    assert!(app.text_cards(Category::AddText).is_empty());
+}
+
+#[test]
+fn a_category_shows_only_its_templates() {
+    let app = VenturiApp::default();
+    let cards = app.text_cards(Category::Template(TextCategory::Karaoke));
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].id, "karaoke_pop");
+}
+
+#[test]
+fn the_hover_preview_plays_in_then_out() {
+    let def = crate::text_templates::find("hype_impact").unwrap();
+    let clips = def.clips((1920, 1080));
+    let early = hover_titles(&clips, def.duration, 0.05);
+    assert_eq!(early.len(), 1, "later layers are not in yet");
+    let mid = hover_titles(&clips, def.duration, 2.0);
+    assert_eq!(mid.len(), 3);
+    assert!(early[0].anim_state.is_some(), "the In is playing");
+    let wrapped = hover_titles(&clips, def.duration, def.duration + 0.6 + 0.05);
+    assert_eq!(wrapped.len(), 1);
+}
+
+#[test]
+fn a_text_template_styles_the_subtitles_without_new_transcription() {
+    let mut app = VenturiApp::default();
+    app.insert_text_at_playhead(None);
+    let timeline_id = app.timeline_id.unwrap();
+    let words = ["one", "two", "three"]
+        .iter()
+        .enumerate()
+        .map(|(i, w)| vv_core::CaptionWord {
+            text: (*w).into(),
+            start_ms: i as u32 * 500,
+            end_ms: i as u32 * 500 + 400,
+        })
+        .collect();
+    app.session.project.captions.insert(
+        timeline_id,
+        vv_core::Captions {
+            language: "en".into(),
+            words,
+            template: vv_core::captions::DEFAULT_TEMPLATE.into(),
+        },
+    );
+    app.choose_subtitle_template("text:karaoke_pop");
+    let captions = &app.session.project.captions[&timeline_id];
+    assert_eq!(captions.words.len(), 3);
+    assert_eq!(captions.template, "text:karaoke_pop");
+    let subtitle_clip = timeline_of(&app)
+        .tracks
+        .iter()
+        .filter(|t| t.subtitles)
+        .flat_map(|t| t.clips.iter())
+        .next()
+        .cloned()
+        .expect("subtitle clip");
+    let title = subtitle_clip.effects.title.unwrap();
+    assert_eq!(title.font_family, "Poppins");
+    let karaoke = title.anim.karaoke.expect("karaoke");
+    assert_eq!(karaoke.word_ms.len(), 3);
 }

@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "id": "comic_boom",
+  "name": "Comic Boom",
+  "category": "social",
+  "tags": [
+    "comic",
+    "boom",
+    "action",
+    "cartoon"
+  ],
+  "duration": 3.0,
+  "layers": [
+    {
+      "text": "BOOM!",
+      "font": "Bangers",
+      "size": 260,
+      "color": "#FFE600",
+      "tracking": 30,
+      "case": "upper",
+      "position": [
+        0,
+        0
+      ],
+      "strokes": [
+        {
+          "color": "#E10600",
+          "width": 8
+        },
+        {
+          "color": "#000000",
+          "width": 18,
+          "join": "miter"
+        }
+      ],
+      "extrude": {
+        "color": "#000000",
+        "depth": 24,
+        "angle": -40
+      },
+      "anim": {
+        "in": {
+          "preset": "slam",
+          "duration": 0.45
+        },
+        "out": {
+          "preset": "fall",
+          "duration": 0.6
+        },
+        "loop": {
+          "preset": "shake",
+          "duration": 0.5
+        }
+      }
+    }
+  ]
+}

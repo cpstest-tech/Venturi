@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "glitch_rgb",
+  "name": "Glitch RGB",
+  "category": "titles",
+  "tags": [
+    "glitch",
+    "rgb",
+    "digital",
+    "cyber"
+  ],
+  "duration": 3.0,
+  "layers": [
+    {
+      "text": "GLITCH",
+      "font": "Space Grotesk",
+      "size": 190,
+      "color": "#FFFFFF",
+      "weight": 700,
+      "case": "upper",
+      "tracking": 40,
+      "shadows": [
+        {
+          "color": "#FF0040",
+          "offset": [
+            -9,
+            0
+          ],
+          "blur": 0,
+          "opacity": 85
+        },
+        {
+          "color": "#00F0FF",
+          "offset": [
+            9,
+            0
+          ],
+          "blur": 0,
+          "opacity": 85
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "glitch",
+          "duration": 0.6
+        },
+        "out": {
+          "preset": "glitch",
+          "duration": 0.4
+        },
+        "loop": {
+          "preset": "flicker",
+          "duration": 0.8,
+          "stagger": 0.6
+        }
+      }
+    }
+  ]
+}

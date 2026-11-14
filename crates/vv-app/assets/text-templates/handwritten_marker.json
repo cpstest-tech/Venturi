@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "handwritten_marker",
+  "name": "Handwritten Marker",
+  "category": "social",
+  "tags": [
+    "handwritten",
+    "marker",
+    "highlight",
+    "notes"
+  ],
+  "duration": 3.5,
+  "layers": [
+    {
+      "text": "Don't forget this",
+      "font": "Caveat",
+      "size": 170,
+      "color": "#1A1A1A",
+      "weight": 700,
+      "background": {
+        "color": "#FFE94D",
+        "padding": 0.18,
+        "corner_radius": 0.12,
+        "opacity": 92,
+        "rotation": -2
+      },
+      "anim": {
+        "in": {
+          "preset": "mask_reveal",
+          "duration": 0.9
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.4
+        }
+      }
+    }
+  ]
+}

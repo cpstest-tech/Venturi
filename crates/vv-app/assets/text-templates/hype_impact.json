@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "id": "hype_impact",
+  "name": "Hype Impact",
+  "category": "titles",
+  "tags": [
+    "impact",
+    "bold",
+    "hype",
+    "sports",
+    "yellow"
+  ],
+  "duration": 3.5,
+  "layers": [
+    {
+      "text": "NEW DROP",
+      "font": "Poppins",
+      "size": 44,
+      "color": "#111111",
+      "weight": 900,
+      "case": "upper",
+      "tracking": 140,
+      "position": [
+        0,
+        190
+      ],
+      "start": 0.15,
+      "background": {
+        "pill": true,
+        "color": "#FFE600",
+        "padding": 0.45,
+        "corner_radius": 0.5
+      },
+      "anim": {
+        "in": {
+          "preset": "pop",
+          "duration": 0.45
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.3
+        }
+      }
+    },
+    {
+      "text": "HYPE IMPACT",
+      "font": "Anton",
+      "size": 230,
+      "color": "#FFFFFF",
+      "case": "upper",
+      "position": [
+        0,
+        20
+      ],
+      "strokes": [
+        {
+          "color": "#000000",
+          "width": 10,
+          "join": "miter"
+        }
+      ],
+      "extrude": {
+        "color": "#FF2D2D",
+        "depth": 26,
+        "angle": -45
+      },
+      "shadows": [
+        {
+          "color": "#000000",
+          "offset": [
+            0,
+            -34
+          ],
+          "blur": 22,
+          "opacity": 60
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "slam",
+          "duration": 0.5
+        },
+        "out": {
+          "preset": "dissolve",
+          "duration": 0.5
+        },
+        "loop": {
+          "preset": "pulse",
+          "duration": 1.2
+        }
+      }
+    },
+    {
+      "text": "The biggest moment of the year",
+      "font": "Montserrat",
+      "size": 50,
+      "color": "#FFFFFF",
+      "weight": 700,
+      "position": [
+        0,
+        -200
+      ],
+      "start": 0.45,
+      "shadows": [
+        {
+          "color": "#000000",
+          "offset": [
+            0,
+            -4
+          ],
+          "blur": 8,
+          "opacity": 80
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "slide",
+          "duration": 0.6
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.4
+        }
+      }
+    }
+  ]
+}

@@ -196,22 +196,36 @@ impl VenturiApp {
     /// Replaces the subtitle clips with the words of `captions` in its
     /// template, in one undo step.
     fn apply_captions(&mut self, timeline_id: TimelineId, captions: Captions) {
-        let Some(template) = SubtitleTemplate::find(&captions.template) else {
-            return;
-        };
         if !self.session.project.timelines.contains_key(timeline_id) {
             return;
         }
-        let clips = vv_core::captions::build_clips(
-            &mut self.session.project,
-            timeline_id,
-            &captions.words,
-            template,
-        );
+        let clips = if let Some(template) = SubtitleTemplate::find(&captions.template) {
+            vv_core::captions::build_clips(
+                &mut self.session.project,
+                timeline_id,
+                &captions.words,
+                template,
+            )
+        } else if let Some(style) = self.text_subtitle_style(&captions.template) {
+            style.build(&mut self.session.project, timeline_id, &captions.words)
+        } else {
+            return;
+        };
         self.session.history.do_command(
             &mut self.session.project,
             Box::new(SetCaptions::new(timeline_id, Some(captions), clips)),
         );
+    }
+
+    /// The text template behind a `text:<id>` subtitle template id.
+    fn text_subtitle_style(&self, template: &str) -> Option<crate::text_templates::SubtitleStyle> {
+        use crate::text_templates::SubtitleStyle;
+        let id = template.strip_prefix(crate::text_templates::SUBTITLE_PREFIX)?;
+        if let Some(def) = crate::text_templates::find(id) {
+            return Some(SubtitleStyle::Bundled(def));
+        }
+        let user = self.settings.text_templates.iter().find(|t| t.id == id)?;
+        Some(SubtitleStyle::User(Box::new(user.title.clone())))
     }
 
     /// A template was chosen: with subtitles already there they are rebuilt

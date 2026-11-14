@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "id": "lower_third_bold",
+  "name": "Lower Third Bold",
+  "category": "lower_third",
+  "tags": [
+    "lower third",
+    "name",
+    "news",
+    "interview"
+  ],
+  "duration": 5.0,
+  "layers": [
+    {
+      "text": "JANE DOE",
+      "font": "Montserrat",
+      "size": 74,
+      "color": "#FFFFFF",
+      "weight": 800,
+      "case": "upper",
+      "align": "left",
+      "tracking": 20,
+      "position": [
+        -800,
+        -250
+      ],
+      "anchor": {
+        "h": "left",
+        "v": "bottom"
+      },
+      "background": {
+        "color": "#FF3B30",
+        "padding": 0.28,
+        "corner_radius": 0.08
+      },
+      "anim": {
+        "in": {
+          "preset": "slide",
+          "duration": 0.5
+        },
+        "out": {
+          "preset": "slide",
+          "duration": 0.4
+        }
+      }
+    },
+    {
+      "text": "Creative Director",
+      "font": "Montserrat",
+      "size": 38,
+      "color": "#FFFFFF",
+      "weight": 500,
+      "align": "left",
+      "position": [
+        -800,
+        -330
+      ],
+      "anchor": {
+        "h": "left",
+        "v": "bottom"
+      },
+      "start": 0.2,
+      "background": {
+        "color": "#111111",
+        "padding": 0.4,
+        "corner_radius": 0.08,
+        "opacity": 85
+      },
+      "anim": {
+        "in": {
+          "preset": "slide",
+          "duration": 0.5
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.3
+        }
+      }
+    }
+  ],
+  "subtitle": {
+    "word_by_word": false,
+    "size": 0.05
+  }
+}

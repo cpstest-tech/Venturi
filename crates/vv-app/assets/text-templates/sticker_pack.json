@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "sticker_pack",
+  "name": "Sticker Pack",
+  "category": "social",
+  "tags": [
+    "sticker",
+    "outline",
+    "cutout",
+    "fun"
+  ],
+  "duration": 3.0,
+  "layers": [
+    {
+      "text": "STICKER",
+      "font": "Archivo Black",
+      "size": 170,
+      "color": "#FFD60A",
+      "case": "upper",
+      "tracking": 20,
+      "strokes": [
+        {
+          "color": "#111111",
+          "width": 8
+        },
+        {
+          "color": "#FFFFFF",
+          "width": 22
+        }
+      ],
+      "shadows": [
+        {
+          "color": "#000000",
+          "offset": [
+            8,
+            -10
+          ],
+          "blur": 0,
+          "opacity": 45
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "bounce",
+          "duration": 0.9,
+          "granularity": "word"
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.3
+        },
+        "loop": {
+          "preset": "float",
+          "duration": 2.4
+        }
+      }
+    }
+  ]
+}

@@ -3,7 +3,6 @@
 use super::*;
 use crate::subtitles::{Message, Section, models_dir};
 use vv_core::captions::{TEMPLATES, TemplateCategory};
-use vv_core::SubtitleTemplate;
 use vv_transcribe::Stage;
 
 const CARD_SIZE: egui::Vec2 = egui::vec2(160.0, 112.0);
@@ -45,7 +44,11 @@ pub(crate) fn template_name(id: &str) -> std::borrow::Cow<'static, str> {
         "line_classic" => t!("subtitles.tpl_line_classic"),
         "line_outline" => t!("subtitles.tpl_line_outline"),
         "line_yellow" => t!("subtitles.tpl_line_yellow"),
-        other => other.to_owned().into(),
+        other => match other.strip_prefix(crate::text_templates::SUBTITLE_PREFIX) {
+            Some(id) => crate::text_templates::find(id)
+                .map_or_else(|| t!("subtitles.tpl_custom"), |d| d.name.clone().into()),
+            None => other.to_owned().into(),
+        },
     }
 }
 
@@ -203,13 +206,37 @@ impl VenturiApp {
                             let selected = self.subtitles.selected.as_deref() == Some(template.id)
                                 || (self.subtitles.selected.is_none()
                                     && applied.as_deref() == Some(template.id));
-                            if self.template_card(ui, template, resolution, selected) {
-                                chosen = Some(template.id);
+                            let sample = match template.category {
+                                TemplateCategory::WordByWord => t!("subtitles.sample_word"),
+                                TemplateCategory::Line => t!("subtitles.sample_line"),
+                            };
+                            let title = template.title(&sample, resolution);
+                            let name = template_name(template.id).into_owned();
+                            if self.template_card(ui, template.id, name, &title, resolution, selected) {
+                                chosen = Some(template.id.to_owned());
                             }
                         }
                     });
                     ui.add_space(theme::SPACE_2);
                 }
+                ui.label(
+                    egui::RichText::new(t!("subtitles.category_text_styles"))
+                        .size(theme::FONT_SECTION)
+                        .color(theme::TEXT_PRIMARY),
+                );
+                ui.add_space(theme::SPACE_1);
+                ui.horizontal_wrapped(|ui| {
+                    let styles = self.text_style_choices(resolution);
+                    for (id, name, title) in styles {
+                        let selected = self.subtitles.selected.as_deref() == Some(id.as_str())
+                            || (self.subtitles.selected.is_none()
+                                && applied.as_deref() == Some(id.as_str()));
+                        if self.template_card(ui, &id, name, &title, resolution, selected) {
+                            chosen = Some(id);
+                        }
+                    }
+                });
+                ui.add_space(theme::SPACE_2);
                 let can_generate = self.subtitles.selected.is_some()
                     && self.timeline_id.is_some()
                     && self.subtitles.job.is_none();
@@ -221,27 +248,47 @@ impl VenturiApp {
                 }
             });
         if let Some(id) = chosen {
-            self.choose_subtitle_template(id);
+            self.choose_subtitle_template(&id);
         }
+    }
+
+    /// `(id, name, sample title)` of the text templates usable as a
+    /// subtitle style: the bundled ones, then the user's.
+    fn text_style_choices(
+        &self,
+        resolution: (u32, u32),
+    ) -> Vec<(String, String, vv_core::TitleParams)> {
+        let sample = t!("subtitles.sample_line");
+        let prefix = crate::text_templates::SUBTITLE_PREFIX;
+        let bundled = crate::text_templates::all().iter().map(|d| {
+            (
+                format!("{prefix}{}", d.id),
+                d.name.clone(),
+                d.subtitle_title(&sample, resolution),
+            )
+        });
+        let user = self.settings.text_templates.iter().map(|u| {
+            (
+                format!("{prefix}{}", u.id),
+                u.name.clone(),
+                vv_core::text_template::subtitle_from_title(&u.title, &sample, resolution, 0.06),
+            )
+        });
+        bundled.chain(user).collect()
     }
 
     fn template_card(
         &mut self,
         ui: &mut egui::Ui,
-        template: &SubtitleTemplate,
+        id: &str,
+        name: String,
+        title: &vv_core::TitleParams,
         resolution: (u32, u32),
         selected: bool,
     ) -> bool {
-        let key = format!("{}-{}x{}", template.id, resolution.0, resolution.1);
+        let key = format!("{id}-{}x{}", resolution.0, resolution.1);
         if !self.subtitles.previews.contains_key(&key) {
-            let sample = match template.category {
-                TemplateCategory::WordByWord => t!("subtitles.sample_word"),
-                TemplateCategory::Line => t!("subtitles.sample_line"),
-            };
-            let image = library_ribbon::title_preview_image(
-                &template.title(&sample, resolution),
-                resolution,
-            );
+            let image = library_ribbon::title_preview_image(title, resolution);
             let texture = ui.ctx().load_texture(
                 format!("subtitle-{key}"),
                 image,
@@ -268,7 +315,7 @@ impl VenturiApp {
         painter.text(
             egui::pos2(rect.center().x, rect.bottom() - theme::SPACE_1),
             egui::Align2::CENTER_BOTTOM,
-            template_name(template.id),
+            name,
             egui::FontId::proportional(theme::FONT_SMALL),
             theme::TEXT_SECONDARY,
         );

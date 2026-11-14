@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "id": "retro_80s",
+  "name": "Retro 80s",
+  "category": "retro",
+  "tags": [
+    "80s",
+    "synthwave",
+    "vaporwave",
+    "chrome"
+  ],
+  "duration": 4.0,
+  "layers": [
+    {
+      "text": "RETRO 80s",
+      "font": "Bungee",
+      "size": 190,
+      "color": "#FFFFFF",
+      "case": "upper",
+      "position": [
+        0,
+        50
+      ],
+      "fill": {
+        "angle": 90,
+        "stops": [
+          [
+            0.0,
+            "#FFF200"
+          ],
+          [
+            0.5,
+            "#FF7A18"
+          ],
+          [
+            1.0,
+            "#FF2D95"
+          ]
+        ]
+      },
+      "strokes": [
+        {
+          "color": "#2B0A5C",
+          "width": 6
+        }
+      ],
+      "extrude": {
+        "color": "#00E5FF",
+        "depth": 22,
+        "angle": -45
+      },
+      "glows": [
+        {
+          "color": "#FF2D95",
+          "radius": 40,
+          "intensity": 0.8
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "slide",
+          "duration": 0.8
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.4
+        },
+        "loop": {
+          "preset": "shimmer",
+          "duration": 1.8
+        }
+      }
+    },
+    {
+      "text": "SYNTHWAVE NIGHTS",
+      "font": "Space Grotesk",
+      "size": 50,
+      "color": "#00E5FF",
+      "weight": 700,
+      "tracking": 380,
+      "position": [
+        0,
+        -150
+      ],
+      "start": 0.4,
+      "glows": [
+        {
+          "color": "#00E5FF",
+          "radius": 18,
+          "intensity": 1.0
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "fade",
+          "duration": 0.6
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.4
+        }
+      }
+    }
+  ]
+}

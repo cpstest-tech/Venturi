@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "id": "gradient_wave",
+  "name": "Gradient Wave",
+  "category": "titles",
+  "tags": [
+    "gradient",
+    "wave",
+    "colorful",
+    "smooth"
+  ],
+  "duration": 4.0,
+  "layers": [
+    {
+      "text": "Gradient Wave",
+      "font": "Poppins",
+      "size": 170,
+      "color": "#FFFFFF",
+      "weight": 900,
+      "fill": {
+        "angle": 0,
+        "stops": [
+          [
+            0.0,
+            "#7B2FF7"
+          ],
+          [
+            0.33,
+            "#00C6FF"
+          ],
+          [
+            0.66,
+            "#FF4FD8"
+          ],
+          [
+            1.0,
+            "#7B2FF7"
+          ]
+        ]
+      },
+      "glows": [
+        {
+          "color": "#7B2FF7",
+          "radius": 28,
+          "intensity": 0.7
+        }
+      ],
+      "shadows": [
+        {
+          "color": "#000000",
+          "offset": [
+            0,
+            -8
+          ],
+          "blur": 16,
+          "opacity": 45
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "wave",
+          "duration": 0.9,
+          "granularity": "char"
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.4
+        },
+        "loop": {
+          "preset": "gradient_flow",
+          "duration": 3.0
+        }
+      }
+    }
+  ]
+}

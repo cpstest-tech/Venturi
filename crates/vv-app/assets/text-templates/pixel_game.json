@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "id": "pixel_game",
+  "name": "Pixel Game",
+  "category": "retro",
+  "tags": [
+    "pixel",
+    "8bit",
+    "arcade",
+    "gaming"
+  ],
+  "duration": 3.5,
+  "layers": [
+    {
+      "text": "GAME OVER",
+      "font": "Press Start 2P",
+      "size": 110,
+      "color": "#39FF14",
+      "case": "upper",
+      "tracking": 20,
+      "strokes": [
+        {
+          "color": "#0B3D02",
+          "width": 6,
+          "join": "miter"
+        }
+      ],
+      "shadows": [
+        {
+          "color": "#000000",
+          "offset": [
+            8,
+            -8
+          ],
+          "blur": 0,
+          "opacity": 100
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "typewriter",
+          "duration": 1.0
+        },
+        "out": {
+          "preset": "dissolve",
+          "duration": 0.6
+        },
+        "loop": {
+          "preset": "flicker",
+          "duration": 1.0,
+          "stagger": 0.4
+        }
+      }
+    }
+  ]
+}

@@ -57,6 +57,7 @@ mod speed_dialog;
 mod subtitles;
 mod subtitles_ui;
 mod text_anim_panel;
+mod text_templates;
 mod text_style_panel;
 mod theme;
 mod thumbnail_worker;
@@ -1934,20 +1935,11 @@ impl VenturiApp {
         start: FrameIdx,
         target: timeline_ui::MediaDropTarget,
     ) {
-        let title = (generator == timeline_ui::Generator::Text)
-            .then(|| self.dropped_text_title())
-            .flatten();
-        self.add_generator_with_title(generator, title, start, target);
-    }
-
-    /// `title` replaces the default one of a text clip (a saved template).
-    fn add_generator_with_title(
-        &mut self,
-        generator: timeline_ui::Generator,
-        title: Option<vv_core::TitleParams>,
-        start: FrameIdx,
-        target: timeline_ui::MediaDropTarget,
-    ) {
+        if generator == timeline_ui::Generator::Text {
+            let template = self.dropped_text_template();
+            self.insert_text_template(template.as_deref(), start, target);
+            return;
+        }
         let group = self.session.history.begin_group();
         let timeline_id = self.ensure_timeline();
         if let Some(tracks) = self.resolve_drop_tracks(timeline_id, target, true, false) {
@@ -1956,29 +1948,15 @@ impl VenturiApp {
             let video_track = tracks
                 .video
                 .expect("generator: video track always resolved");
-            match title {
-                Some(title) => {
-                    vv_core::edit::insert_title(
-                        &mut self.session.project,
-                        &mut self.session.history,
-                        timeline_id,
-                        title,
-                        video_track,
-                        start,
-                    );
-                }
-                None => {
-                    vv_core::edit::insert_generator(
-                        &mut self.session.project,
-                        &mut self.session.history,
-                        timeline_id,
-                        generator,
-                        video_track,
-                        start,
-                        None,
-                    );
-                }
-            }
+            vv_core::edit::insert_generator(
+                &mut self.session.project,
+                &mut self.session.history,
+                timeline_id,
+                generator,
+                video_track,
+                start,
+                None,
+            );
         }
         self.session
             .history

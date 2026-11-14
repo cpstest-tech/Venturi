@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "id": "bubble_pop",
+  "name": "Bubble Pop",
+  "category": "social",
+  "tags": [
+    "bubble",
+    "fun",
+    "cute",
+    "pop"
+  ],
+  "duration": 3.0,
+  "layers": [
+    {
+      "text": "Bubble Pop!",
+      "font": "Fredoka",
+      "size": 150,
+      "color": "#FFFFFF",
+      "weight": 700,
+      "fill": {
+        "angle": 90,
+        "stops": [
+          [
+            0.0,
+            "#FFD1F0"
+          ],
+          [
+            1.0,
+            "#FF5FB8"
+          ]
+        ]
+      },
+      "strokes": [
+        {
+          "color": "#FFFFFF",
+          "width": 12
+        },
+        {
+          "color": "#B3188A",
+          "width": 22
+        }
+      ],
+      "shadows": [
+        {
+          "color": "#5A0B45",
+          "offset": [
+            0,
+            -10
+          ],
+          "blur": 14,
+          "opacity": 55
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "pop",
+          "duration": 0.7,
+          "granularity": "char",
+          "stagger": 0.5
+        },
+        "out": {
+          "preset": "pop",
+          "duration": 0.4
+        },
+        "loop": {
+          "preset": "float",
+          "duration": 2.4,
+          "granularity": "char"
+        }
+      }
+    }
+  ]
+}

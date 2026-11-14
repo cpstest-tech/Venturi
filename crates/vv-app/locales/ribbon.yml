@@ -36,9 +36,41 @@ ribbon.text_add:
   en: "Add text"
   it: "Aggiungi testo"
 
-ribbon.text_effects:
-  en: "Text effects"
-  it: "Text effects"
+ribbon.text_cat_titles:
+  en: "Titles"
+  it: "Titoli"
+
+ribbon.text_cat_social:
+  en: "Social"
+  it: "Social"
+
+ribbon.text_cat_lower_third:
+  en: "Lower thirds"
+  it: "Lower third"
+
+ribbon.text_cat_karaoke:
+  en: "Karaoke"
+  it: "Karaoke"
+
+ribbon.text_cat_retro:
+  en: "Retro"
+  it: "Retro"
+
+ribbon.text_cat_elegant:
+  en: "Elegant"
+  it: "Eleganti"
+
+ribbon.text_search:
+  en: "Search templates"
+  it: "Cerca template"
+
+ribbon.text_no_match:
+  en: "No template matches."
+  it: "Nessun template corrisponde."
+
+ribbon.use_as_subtitles:
+  en: "Use as subtitle style"
+  it: "Usa come stile dei sottotitoli"
 
 ribbon.text_yours:
   en: "Yours"
@@ -111,10 +143,6 @@ ribbon.templates_empty:
 ribbon.text_default:
   en: "Default text"
   it: "Testo predefinito"
-
-ribbon.text_effects_soon:
-  en: "Text effects"
-  it: "Text effects"
 
 ribbon.save_template:
   en: "Save as template"

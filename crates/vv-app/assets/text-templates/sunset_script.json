@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "id": "sunset_script",
+  "name": "Sunset Script",
+  "category": "elegant",
+  "tags": [
+    "script",
+    "sunset",
+    "summer",
+    "handwriting"
+  ],
+  "duration": 4.0,
+  "layers": [
+    {
+      "text": "Golden Sunset",
+      "font": "Pacifico",
+      "size": 170,
+      "color": "#FFFFFF",
+      "fill": {
+        "angle": 90,
+        "stops": [
+          [
+            0.0,
+            "#FFD27A"
+          ],
+          [
+            0.5,
+            "#FF6F61"
+          ],
+          [
+            1.0,
+            "#B83280"
+          ]
+        ]
+      },
+      "glows": [
+        {
+          "color": "#FF6F61",
+          "radius": 30,
+          "intensity": 0.6
+        }
+      ],
+      "shadows": [
+        {
+          "color": "#3B0A3F",
+          "offset": [
+            0,
+            -8
+          ],
+          "blur": 18,
+          "opacity": 55
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "slide",
+          "duration": 0.9
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.5
+        },
+        "loop": {
+          "preset": "float",
+          "duration": 2.6
+        }
+      }
+    }
+  ]
+}

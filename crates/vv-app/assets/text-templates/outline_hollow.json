@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "id": "outline_hollow",
+  "name": "Outline Hollow",
+  "category": "titles",
+  "tags": [
+    "outline",
+    "hollow",
+    "stroke",
+    "minimal"
+  ],
+  "duration": 3.0,
+  "layers": [
+    {
+      "text": "HOLLOW",
+      "font": "Montserrat",
+      "size": 220,
+      "color": "#0E0E14",
+      "weight": 900,
+      "case": "upper",
+      "tracking": 60,
+      "strokes": [
+        {
+          "color": "#FFFFFF",
+          "width": 6
+        }
+      ],
+      "anim": {
+        "in": {
+          "preset": "mask_reveal",
+          "duration": 0.9
+        },
+        "out": {
+          "preset": "fade",
+          "duration": 0.4
+        },
+        "loop": {
+          "preset": "glow_pulse",
+          "duration": 2.0,
+          "tint": "#FFFFFF"
+        }
+      }
+    }
+  ]
+}
