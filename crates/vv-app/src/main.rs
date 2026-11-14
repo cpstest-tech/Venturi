@@ -55,6 +55,8 @@ mod settings_dialog;
 mod silence_dialog;
 mod slip_viewer;
 mod speed_dialog;
+mod stickers;
+mod stickers_ui;
 mod subtitles;
 mod subtitles_ui;
 mod text_anim_panel;
@@ -491,6 +493,7 @@ struct VenturiApp {
     effects_panel: media_pool_ui::EffectsPanelState,
     library_ui: library_ui::LibraryUiState,
     library_ribbon: library_ribbon::RibbonState,
+    stickers: stickers_ui::StickerState,
     fx: fx_library::FxState,
     toast: Option<(String, std::time::Instant)>,
     /// Per file, see `first_media::probe_rotation`.
@@ -666,6 +669,7 @@ impl Default for VenturiApp {
             effects_panel: Default::default(),
             library_ui: Default::default(),
             library_ribbon: Default::default(),
+            stickers: Default::default(),
             fx: Default::default(),
             toast: None,
             media_rotation: Default::default(),

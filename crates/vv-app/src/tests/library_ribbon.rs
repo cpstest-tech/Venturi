@@ -58,8 +58,11 @@ fn only_audio_and_sticker_categories_have_a_library_folder() {
     let mut ids = Vec::new();
     for tab in RibbonTab::ALL {
         for category in tab.categories() {
-            let expects_folder = matches!(tab, RibbonTab::Audio | RibbonTab::Sticker)
-                && category != Category::Favorites;
+            let expects_folder = match tab {
+                RibbonTab::Audio => category != Category::Favorites,
+                RibbonTab::Sticker => category == Category::Sticker(StickerCategory::Yours),
+                _ => false,
+            };
             assert_eq!(
                 category.folder_id().is_some(),
                 expects_folder,
@@ -109,7 +112,7 @@ fn the_import_category_follows_the_tab() {
     app.library_ribbon.tab = RibbonTab::Sticker;
     assert_eq!(
         app.ribbon_import_category(),
-        Some(Category::Sticker(StickerCategory::Shapes))
+        Some(Category::Sticker(StickerCategory::Yours))
     );
     app.library_ribbon.tab = RibbonTab::Text;
     assert_eq!(app.ribbon_import_category(), None);
@@ -120,7 +123,7 @@ fn svg_and_gif_stickers_are_flagged_not_imported() {
     let mut app = VenturiApp::default();
     app.import_into_category(
         vec![PathBuf::from("/x/a.svg"), PathBuf::from("/x/b.gif")],
-        Category::Sticker(StickerCategory::Other),
+        Category::Sticker(StickerCategory::Yours),
     );
     assert_eq!(app.import_warnings.len(), 2);
     assert!(app.library.assets.is_empty());

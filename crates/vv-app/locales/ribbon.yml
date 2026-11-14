@@ -93,8 +93,60 @@ ribbon.sticker_social:
   it: "Social"
 
 ribbon.sticker_other:
-  en: "Other"
-  it: "Altro"
+  en: "Icons"
+  it: "Icone"
+
+ribbon.sticker_yours:
+  en: "Yours"
+  it: "Tuoi"
+
+ribbon.sticker_none:
+  en: "No stickers found."
+  it: "Nessuno sticker trovato."
+
+ribbon.sticker_download_failed:
+  en: "%{name}: download failed, check the connection"
+  it: "%{name}: download non riuscito, controlla la connessione"
+
+ribbon.emoji_all:
+  en: "All emoji"
+  it: "Tutte le emoji"
+
+ribbon.emoji_group_0:
+  en: "Smileys and emotions"
+  it: "Faccine ed emozioni"
+
+ribbon.emoji_group_1:
+  en: "People"
+  it: "Persone"
+
+ribbon.emoji_group_2:
+  en: "Animals and nature"
+  it: "Animali e natura"
+
+ribbon.emoji_group_3:
+  en: "Food and drink"
+  it: "Cibo e bevande"
+
+ribbon.emoji_group_4:
+  en: "Travel and places"
+  it: "Viaggi e luoghi"
+
+ribbon.emoji_group_5:
+  en: "Activities and events"
+  it: "Attività ed eventi"
+
+ribbon.emoji_group_6:
+  en: "Objects"
+  it: "Oggetti"
+
+ribbon.emoji_group_7:
+  en: "Symbols"
+  it: "Simboli"
+
+ribbon.emoji_group_8:
+  en: "Flags"
+  it: "Bandiere"
 
 ribbon.import:
   en: "Import"

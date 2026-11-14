@@ -14,6 +14,7 @@ use std::sync::Arc;
 use vv_core::text_template::{TemplateCategory as TextCategory, TemplateClip};
 
 pub(crate) const STICKER_SECS: f64 = 3.0;
+pub(crate) const YOURS_STICKER_FOLDER: &str = "ribbon-sticker-yours";
 const TEXT_SECS: f64 = 3.0;
 const TEXT_CARD: egui::Vec2 = egui::vec2(160.0, 112.0);
 const TEXT_PREVIEW: egui::Vec2 = egui::vec2(160.0, 90.0);
@@ -115,25 +116,30 @@ pub(crate) enum StickerCategory {
     Emoji,
     Arrows,
     Social,
+    /// Everything else of the icon sets.
     Other,
+    /// The user's own images.
+    Yours,
 }
 
 impl StickerCategory {
-    const ALL: [StickerCategory; 5] = [
+    pub(crate) const ALL: [StickerCategory; 6] = [
         Self::Shapes,
         Self::Emoji,
         Self::Arrows,
         Self::Social,
         Self::Other,
+        Self::Yours,
     ];
 
-    fn id(self) -> &'static str {
+    pub(crate) fn id(self) -> &'static str {
         match self {
             Self::Shapes => "shapes",
             Self::Emoji => "emoji",
             Self::Arrows => "arrows",
             Self::Social => "social",
             Self::Other => "other",
+            Self::Yours => "yours",
         }
     }
 
@@ -144,6 +150,7 @@ impl StickerCategory {
             Self::Arrows => t!("ribbon.sticker_arrows"),
             Self::Social => t!("ribbon.sticker_social"),
             Self::Other => t!("ribbon.sticker_other"),
+            Self::Yours => t!("ribbon.sticker_yours"),
         }
     }
 }
@@ -179,7 +186,7 @@ impl Category {
         match self {
             Self::Music => Some("ribbon-audio-music".to_owned()),
             Self::Sfx => Some("ribbon-audio-sfx".to_owned()),
-            Self::Sticker(category) => Some(format!("ribbon-sticker-{}", category.id())),
+            Self::Sticker(StickerCategory::Yours) => Some(YOURS_STICKER_FOLDER.to_owned()),
             _ => None,
         }
     }
@@ -801,6 +808,7 @@ impl VenturiApp {
             (RibbonTab::Media, Category::Project) => self.show_media_pool(ui, preview_action),
             (RibbonTab::Media, _) => self.show_media_favorites(ui, preview_action),
             (RibbonTab::Text, category) => self.show_text_tab(ui, category),
+            (RibbonTab::Sticker, category) => self.show_sticker_tab(ui, category),
             (_, category) => self.show_asset_category(ui, tab, category, preview_action),
         }
         ui.allocate_rect(area, egui::Sense::hover());
@@ -942,15 +950,18 @@ impl VenturiApp {
         chosen
     }
 
-    /// Audio and sticker category that files imported now would join: the
-    /// one shown, or the first of the tab while on Favorites. `None` on the
-    /// other tabs, or with the Library block closed.
+    /// Audio category that files imported now would join: the one shown, or
+    /// the first of the tab while on Favorites. Stickers always go to
+    /// Yours. `None` on the other tabs, or with the Library block closed.
     pub(crate) fn ribbon_import_category(&self) -> Option<Category> {
         let ribbon = &self.library_ribbon;
         if !self.workspace.is_shown(Block::Library)
             || !matches!(ribbon.tab, RibbonTab::Audio | RibbonTab::Sticker)
         {
             return None;
+        }
+        if ribbon.tab == RibbonTab::Sticker {
+            return Some(Category::Sticker(StickerCategory::Yours));
         }
         let category = ribbon.category();
         if category.folder_id().is_some() {
@@ -1115,7 +1126,7 @@ impl VenturiApp {
         self.add_media_set_to_timeline_at(&set, start, target);
     }
 
-    fn insert_assets_at_playhead(&mut self, assets: &[String], sticker: bool) {
+    pub(crate) fn insert_assets_at_playhead(&mut self, assets: &[String], sticker: bool) {
         let media: Vec<MediaId> = assets
             .iter()
             .flat_map(|id| self.import_library_asset(id))
@@ -1404,8 +1415,8 @@ impl VenturiApp {
         }
     }
 
-    /// Audio and sticker items of the user library in `category`, or the
-    /// starred ones of the tab.
+    /// Audio items of the user library in `category`, or the starred ones of
+    /// the tab.
     fn show_asset_category(
         &mut self,
         ui: &mut egui::Ui,
@@ -1432,8 +1443,7 @@ impl VenturiApp {
         let entries = self.ribbon_asset_entries(&folders, favorites_only);
         let empty_hint = match (favorites_only, tab) {
             (true, _) => t!("ribbon.favorites_empty"),
-            (false, RibbonTab::Audio) => t!("ribbon.audio_empty"),
-            _ => t!("ribbon.sticker_empty"),
+            _ => t!("ribbon.audio_empty"),
         };
         let events = pool_view::show_pool(
             ui,
@@ -1448,7 +1458,6 @@ impl VenturiApp {
                 empty_hint: Some(empty_hint),
             },
         );
-        let sticker = tab == RibbonTab::Sticker;
         for event in events {
             match event {
                 PoolEvent::Clicked(id) if tab == RibbonTab::Audio => {
@@ -1457,7 +1466,7 @@ impl VenturiApp {
                 }
                 PoolEvent::Open(id) => *preview_action = Some(Browsed::Asset(id)),
                 PoolEvent::ToggleFavorite(id) => self.toggle_favorite_key(&asset_key(&id)),
-                PoolEvent::Insert(id) => self.insert_assets_at_playhead(&[id], sticker),
+                PoolEvent::Insert(id) => self.insert_assets_at_playhead(&[id], false),
                 PoolEvent::Action(RibbonAction::Remove) => {
                     let ids: Vec<String> =
                         self.library_ribbon.pool.selected.iter().cloned().collect();
@@ -1466,14 +1475,14 @@ impl VenturiApp {
                 _ => {}
             }
         }
-        self.import_dragged_ribbon_assets(ui.ctx(), sticker);
+        self.import_dragged_ribbon_assets(ui.ctx(), false);
         let library = &self.library;
         self.library_ribbon
             .pool
             .forget(|id| library.assets.iter().any(|a| a.id == *id), |_| false);
     }
 
-    fn remove_ribbon_assets(&mut self, ids: &[String]) {
+    pub(crate) fn remove_ribbon_assets(&mut self, ids: &[String]) {
         for id in ids {
             if matches!(&self.browsing, Some(Browsed::Asset(b)) if b == id) {
                 self.stop_browsing();
@@ -1486,7 +1495,7 @@ impl VenturiApp {
         self.persist_settings();
     }
 
-    fn ribbon_asset_entries(
+    pub(crate) fn ribbon_asset_entries(
         &mut self,
         folders: &[String],
         favorites_only: bool,
@@ -1548,7 +1557,7 @@ impl VenturiApp {
 
     /// Assets dragged out of the ribbon become pool items, so that the
     /// timeline can take them.
-    fn import_dragged_ribbon_assets(&mut self, ctx: &egui::Context, sticker: bool) {
+    pub(crate) fn import_dragged_ribbon_assets(&mut self, ctx: &egui::Context, sticker: bool) {
         let Some(drag) = egui::DragAndDrop::payload::<pool_view::ItemsDrag<String>>(ctx) else {
             return;
         };
@@ -1559,8 +1568,17 @@ impl VenturiApp {
         if inside {
             return;
         }
-        let media: Vec<MediaId> = drag
-            .0
+        let mut assets = Vec::with_capacity(drag.0.len());
+        for id in &drag.0 {
+            match self.sticker_asset_id(id) {
+                Some(asset) => assets.push(asset),
+                None => {
+                    ctx.request_repaint();
+                    return;
+                }
+            }
+        }
+        let media: Vec<MediaId> = assets
             .iter()
             .flat_map(|id| self.import_library_asset(id))
             .collect();
