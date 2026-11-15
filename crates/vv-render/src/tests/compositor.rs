@@ -712,7 +712,10 @@ fn colorize_multiplies_white_by_its_color_and_keeps_black() {
     assert_eq!((r, b), (255, 0));
     assert!((g as i32 - 128).abs() <= 1);
     assert_eq!(render(vv_core::Rgba::BLACK, orange)[..3], [0, 0, 0]);
-    assert_eq!(render(vv_core::Rgba::WHITE, vv_core::Rgba::WHITE)[..3], [255, 255, 255]);
+    assert_eq!(
+        render(vv_core::Rgba::WHITE, vv_core::Rgba::WHITE)[..3],
+        [255, 255, 255]
+    );
 }
 
 #[test]

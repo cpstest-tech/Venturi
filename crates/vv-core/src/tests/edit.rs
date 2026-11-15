@@ -369,6 +369,31 @@ fn insert_media_creates_an_audio_track_per_stream_and_links_everything() {
 }
 
 #[test]
+fn insert_media_puts_overlapping_audio_on_a_new_track() {
+    let (mut project, tl) = project_with_tracks(&[TrackKind::Video, TrackKind::Audio]);
+    let mut history = History::default();
+    let media = media(&mut project, 1);
+    let insert = MediaInsert {
+        media_id: media,
+        source_in: 0,
+        source_out: 50,
+        video: true,
+        audio: true,
+    };
+    let tracks = TargetTracks {
+        video: Some(0),
+        extra_audio: None,
+    };
+
+    insert_media(&mut project, &mut history, tl, insert, 0, tracks).unwrap();
+    let second = insert_media(&mut project, &mut history, tl, insert, 10, tracks).unwrap();
+
+    assert_eq!(project.timelines[tl].tracks.len(), 3);
+    assert_eq!(second[1].0, 2);
+    assert_eq!(spans(&project, tl, 1).len(), 1);
+}
+
+#[test]
 fn insert_media_of_an_unknown_media_does_nothing() {
     let (mut project, tl) = project_with_tracks(&[TrackKind::Video]);
     let mut history = History::default();

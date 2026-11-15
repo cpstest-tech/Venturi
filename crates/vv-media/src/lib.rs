@@ -26,8 +26,8 @@ pub use encode::{
 pub use hw::{HwDevice, HwPriority};
 pub use probe::{
     AUDIO_EXTENSIONS, AUDIO_ONLY_FPS, AudioStreamInfo, IMAGE_EXTENSIONS, IMAGE_FPS,
-    VIDEO_EXTENSIONS, audio_streams, content_fingerprint, is_image_path, is_media_path, probe,
-    has_alpha, probe_file_info, probe_image, probe_media, probe_tags,
+    VIDEO_EXTENSIONS, audio_streams, content_fingerprint, has_alpha, is_image_path, is_media_path,
+    probe, probe_file_info, probe_image, probe_media, probe_tags,
 };
 pub use thumbnail::{Thumbnail, generate_thumbnail};
 pub use waveform::{

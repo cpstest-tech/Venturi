@@ -361,7 +361,9 @@ pub(crate) fn libvpx_for_alpha(stream: &ffmpeg::format::stream::Stream) -> Optio
         _ => return None,
     };
     let flagged = stream.metadata().get("alpha_mode") == Some("1");
-    flagged.then(|| ffmpeg::decoder::find_by_name(name)).flatten()
+    flagged
+        .then(|| ffmpeg::decoder::find_by_name(name))
+        .flatten()
 }
 
 /// Whether the video of `path` has an alpha channel: a PNG-like pixel

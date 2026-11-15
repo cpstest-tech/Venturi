@@ -4382,7 +4382,8 @@ impl VenturiApp {
         // A user scrub must be followed during playback too, unlike
         // the playhead moved by `drive_playback`.
         let user_scrubbed_playhead = self.timeline_state.playhead != playhead_before_timeline_ui;
-        if user_scrubbed_playhead {
+        let selection_changed = self.timeline_state.selected != selected_before_timeline_ui;
+        if user_scrubbed_playhead && !selection_changed {
             self.sync_selection_to_playhead();
         }
 
@@ -4404,8 +4405,13 @@ impl VenturiApp {
             // The selection follows the playhead moved by playback too, but only
             // if it really moved: it does not touch a selection made in this frame.
             let playhead_before_playback = self.timeline_state.playhead;
+            let clip_before_playback = self.active_video_clip_at(playhead_before_playback);
             self.drive_playback();
-            if self.timeline_state.playhead != playhead_before_playback {
+            // Only on entering another clip: syncing every frame would
+            // overwrite a selection made by hand during playback.
+            if self.timeline_state.playhead != playhead_before_playback
+                && self.active_video_clip_at(self.timeline_state.playhead) != clip_before_playback
+            {
                 self.sync_selection_to_playhead();
             }
         }

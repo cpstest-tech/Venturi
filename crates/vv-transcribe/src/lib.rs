@@ -254,7 +254,8 @@ pub fn to_mono_16k(interleaved: &[f32], rate: u32, channels: u16) -> Vec<f32> {
 /// Input frames `to_mono_16k` turns into one sample, for a rate that is a
 /// multiple of 16 kHz.
 pub fn frames_per_output(rate: u32) -> Option<usize> {
-    rate.is_multiple_of(SAMPLE_RATE).then_some((rate / SAMPLE_RATE) as usize)
+    rate.is_multiple_of(SAMPLE_RATE)
+        .then_some((rate / SAMPLE_RATE) as usize)
 }
 
 /// A token as whisper reports it, times in centiseconds.

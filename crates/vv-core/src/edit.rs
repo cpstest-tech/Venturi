@@ -482,9 +482,29 @@ pub fn insert_media(
     } else {
         0
     };
-    while audio_track_indices.len() < num_audio_streams {
-        audio_track_indices.push(add_track(project, history, timeline_id, TrackKind::Audio));
+    // Audio never lands on top of existing audio: a busy track is skipped
+    // and, if none is free, a new one is created.
+    let audio_len = Clip::from_source_range(
+        ClipId(0),
+        ClipSource::Media(insert.media_id),
+        insert.source_in,
+        insert.source_out,
+        start,
+        rate,
+    )
+    .timeline_len;
+    let mut chosen: Vec<usize> = Vec::new();
+    for _ in 0..num_audio_streams {
+        let free = audio_track_indices.iter().copied().find(|i| {
+            !chosen.contains(i)
+                && project.timelines[timeline_id].tracks[*i].is_free(start, audio_len)
+        });
+        chosen.push(match free {
+            Some(i) => i,
+            None => add_track(project, history, timeline_id, TrackKind::Audio),
+        });
     }
+    let audio_track_indices = chosen;
 
     let audio_clip_ids: Vec<ClipId> = (0..num_audio_streams)
         .map(|_| project.alloc_clip_id())
