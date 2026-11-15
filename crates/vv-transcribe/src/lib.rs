@@ -67,10 +67,17 @@ impl Model {
 pub fn gpu_name() -> Option<&'static str> {
     static GPU: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
     GPU.get_or_init(|| {
-        whisper_rs::vulkan::list_devices()
-            .into_iter()
-            .next()
-            .map(|d| d.name)
+        #[cfg(not(target_os = "macos"))]
+        {
+            whisper_rs::vulkan::list_devices()
+                .into_iter()
+                .next()
+                .map(|d| d.name)
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Some("Apple GPU".to_string())
+        }
     })
     .as_deref()
 }
