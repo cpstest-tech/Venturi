@@ -17,7 +17,7 @@ pub(crate) enum Section {
     #[default]
     Generate,
     Templates,
-    Add,
+    Edit,
 }
 
 pub(crate) struct TranscribeJob {
@@ -40,6 +40,11 @@ pub(crate) struct SubtitleState {
     /// The card under the pointer and when the pointer got there.
     pub hover: Option<(String, f64)>,
     pub hover_texture: Option<egui::TextureHandle>,
+    /// The line being typed into (its first word) and its text, committed
+    /// when the field loses focus.
+    pub editing: Option<(usize, String)>,
+    /// Keeps a drag of a line's times one undo step.
+    pub drag_group: Option<vv_core::GroupMark>,
 }
 
 pub(crate) enum Message {
@@ -219,11 +224,50 @@ impl VenturiApp {
 
     /// Replaces the subtitle clips with the words of `captions` in its
     /// template, in one undo step.
+    /// Edits the words of the subtitles (made empty if there are none yet)
+    /// and rebuilds their clips, keeping the look and place of the current ones.
+    pub(crate) fn edit_caption_words(&mut self, edit: impl FnOnce(&mut Vec<CaptionWord>)) {
+        let Some(timeline_id) = self.timeline_id else {
+            return;
+        };
+        let mut captions = self
+            .session
+            .project
+            .captions
+            .get(&timeline_id)
+            .cloned()
+            .unwrap_or_else(|| Captions {
+                template: self
+                    .subtitles
+                    .selected
+                    .clone()
+                    .unwrap_or_else(|| vv_core::captions::DEFAULT_TEMPLATE.to_owned()),
+                ..Captions::default()
+            });
+        edit(&mut captions.words);
+        let timeline = &self.session.project.timelines[timeline_id];
+        let old: Vec<vv_core::Clip> = vv_core::captions::subtitle_track(timeline)
+            .map(|i| timeline.tracks[i].clips.clone())
+            .unwrap_or_default();
+        self.apply_captions_with(timeline_id, captions, &old);
+    }
+
     fn apply_captions(&mut self, timeline_id: TimelineId, captions: Captions) {
+        self.apply_captions_with(timeline_id, captions, &[]);
+    }
+
+    /// `look_from`: clips whose look the new ones take, each from the
+    /// nearest in time.
+    fn apply_captions_with(
+        &mut self,
+        timeline_id: TimelineId,
+        captions: Captions,
+        look_from: &[vv_core::Clip],
+    ) {
         if !self.session.project.timelines.contains_key(timeline_id) {
             return;
         }
-        let clips = if let Some(template) = SubtitleTemplate::find(&captions.template) {
+        let mut clips = if let Some(template) = SubtitleTemplate::find(&captions.template) {
             vv_core::captions::build_clips(
                 &mut self.session.project,
                 timeline_id,
@@ -235,6 +279,7 @@ impl VenturiApp {
         } else {
             return;
         };
+        carry_look(look_from, &mut clips);
         self.session.history.do_command(
             &mut self.session.project,
             Box::new(SetCaptions::new(timeline_id, Some(captions), clips)),
@@ -297,5 +342,35 @@ impl VenturiApp {
     pub(crate) fn transcription_stage(&self) -> Option<(Stage, f32)> {
         let job = self.subtitles.job.as_ref()?;
         Some((job.progress.stage(), job.progress.fraction()))
+    }
+}
+
+/// Gives each of `clips` the effects (style, position, filters) of the
+/// nearest of `old`, keeping its own text and word times: editing the words
+/// must not undo what the user did to the subtitles.
+fn carry_look(old: &[vv_core::Clip], clips: &mut [vv_core::Clip]) {
+    for clip in clips {
+        let Some(reference) = old
+            .iter()
+            .min_by_key(|o| (o.timeline_start - clip.timeline_start).abs())
+        else {
+            return;
+        };
+        let Some(own) = clip.effects.title.take() else {
+            continue;
+        };
+        let mut effects = reference.effects.clone();
+        match &mut effects.title {
+            Some(title) => {
+                title.content = own.content;
+                if let (Some(karaoke), Some(own_karaoke)) =
+                    (&mut title.anim.karaoke, &own.anim.karaoke)
+                {
+                    karaoke.word_ms = own_karaoke.word_ms.clone();
+                }
+            }
+            None => effects.title = Some(own),
+        }
+        clip.effects = effects;
     }
 }

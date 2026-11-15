@@ -12,13 +12,33 @@ subtitles.section_templates:
   en: "Subtitle templates"
   it: "Template sottotitoli"
 
-subtitles.section_add:
-  en: "Add subtitles"
-  it: "Aggiungi sottotitoli"
+subtitles.section_edit:
+  en: "Edit subtitles"
+  it: "Modifica sottotitoli"
 
-subtitles.add_soon:
-  en: "Add subtitles by hand"
-  it: "Aggiungi i sottotitoli a mano"
+subtitles.edit_add:
+  en: "+ Add subtitle"
+  it: "+ Aggiungi sottotitolo"
+
+subtitles.edit_hint:
+  en: "Click a line to jump there; the look stays as you set it."
+  it: "Clicca una riga per andarci; lo stile resta quello impostato."
+
+subtitles.edit_empty:
+  en: "No subtitles yet: generate them, or add one at the playhead."
+  it: "Ancora nessun sottotitolo: generali, o aggiungine uno al cursore."
+
+subtitles.edit_no_timeline:
+  en: "Open a timeline to edit its subtitles."
+  it: "Apri una timeline per modificarne i sottotitoli."
+
+subtitles.edit_delete:
+  en: "Delete this subtitle"
+  it: "Elimina questo sottotitolo"
+
+subtitles.edit_new_text:
+  en: "New subtitle"
+  it: "Nuovo sottotitolo"
 
 subtitles.generate:
   en: "Generate subtitles"

@@ -360,3 +360,49 @@ fn a_preview_frame_animates_like_the_clips_of_its_template() {
             .is_empty()
     );
 }
+
+fn w(text: &str, start_ms: u32, end_ms: u32) -> CaptionWord {
+    CaptionWord {
+        text: text.into(),
+        start_ms,
+        end_ms,
+    }
+}
+
+#[test]
+fn an_edited_line_keeps_its_span_and_the_other_lines() {
+    let mut words = vec![
+        w("ciao", 0, 500),
+        w("a", 500, 600),
+        w("tutti", 600, 1000),
+        w("dopo", 2000, 2500),
+    ];
+    set_line_text(&mut words, 0..3, "buongiorno mondo");
+    let texts: Vec<_> = words.iter().map(|w| w.text.as_str()).collect();
+    assert_eq!(texts, ["buongiorno", "mondo", "dopo"]);
+    assert_eq!(words[0].start_ms, 0);
+    assert_eq!(words[1].end_ms, 1000);
+    assert!(words[0].end_ms <= words[1].start_ms);
+}
+
+#[test]
+fn an_empty_text_removes_the_line() {
+    let mut words = vec![w("uno", 0, 500), w("due", 2000, 2500)];
+    set_line_text(&mut words, 0..1, "  ");
+    assert_eq!(words, vec![w("due", 2000, 2500)]);
+}
+
+#[test]
+fn retiming_a_line_scales_its_words() {
+    let mut words = vec![w("uno", 1000, 1500), w("due", 1500, 2000)];
+    retime_line(&mut words, 0..2, 3000, 5000);
+    assert_eq!(words, vec![w("uno", 3000, 4000), w("due", 4000, 5000)]);
+}
+
+#[test]
+fn an_inserted_line_lands_in_time_order() {
+    let mut words = vec![w("prima", 0, 500), w("dopo", 5000, 5500)];
+    insert_line(&mut words, 2000, 3000, "nuovo testo");
+    let texts: Vec<_> = words.iter().map(|w| w.text.as_str()).collect();
+    assert_eq!(texts, ["prima", "nuovo", "testo", "dopo"]);
+}

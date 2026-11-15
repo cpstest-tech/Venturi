@@ -1,4 +1,4 @@
-//! The Subtitles tab of the Library block: Generate, Templates, Add.
+//! The Subtitles tab of the Library block: Generate, Templates, Edit.
 
 use super::*;
 use crate::subtitles::{Message, Section, models_dir};
@@ -6,6 +6,15 @@ use vv_core::captions::{SubtitleTemplate, TEMPLATES, TemplateCategory};
 use vv_transcribe::Stage;
 
 const CARD_SIDE: f32 = 160.0;
+/// Length of a subtitle added by hand.
+const NEW_LINE_MS: u32 = 2000;
+
+enum EditAction {
+    Seek(u32),
+    Text(std::ops::Range<usize>, String),
+    Retime(std::ops::Range<usize>, u32, u32),
+    Insert(u32),
+}
 const CARD_LABEL: f32 = 24.0;
 const PREVIEW_TEXTURE: u32 = 320;
 /// Square frame the sample titles are built and drawn for.
@@ -91,7 +100,7 @@ fn section_label(section: Section) -> std::borrow::Cow<'static, str> {
     match section {
         Section::Generate => t!("subtitles.section_generate"),
         Section::Templates => t!("subtitles.section_templates"),
-        Section::Add => t!("subtitles.section_add"),
+        Section::Edit => t!("subtitles.section_edit"),
     }
 }
 
@@ -150,7 +159,7 @@ impl VenturiApp {
         let side_rect = area.with_max_x(area.left() + SIDEBAR.min(area.width() * 0.4));
         let content_rect = area.with_min_x(side_rect.right() + theme::SPACE_2);
         let mut side_ui = ui.new_child(egui::UiBuilder::new().max_rect(side_rect));
-        for section in [Section::Generate, Section::Templates, Section::Add] {
+        for section in [Section::Generate, Section::Templates, Section::Edit] {
             let selected = self.subtitles.section == section;
             let text = egui::RichText::new(section_label(section)).color(if selected {
                 theme::ACCENT
@@ -169,14 +178,7 @@ impl VenturiApp {
         match self.subtitles.section {
             Section::Generate => self.show_generate_section(&mut content),
             Section::Templates => self.show_templates_section(&mut content),
-            Section::Add => {
-                content
-                    .add_enabled_ui(false, |ui| {
-                        ui.label(t!("subtitles.add_soon"));
-                    })
-                    .response
-                    .on_disabled_hover_text(t!("common.coming_soon"));
-            }
+            Section::Edit => self.show_edit_section(&mut content),
         }
         ui.allocate_rect(area, egui::Sense::hover());
     }
@@ -468,3 +470,172 @@ impl VenturiApp {
 #[cfg(test)]
 #[path = "tests/subtitles_ui.rs"]
 mod tests;
+
+impl VenturiApp {
+    /// The subtitles as a list, like CapCut's editor: every line with its
+    /// times and text, editable; a click jumps there.
+    fn show_edit_section(&mut self, ui: &mut egui::Ui) {
+        let Some(timeline_id) = self.timeline_id else {
+            ui.weak(t!("subtitles.edit_no_timeline"));
+            return;
+        };
+        let fps = self.session.project.timelines[timeline_id]
+            .fps
+            .as_f64()
+            .max(1e-9);
+        let playhead_ms = (self.timeline_state.playhead as f64 / fps * 1000.0).round() as u32;
+        let words = self
+            .session
+            .project
+            .captions
+            .get(&timeline_id)
+            .map(|c| c.words.clone())
+            .unwrap_or_default();
+        let lines = vv_core::captions::caption_lines(&words);
+        let playing = self.is_timeline_playing();
+        let mut action = None;
+
+        ui.add_space(theme::SPACE_1);
+        ui.horizontal(|ui| {
+            if ui.button(t!("subtitles.edit_add")).clicked() {
+                // After the line under the playhead, not inside it.
+                let at = lines
+                    .iter()
+                    .find(|l| (l.start_ms..l.end_ms).contains(&playhead_ms))
+                    .map_or(playhead_ms, |l| l.end_ms);
+                action = Some(EditAction::Insert(at));
+            }
+            ui.weak(t!("subtitles.edit_hint"));
+        });
+        ui.add_space(theme::SPACE_1);
+        if lines.is_empty() {
+            ui.weak(t!("subtitles.edit_empty"));
+        }
+        let mut drag_started = false;
+        let mut drag_stopped = false;
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                for line in &lines {
+                    let active =
+                        (line.start_ms..line.end_ms.max(line.start_ms + 1)).contains(&playhead_ms);
+                    let fill = if active {
+                        theme::ACCENT_TRANSLUCENT
+                    } else {
+                        egui::Color32::TRANSPARENT
+                    };
+                    // The row's click sense sits under its fields, which keep theirs.
+                    let row = ui.scope_builder(
+                        egui::UiBuilder::new()
+                            .id_salt(("subtitle_line", line.words.start))
+                            .sense(egui::Sense::click()),
+                        |ui| {
+                            egui::Frame::new()
+                                .fill(fill)
+                                .corner_radius(4.0)
+                                .inner_margin(egui::Margin::same(4))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        let mut start = f64::from(line.start_ms) / 1000.0;
+                                        let mut end = f64::from(line.end_ms) / 1000.0;
+                                        fn time(value: &mut f64) -> egui::DragValue<'_> {
+                                            egui::DragValue::new(value)
+                                                .speed(0.01)
+                                                .range(0.0..=f64::from(u32::MAX) / 1000.0)
+                                                .fixed_decimals(2)
+                                                .suffix(" s")
+                                        }
+                                        let start_resp = ui.add(time(&mut start));
+                                        ui.label("–");
+                                        let end_resp = ui.add(time(&mut end));
+                                        for resp in [&start_resp, &end_resp] {
+                                            drag_started |= resp.drag_started();
+                                            drag_stopped |= resp.drag_stopped();
+                                        }
+                                        if start_resp.changed() || end_resp.changed() {
+                                            let start_ms = (start * 1000.0).round() as u32;
+                                            let end_ms =
+                                                ((end * 1000.0).round() as u32).max(start_ms + 1);
+                                            action = Some(EditAction::Retime(
+                                                line.words.clone(),
+                                                start_ms,
+                                                end_ms,
+                                            ));
+                                        }
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                if ui
+                                                    .small_button("✕")
+                                                    .on_hover_text(t!("subtitles.edit_delete"))
+                                                    .clicked()
+                                                {
+                                                    action = Some(EditAction::Text(
+                                                        line.words.clone(),
+                                                        String::new(),
+                                                    ));
+                                                }
+                                            },
+                                        );
+                                    });
+                                    let key = line.words.start;
+                                    let mut text = match &self.subtitles.editing {
+                                        Some((k, t)) if *k == key => t.clone(),
+                                        _ => line.text.clone(),
+                                    };
+                                    let field = ui.add(
+                                        egui::TextEdit::singleline(&mut text)
+                                            .desired_width(f32::INFINITY),
+                                    );
+                                    if field.changed() || field.gained_focus() {
+                                        self.subtitles.editing = Some((key, text.clone()));
+                                    }
+                                    if field.lost_focus() {
+                                        self.subtitles.editing = None;
+                                        if text != line.text {
+                                            action =
+                                                Some(EditAction::Text(line.words.clone(), text));
+                                        }
+                                    }
+                                })
+                        },
+                    );
+                    if row.response.clicked() {
+                        action = Some(EditAction::Seek(line.start_ms));
+                    }
+                    if active && playing {
+                        row.response.scroll_to_me(Some(egui::Align::Center));
+                    }
+                }
+            });
+
+        if drag_started && self.subtitles.drag_group.is_none() {
+            self.subtitles.drag_group = Some(self.session.history.begin_group());
+        }
+        match action {
+            Some(EditAction::Seek(ms)) => {
+                self.jump_playhead_to((f64::from(ms) / 1000.0 * fps).round() as FrameIdx);
+            }
+            Some(EditAction::Text(range, text)) => {
+                self.edit_caption_words(|words| {
+                    vv_core::captions::set_line_text(words, range, &text)
+                });
+            }
+            Some(EditAction::Retime(range, start, end)) => {
+                self.edit_caption_words(|words| {
+                    vv_core::captions::retime_line(words, range, start, end)
+                });
+            }
+            Some(EditAction::Insert(at)) => {
+                let text = t!("subtitles.edit_new_text").into_owned();
+                self.edit_caption_words(|words| {
+                    vv_core::captions::insert_line(words, at, at + NEW_LINE_MS, &text)
+                });
+            }
+            None => {}
+        }
+        if drag_stopped && let Some(mark) = self.subtitles.drag_group.take() {
+            self.session.history.end_group(mark);
+        }
+    }
+}

@@ -533,6 +533,75 @@ fn words_within(
     (words.len() == expected).then_some(words)
 }
 
+/// The words `text` splits into, spread over `start_ms..end_ms` in
+/// proportion to their length: an edited line keeps its span.
+fn spread_words(text: &str, start_ms: u32, end_ms: u32) -> Vec<CaptionWord> {
+    let parts: Vec<&str> = text.split_whitespace().collect();
+    let total: usize = parts.iter().map(|p| p.chars().count().max(1)).sum();
+    let span = end_ms.saturating_sub(start_ms).max(parts.len() as u32);
+    let mut at = 0usize;
+    parts
+        .iter()
+        .map(|part| {
+            let from = start_ms + (at as u64 * u64::from(span) / total.max(1) as u64) as u32;
+            at += part.chars().count().max(1);
+            let to = start_ms + (at as u64 * u64::from(span) / total.max(1) as u64) as u32;
+            CaptionWord {
+                text: (*part).to_owned(),
+                start_ms: from,
+                end_ms: to.max(from + 1),
+            }
+        })
+        .collect()
+}
+
+/// Replaces the words of a line with `text`, over the same span; an empty
+/// text removes the line.
+pub fn set_line_text(words: &mut Vec<CaptionWord>, line: std::ops::Range<usize>, text: &str) {
+    let (Some(first), Some(last)) = (words.get(line.start), words.get(line.end.wrapping_sub(1)))
+    else {
+        return;
+    };
+    let new = spread_words(text, first.start_ms, last.end_ms);
+    words.splice(line, new);
+}
+
+/// Moves a line to `start_ms..end_ms`, its words scaled along, and keeps the
+/// words in time order.
+pub fn retime_line(
+    words: &mut [CaptionWord],
+    line: std::ops::Range<usize>,
+    start_ms: u32,
+    end_ms: u32,
+) {
+    let (Some(first), Some(last)) = (words.get(line.start), words.get(line.end.wrapping_sub(1)))
+    else {
+        return;
+    };
+    let (old_start, old_span) = (
+        first.start_ms,
+        last.end_ms.saturating_sub(first.start_ms).max(1),
+    );
+    let span = end_ms.saturating_sub(start_ms).max(1);
+    let map = |ms: u32| {
+        start_ms
+            + (u64::from(ms.saturating_sub(old_start)) * u64::from(span) / u64::from(old_span))
+                as u32
+    };
+    for word in &mut words[line] {
+        word.start_ms = map(word.start_ms);
+        word.end_ms = map(word.end_ms).max(word.start_ms + 1);
+    }
+    words.sort_by_key(|w| w.start_ms);
+}
+
+/// Adds a line of `text` at `start_ms..end_ms`, in time order.
+pub fn insert_line(words: &mut Vec<CaptionWord>, start_ms: u32, end_ms: u32, text: &str) {
+    let at = words.partition_point(|w| w.start_ms < start_ms);
+    let new = spread_words(text, start_ms, end_ms);
+    words.splice(at..at, new);
+}
+
 /// The index of the subtitle track, if the timeline has one.
 pub fn subtitle_track(timeline: &crate::model::Timeline) -> Option<usize> {
     timeline.tracks.iter().position(|t| t.subtitles)
