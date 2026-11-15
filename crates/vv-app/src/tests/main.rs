@@ -5987,3 +5987,76 @@ fn clip_mut_set_cutout(app: &mut VenturiApp, timeline: TimelineId, clip: vv_core
         Box::new(vv_core::set_clip_remove_background(timeline, 0, clip, true)),
     );
 }
+
+fn show_panel_on(app: &mut VenturiApp, targets: &[PanelTarget]) {
+    let ctx = egui::Context::default();
+    ctx.run_ui(egui::RawInput::default(), |ui| {
+        app.show_properties_panel(ui, targets, &[]);
+    })
+    .textures_delta
+    .clear();
+}
+
+/// Clicking a subtitle opens the list of lines; another clip goes back to Video.
+#[test]
+fn selecting_a_subtitle_opens_the_subtitle_list_in_the_properties() {
+    let mut app = app_with_two_subtitles();
+    let timeline = app.timeline_id.unwrap();
+    let index =
+        vv_core::captions::subtitle_track(&app.session.project.timelines[timeline]).unwrap();
+    let second = subtitle_clips(&app)[1].clone();
+    let subtitle = panel_target(timeline, index, &second, 0);
+    let ms = app.subtitle_clip_ms(&subtitle).unwrap();
+    assert!((4000..5500).contains(&ms), "{ms} inside the second line");
+
+    app.timeline_state.selected = BTreeSet::from([(index, second.id)]);
+    show_panel_on(&mut app, &[subtitle]);
+    assert_eq!(app.clip_tab, properties_tabs::ClipTab::Subtitles);
+    assert_eq!(app.subtitles.scrolled_to, Some(ms));
+
+    let video_clip = app.session.project.timelines[timeline].tracks[0].clips[0].clone();
+    let video = panel_target(timeline, 0, &video_clip, 0);
+    assert_eq!(app.subtitle_clip_ms(&video), None);
+    app.timeline_state.selected = BTreeSet::from([(0, video_clip.id)]);
+    show_panel_on(&mut app, &[video]);
+    assert_eq!(app.clip_tab, properties_tabs::ClipTab::Video);
+}
+
+/// A still image goes to the image model, not the video one.
+#[test]
+fn an_image_that_removes_its_background_asks_for_an_image_matte() {
+    let mut app = VenturiApp::default();
+    let clip = make_timeline_with_clip(&mut app, 0, 0, 250);
+    let timeline = app.timeline_id.unwrap();
+    let hash = 0x7E57_C0FF_EE00_0002;
+    let media = app.session.project.media_pool.insert(vv_core::MediaItem {
+        path: "icon.png".into(),
+        meta: vv_core::MediaMeta {
+            duration_frames: vv_core::IMAGE_DURATION_FRAMES,
+            fps: vv_core::Rational::new(25, 1),
+            width: 64,
+            height: 64,
+            has_video: true,
+            has_audio: false,
+            sample_rate: 0,
+            channels: 0,
+            audio_streams: 0,
+            file: Default::default(),
+        },
+        content_hash: hash,
+        compound: None,
+        folder: None,
+    });
+    app.session.project.timelines[timeline].tracks[0]
+        .clips
+        .iter_mut()
+        .find(|c| c.id == clip)
+        .unwrap()
+        .source = vv_core::ClipSource::Media(media);
+    clip_mut_set_cutout(&mut app, timeline, clip);
+
+    let requests = app.matte_requests();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].image);
+    assert_eq!(requests[0].content_hash, hash);
+}

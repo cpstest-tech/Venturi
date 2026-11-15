@@ -45,6 +45,10 @@ pub(crate) struct SubtitleState {
     pub editing: Option<(usize, String)>,
     /// Keeps a drag of a line's times one undo step.
     pub drag_group: Option<vv_core::GroupMark>,
+    /// Start of the selected subtitle clip the list last scrolled to.
+    pub scrolled_to: Option<u32>,
+    /// The properties panel showed a subtitle clip last frame.
+    pub panel_on_subtitle: bool,
 }
 
 pub(crate) enum Message {

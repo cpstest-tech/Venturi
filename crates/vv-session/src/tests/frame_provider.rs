@@ -1266,3 +1266,45 @@ fn a_clip_that_removes_its_background_shows_what_is_below_where_its_matte_is_emp
     ));
     let _ = std::fs::remove_dir_all(vv_media::matte::matte_dir(hash));
 }
+
+#[test]
+fn an_image_shows_its_one_matte_on_every_frame() {
+    let hash = 0x7E57_3A77_E000_0004;
+    let _ = std::fs::remove_dir_all(vv_media::matte::matte_dir(hash));
+    let matte = vv_media::matte::Matte {
+        width: 2,
+        height: 1,
+        data: vec![0, 255],
+    };
+    vv_media::matte::write_matte(hash, 0, &matte).unwrap();
+    let mut project = Project::default();
+    let media = project.media_pool.insert(vv_core::MediaItem {
+        path: "icon.png".into(),
+        meta: vv_core::MediaMeta {
+            duration_frames: vv_core::IMAGE_DURATION_FRAMES,
+            fps: Rational::new(25, 1),
+            width: 2,
+            height: 1,
+            has_video: true,
+            has_audio: false,
+            sample_rate: 0,
+            channels: 0,
+            audio_streams: 0,
+            file: Default::default(),
+        },
+        content_hash: hash,
+        compound: None,
+        folder: None,
+    });
+    let mut clip = Clip::from_source_range(
+        ClipId(1),
+        ClipSource::Media(media),
+        0,
+        250,
+        0,
+        Rational::one(),
+    );
+    clip.effects.remove_background = true;
+    assert_eq!(background_matte(&project, &clip, 200).as_deref(), Some(&matte));
+    let _ = std::fs::remove_dir_all(vv_media::matte::matte_dir(hash));
+}

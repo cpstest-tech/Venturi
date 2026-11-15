@@ -5342,30 +5342,37 @@ impl VenturiApp {
             .reduce(f32::min)
     }
 
+    /// What the clips of the timeline that remove their background need matted.
+    fn matte_requests(&self) -> Vec<matte_worker::MatteRequest> {
+        let Some(timeline_id) = self.timeline_id else {
+            return Vec::new();
+        };
+        let project = &self.session.project;
+        project.timelines[timeline_id]
+            .tracks
+            .iter()
+            .flat_map(|t| t.clips.iter())
+            .filter(|c| c.effects.remove_background)
+            .filter_map(|clip| match clip.source {
+                vv_core::ClipSource::Media(id) => project.media_pool.get(id),
+                _ => None,
+            })
+            .filter(|item| item.compound.is_none())
+            .map(|item| matte_worker::MatteRequest {
+                content_hash: item.content_hash,
+                path: item.path.clone(),
+                frames: item.meta.duration_frames,
+                fps: item.meta.fps.as_f64(),
+                image: item.meta.is_image(),
+            })
+            .collect()
+    }
+
     /// Queues the mattes the clips that remove their background still lack,
     /// and redraws while they arrive.
     fn poll_background_removal(&mut self, ctx: &egui::Context) {
-        if let Some(timeline_id) = self.timeline_id {
-            let project = &self.session.project;
-            for clip in project.timelines[timeline_id]
-                .tracks
-                .iter()
-                .flat_map(|t| t.clips.iter())
-                .filter(|c| c.effects.remove_background)
-            {
-                let vv_core::ClipSource::Media(id) = clip.source else {
-                    continue;
-                };
-                let Some(item) = project.media_pool.get(id).filter(|i| i.compound.is_none()) else {
-                    continue;
-                };
-                self.matte_worker.request(matte_worker::MatteRequest {
-                    content_hash: item.content_hash,
-                    path: item.path.clone(),
-                    frames: item.meta.duration_frames,
-                    fps: item.meta.fps.as_f64(),
-                });
-            }
+        for request in self.matte_requests() {
+            self.matte_worker.request(request);
         }
         let progressed = self.matte_worker.poll();
         if self.matte_worker.is_busy() {

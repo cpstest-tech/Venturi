@@ -815,7 +815,12 @@ fn background_matte(
         return None;
     };
     let item = project.media_pool.get(*media_id)?;
-    vv_media::matte::load_matte(item.content_hash, clip.picture_frame_at(frame))
+    let source_frame = if item.meta.is_image() {
+        0
+    } else {
+        clip.picture_frame_at(frame)
+    };
+    vv_media::matte::load_matte(item.content_hash, source_frame)
 }
 
 /// The timeline frame to take the content from: `timeline_frame`, or that of

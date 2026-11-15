@@ -178,7 +178,7 @@ impl VenturiApp {
         match self.subtitles.section {
             Section::Generate => self.show_generate_section(&mut content),
             Section::Templates => self.show_templates_section(&mut content),
-            Section::Edit => self.show_edit_section(&mut content),
+            Section::Edit => self.show_subtitle_lines(&mut content, None, true),
         }
         ui.allocate_rect(area, egui::Sense::hover());
     }
@@ -473,8 +473,14 @@ mod tests;
 
 impl VenturiApp {
     /// The subtitles as a list, like CapCut's editor: every line with its
-    /// times and text, editable; a click jumps there.
-    fn show_edit_section(&mut self, ui: &mut egui::Ui) {
+    /// times and text, editable; a click jumps there. `focus_ms` (the
+    /// selected subtitle clip) is highlighted and scrolled to once.
+    pub(crate) fn show_subtitle_lines(
+        &mut self,
+        ui: &mut egui::Ui,
+        focus_ms: Option<u32>,
+        own_scroll: bool,
+    ) {
         let Some(timeline_id) = self.timeline_id else {
             ui.weak(t!("subtitles.edit_no_timeline"));
             return;
@@ -513,101 +519,110 @@ impl VenturiApp {
         }
         let mut drag_started = false;
         let mut drag_stopped = false;
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                for line in &lines {
-                    let active =
-                        (line.start_ms..line.end_ms.max(line.start_ms + 1)).contains(&playhead_ms);
-                    let fill = if active {
-                        theme::ACCENT_TRANSLUCENT
-                    } else {
-                        egui::Color32::TRANSPARENT
-                    };
-                    // The row's click sense sits under its fields, which keep theirs.
-                    let row = ui.scope_builder(
-                        egui::UiBuilder::new()
-                            .id_salt(("subtitle_line", line.words.start))
-                            .sense(egui::Sense::click()),
-                        |ui| {
-                            egui::Frame::new()
-                                .fill(fill)
-                                .corner_radius(4.0)
-                                .inner_margin(egui::Margin::same(4))
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        let mut start = f64::from(line.start_ms) / 1000.0;
-                                        let mut end = f64::from(line.end_ms) / 1000.0;
-                                        fn time(value: &mut f64) -> egui::DragValue<'_> {
-                                            egui::DragValue::new(value)
-                                                .speed(0.01)
-                                                .range(0.0..=f64::from(u32::MAX) / 1000.0)
-                                                .fixed_decimals(2)
-                                                .suffix(" s")
-                                        }
-                                        let start_resp = ui.add(time(&mut start));
-                                        ui.label("–");
-                                        let end_resp = ui.add(time(&mut end));
-                                        for resp in [&start_resp, &end_resp] {
-                                            drag_started |= resp.drag_started();
-                                            drag_stopped |= resp.drag_stopped();
-                                        }
-                                        if start_resp.changed() || end_resp.changed() {
-                                            let start_ms = (start * 1000.0).round() as u32;
-                                            let end_ms =
-                                                ((end * 1000.0).round() as u32).max(start_ms + 1);
-                                            action = Some(EditAction::Retime(
-                                                line.words.clone(),
-                                                start_ms,
-                                                end_ms,
-                                            ));
-                                        }
-                                        ui.with_layout(
-                                            egui::Layout::right_to_left(egui::Align::Center),
-                                            |ui| {
-                                                if ui
-                                                    .small_button("✕")
-                                                    .on_hover_text(t!("subtitles.edit_delete"))
-                                                    .clicked()
-                                                {
-                                                    action = Some(EditAction::Text(
-                                                        line.words.clone(),
-                                                        String::new(),
-                                                    ));
-                                                }
-                                            },
-                                        );
-                                    });
-                                    let key = line.words.start;
-                                    let mut text = match &self.subtitles.editing {
-                                        Some((k, t)) if *k == key => t.clone(),
-                                        _ => line.text.clone(),
-                                    };
-                                    let field = ui.add(
-                                        egui::TextEdit::singleline(&mut text)
-                                            .desired_width(f32::INFINITY),
+        let scroll_to_focus = focus_ms.is_some() && focus_ms != self.subtitles.scrolled_to;
+        self.subtitles.scrolled_to = focus_ms;
+        let mut rows = |ui: &mut egui::Ui| {
+            for line in &lines {
+                let span = line.start_ms..line.end_ms.max(line.start_ms + 1);
+                let active = span.contains(&playhead_ms);
+                let focused = focus_ms.is_some_and(|ms| span.contains(&ms));
+                let fill = if focused {
+                    theme::BG_SELECTED
+                } else if active {
+                    theme::ACCENT_TRANSLUCENT
+                } else {
+                    egui::Color32::TRANSPARENT
+                };
+                // The row's click sense sits under its fields, which keep theirs.
+                let row = ui.scope_builder(
+                    egui::UiBuilder::new()
+                        .id_salt(("subtitle_line", line.words.start))
+                        .sense(egui::Sense::click()),
+                    |ui| {
+                        egui::Frame::new()
+                            .fill(fill)
+                            .corner_radius(4.0)
+                            .inner_margin(egui::Margin::same(4))
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    let mut start = f64::from(line.start_ms) / 1000.0;
+                                    let mut end = f64::from(line.end_ms) / 1000.0;
+                                    fn time(value: &mut f64) -> egui::DragValue<'_> {
+                                        egui::DragValue::new(value)
+                                            .speed(0.01)
+                                            .range(0.0..=f64::from(u32::MAX) / 1000.0)
+                                            .fixed_decimals(2)
+                                            .suffix(" s")
+                                    }
+                                    let start_resp = ui.add(time(&mut start));
+                                    ui.label("–");
+                                    let end_resp = ui.add(time(&mut end));
+                                    for resp in [&start_resp, &end_resp] {
+                                        drag_started |= resp.drag_started();
+                                        drag_stopped |= resp.drag_stopped();
+                                    }
+                                    if start_resp.changed() || end_resp.changed() {
+                                        let start_ms = (start * 1000.0).round() as u32;
+                                        let end_ms =
+                                            ((end * 1000.0).round() as u32).max(start_ms + 1);
+                                        action = Some(EditAction::Retime(
+                                            line.words.clone(),
+                                            start_ms,
+                                            end_ms,
+                                        ));
+                                    }
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui
+                                                .small_button("✕")
+                                                .on_hover_text(t!("subtitles.edit_delete"))
+                                                .clicked()
+                                            {
+                                                action = Some(EditAction::Text(
+                                                    line.words.clone(),
+                                                    String::new(),
+                                                ));
+                                            }
+                                        },
                                     );
-                                    if field.changed() || field.gained_focus() {
-                                        self.subtitles.editing = Some((key, text.clone()));
+                                });
+                                let key = line.words.start;
+                                let mut text = match &self.subtitles.editing {
+                                    Some((k, t)) if *k == key => t.clone(),
+                                    _ => line.text.clone(),
+                                };
+                                let field = ui.add(
+                                    egui::TextEdit::singleline(&mut text)
+                                        .desired_width(f32::INFINITY),
+                                );
+                                if field.changed() || field.gained_focus() {
+                                    self.subtitles.editing = Some((key, text.clone()));
+                                }
+                                if field.lost_focus() {
+                                    self.subtitles.editing = None;
+                                    if text != line.text {
+                                        action = Some(EditAction::Text(line.words.clone(), text));
                                     }
-                                    if field.lost_focus() {
-                                        self.subtitles.editing = None;
-                                        if text != line.text {
-                                            action =
-                                                Some(EditAction::Text(line.words.clone(), text));
-                                        }
-                                    }
-                                })
-                        },
-                    );
-                    if row.response.clicked() {
-                        action = Some(EditAction::Seek(line.start_ms));
-                    }
-                    if active && playing {
-                        row.response.scroll_to_me(Some(egui::Align::Center));
-                    }
+                                }
+                            })
+                    },
+                );
+                if row.response.clicked() {
+                    action = Some(EditAction::Seek(line.start_ms));
                 }
-            });
+                if (active && playing) || (focused && scroll_to_focus) {
+                    row.response.scroll_to_me(Some(egui::Align::Center));
+                }
+            }
+        };
+        if own_scroll {
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, rows);
+        } else {
+            rows(ui);
+        }
 
         if drag_started && self.subtitles.drag_group.is_none() {
             self.subtitles.drag_group = Some(self.session.history.begin_group());

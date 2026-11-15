@@ -14,6 +14,7 @@ pub(crate) struct MatteRequest {
     pub path: PathBuf,
     pub frames: FrameIdx,
     pub fps: f64,
+    pub image: bool,
 }
 
 pub(crate) enum MatteState {
@@ -145,6 +146,13 @@ fn spawn(request: MatteRequest) -> Running {
         .name("matting".into())
         .spawn(move || {
             let result = match crate::subtitles::models_dir() {
+                Some(dir) if request.image => vv_matting::matte_image(
+                    &request.path,
+                    request.content_hash,
+                    &dir,
+                    &job_progress,
+                    &job_cancel,
+                ),
                 Some(dir) => vv_matting::matte_media(
                     &request.path,
                     request.content_hash,

@@ -709,6 +709,10 @@ props.tab_adjust:
   en: "Adjust"
   it: "Regola"
 
+props.tab_subtitles:
+  en: "Subtitles"
+  it: "Sottotitoli"
+
 props.sub_basic:
   en: "Basic"
   it: "Base"
@@ -1049,17 +1053,17 @@ props.key_spill:
   en: "Spill removal"
   it: "Rimozione riflessi"
 
-props.cutout_video_only:
-  en: "Select a video clip to cut its subject out."
-  it: "Seleziona una clip video per scontornarne il soggetto."
+props.cutout_no_media:
+  en: "Select an image or a video clip to cut its subject out."
+  it: "Seleziona un'immagine o una clip video per scontornarne il soggetto."
 
 props.cutout_toggle:
   en: "Remove background"
   it: "Rimuovi sfondo"
 
 props.cutout_hint:
-  en: "Finds the people in the video and makes everything else transparent. Analysed once per video, in the background."
-  it: "Trova le persone nel video e rende trasparente il resto. Il video viene analizzato una volta, in background."
+  en: "Keeps the main subject (an object, a logo, an app icon; the people in a video) and makes everything else transparent. Analysed once, in the background."
+  it: "Tiene il soggetto principale (un oggetto, un logo, l'icona di un'app; le persone in un video) e rende trasparente il resto. Analizzato una volta, in background."
 
 props.cutout_ready:
   en: "Background removed."
@@ -1072,6 +1076,10 @@ props.cutout_download:
 props.cutout_running:
   en: "Analysing the frames…"
   it: "Analisi dei fotogrammi…"
+
+props.cutout_running_image:
+  en: "Analysing the image…"
+  it: "Analisi dell'immagine…"
 
 props.cutout_queued:
   en: "Waiting…"

@@ -1,8 +1,8 @@
-//! Automatic background removal: Robust Video Matting (MobileNetV3) on the
-//! CPU through tract, writing one matte per media frame into
-//! `vv_media::matte`. The model keeps a recurrent state from frame to frame,
+//! Automatic background removal on the CPU through tract, writing one matte
+//! per media frame into `vv_media::matte`. Videos go through Robust Video
+//! Matting (MobileNetV3), which keeps a recurrent state from frame to frame,
 //! so the clip is cut into stretches matted in parallel, each warmed up on a
-//! few frames before its start.
+//! few frames before its start. Still images go through IS-Net (`image`).
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -12,10 +12,34 @@ use tract_onnx::prelude::*;
 use vv_core::FrameIdx;
 use vv_media::{ColorMatrix, Decoder, FrameYuv420, matte};
 
-const MODEL_FILE: &str = "rvm_mobilenetv3_fp32.onnx";
-const MODEL_URL: &str = "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx";
-const MODEL_BYTES: u64 = 14_975_696;
-pub const MODEL_MB: u32 = 15;
+mod image;
+
+pub use image::matte_image;
+
+pub struct ModelFile {
+    name: &'static str,
+    url: &'static str,
+    bytes: u64,
+}
+
+impl ModelFile {
+    pub fn size_mb(&self) -> u32 {
+        self.bytes.div_ceil(1_000_000) as u32
+    }
+}
+
+pub const VIDEO_MODEL: ModelFile = ModelFile {
+    name: "rvm_mobilenetv3_fp32.onnx",
+    url: "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx",
+    bytes: 14_975_696,
+};
+
+/// RVM only knows people: objects, logos and icons need a salient-object model.
+pub const IMAGE_MODEL: ModelFile = ModelFile {
+    name: "isnet-general-use.onnx",
+    url: "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx",
+    bytes: 178_648_008,
+};
 /// Longest side the frames are matted at: the model refines the edges at
 /// this size from an encoder pass at half of it.
 const MATTE_SIDE: u32 = 960;
@@ -87,27 +111,28 @@ impl Progress {
     }
 }
 
-pub fn model_present(dir: &Path) -> bool {
-    std::fs::metadata(dir.join(MODEL_FILE)).is_ok_and(|m| m.len() == MODEL_BYTES)
+pub fn model_present(dir: &Path, model: &ModelFile) -> bool {
+    std::fs::metadata(dir.join(model.name)).is_ok_and(|m| m.len() == model.bytes)
 }
 
 /// Downloads the model into `dir` unless it is already there, under a
 /// temporary name until complete.
 pub fn ensure_model(
     dir: &Path,
+    model: &ModelFile,
     progress: &Progress,
     cancel: &AtomicBool,
 ) -> Result<PathBuf, Error> {
-    let path = dir.join(MODEL_FILE);
-    if model_present(dir) {
+    let path = dir.join(model.name);
+    if model_present(dir, model) {
         return Ok(path);
     }
-    progress.enter(Stage::Download, MODEL_BYTES);
+    progress.enter(Stage::Download, model.bytes);
     let fail = |e: &dyn std::fmt::Display| Error::Download(e.to_string());
     std::fs::create_dir_all(dir).map_err(|e| fail(&e))?;
     let part = path.with_extension("part");
     let result = (|| {
-        let mut response = ureq::get(MODEL_URL).call().map_err(|e| fail(&e))?;
+        let mut response = ureq::get(model.url).call().map_err(|e| fail(&e))?;
         let mut reader = response.body_mut().as_reader();
         let mut file = std::fs::File::create(&part).map_err(|e| fail(&e))?;
         let mut buffer = vec![0u8; 64 * 1024];
@@ -125,9 +150,10 @@ pub fn ensure_model(
             progress.advance(read as u64);
         }
         file.sync_all().map_err(|e| fail(&e))?;
-        if done != MODEL_BYTES {
+        if done != model.bytes {
             return Err(Error::Download(format!(
-                "incomplete download ({done} of {MODEL_BYTES} bytes)"
+                "incomplete download ({done} of {} bytes)",
+                model.bytes
             )));
         }
         Ok(())
@@ -197,42 +223,70 @@ fn plan(model_path: &Path, input: (usize, usize)) -> Result<Plan, Error> {
     Ok(runnable)
 }
 
+/// RGB in 0..1 of the pixels of a YUV frame.
+struct RgbReader<'a> {
+    frame: &'a FrameYuv420,
+    kr: f32,
+    kb: f32,
+    y_scale: f32,
+    y_off: f32,
+    c_scale: f32,
+}
+
+impl<'a> RgbReader<'a> {
+    fn new(frame: &'a FrameYuv420) -> Self {
+        let (kr, kb) = match frame.matrix {
+            ColorMatrix::Bt709 => (0.2126f32, 0.0722f32),
+            ColorMatrix::Bt2020 => (0.2627, 0.0593),
+            _ => (0.299, 0.114),
+        };
+        let (y_scale, y_off, c_scale) = if frame.full_range {
+            (1.0 / 255.0, 0.0, 1.0 / 255.0)
+        } else {
+            (1.0 / 219.0, 16.0, 1.0 / 224.0)
+        };
+        Self {
+            frame,
+            kr,
+            kb,
+            y_scale,
+            y_off,
+            c_scale,
+        }
+    }
+
+    fn at(&self, x: usize, y: usize) -> [f32; 3] {
+        let frame = self.frame;
+        let luma = (f32::from(frame.y[y * frame.width as usize + x]) - self.y_off) * self.y_scale;
+        let (u, v) = frame.chroma_at(
+            (x / 2).min(frame.chroma_width as usize - 1),
+            (y / 2).min(frame.chroma_height as usize - 1),
+        );
+        let cb = (f32::from(u) - 128.0) * self.c_scale;
+        let cr = (f32::from(v) - 128.0) * self.c_scale;
+        let r = luma + 2.0 * (1.0 - self.kr) * cr;
+        let b = luma + 2.0 * (1.0 - self.kb) * cb;
+        let g = (luma - self.kr * r - self.kb * b) / (1.0 - self.kr - self.kb);
+        [r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0)]
+    }
+}
+
 /// RGB in 0..1, planar, `frame` copied into the top-left of `input` and its
 /// last row and column repeated over the padding.
 fn frame_tensor(frame: &FrameYuv420, input: (usize, usize)) -> Tensor {
     let (pw, ph) = input;
     let (w, h) = (frame.width as usize, frame.height as usize);
     let mut data = vec![0f32; 3 * pw * ph];
-    let (kr, kb) = match frame.matrix {
-        ColorMatrix::Bt709 => (0.2126f32, 0.0722f32),
-        ColorMatrix::Bt2020 => (0.2627, 0.0593),
-        _ => (0.299, 0.114),
-    };
-    let kg = 1.0 - kr - kb;
-    let (y_scale, y_off, c_scale) = if frame.full_range {
-        (1.0 / 255.0, 0.0, 1.0 / 255.0)
-    } else {
-        (1.0 / 219.0, 16.0, 1.0 / 224.0)
-    };
+    let rgb = RgbReader::new(frame);
     let plane = pw * ph;
     for py in 0..ph {
         let y = py.min(h - 1);
         for px in 0..pw {
-            let x = px.min(w - 1);
-            let luma = (f32::from(frame.y[y * w + x]) - y_off) * y_scale;
-            let (u, v) = frame.chroma_at(
-                (x / 2).min(frame.chroma_width as usize - 1),
-                (y / 2).min(frame.chroma_height as usize - 1),
-            );
-            let cb = (f32::from(u) - 128.0) * c_scale;
-            let cr = (f32::from(v) - 128.0) * c_scale;
-            let r = luma + 2.0 * (1.0 - kr) * cr;
-            let b = luma + 2.0 * (1.0 - kb) * cb;
-            let g = (luma - kr * r - kb * b) / kg;
+            let [r, g, b] = rgb.at(px.min(w - 1), y);
             let i = py * pw + px;
-            data[i] = r.clamp(0.0, 1.0);
-            data[plane + i] = g.clamp(0.0, 1.0);
-            data[2 * plane + i] = b.clamp(0.0, 1.0);
+            data[i] = r;
+            data[plane + i] = g;
+            data[2 * plane + i] = b;
         }
     }
     tract_ndarray::Array4::from_shape_vec((1, 3, ph, pw), data)
@@ -310,7 +364,7 @@ pub fn matte_media(
     if matte::mattes_complete(content_hash) {
         return Ok(());
     }
-    let model_path = ensure_model(models_dir, progress, cancel)?;
+    let model_path = ensure_model(models_dir, &VIDEO_MODEL, progress, cancel)?;
     let media = |e: vv_media::MediaError| Error::Media(e.to_string());
     let mut probe = Decoder::open(path).map_err(media)?;
     let size = matte_size(probe.width(), probe.height());

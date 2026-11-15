@@ -1767,7 +1767,18 @@ impl VenturiApp {
                             }
                             self.show_asset_effects_section(ui, element, &mut pending_effects);
                         } else if selected_count > 0 {
-                            properties_tabs::tab_bar(ui, &mut self.clip_tab);
+                            let subtitle_ms = video_targets.first().and_then(|t| self.subtitle_clip_ms(t));
+                            // Opening a subtitle shows the list; leaving them falls back to Video.
+                            let on_subtitle = subtitle_ms.is_some();
+                            if on_subtitle != self.subtitles.panel_on_subtitle {
+                                self.subtitles.panel_on_subtitle = on_subtitle;
+                                if on_subtitle {
+                                    self.clip_tab = properties_tabs::ClipTab::Subtitles;
+                                } else if self.clip_tab == properties_tabs::ClipTab::Subtitles {
+                                    self.clip_tab = properties_tabs::ClipTab::Video;
+                                }
+                            }
+                            properties_tabs::tab_bar(ui, &mut self.clip_tab, on_subtitle);
                             ui.separator();
                             self.properties_tab = if self.clip_tab == properties_tabs::ClipTab::Audio {
                                 PropertiesTab::Audio
@@ -1817,6 +1828,7 @@ impl VenturiApp {
                                     let show_mask = tab == properties_tabs::ClipTab::Video
                                         && sub == properties_tabs::VideoSubTab::Mask;
                                     match tab {
+                                        properties_tabs::ClipTab::Subtitles => self.show_subtitle_lines(ui, subtitle_ms, false),
                                         properties_tabs::ClipTab::Speed => self.show_speed_tab(ui, targets),
                                         properties_tabs::ClipTab::Animation => match info.title.clone() {
                                             Some(before) => {

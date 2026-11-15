@@ -16,6 +16,8 @@ pub(crate) enum ClipTab {
     Speed,
     Animation,
     Adjust,
+    /// Only for a clip of the subtitle track: the whole list of lines.
+    Subtitles,
 }
 
 impl ClipTab {
@@ -34,6 +36,7 @@ impl ClipTab {
             ClipTab::Speed => t!("props.tab_speed"),
             ClipTab::Animation => t!("props.tab_animation"),
             ClipTab::Adjust => t!("props.tab_adjust"),
+            ClipTab::Subtitles => t!("props.tab_subtitles"),
         }
     }
 }
@@ -65,10 +68,11 @@ impl VideoSubTab {
 }
 
 /// Text tabs, no underline: the active one is cyan.
-pub(crate) fn tab_bar(ui: &mut egui::Ui, current: &mut ClipTab) {
-    ui.horizontal(|ui| {
+pub(crate) fn tab_bar(ui: &mut egui::Ui, current: &mut ClipTab, subtitles: bool) {
+    let subtitle_tab = subtitles.then_some(ClipTab::Subtitles);
+    ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 24.0;
-        for tab in ClipTab::ALL {
+        for tab in subtitle_tab.into_iter().chain(ClipTab::ALL) {
             let color = if *current == tab {
                 theme::ACCENT
             } else {
@@ -218,8 +222,7 @@ impl VenturiApp {
                 return None;
             };
             let item = self.session.project.media_pool.get(id)?;
-            (item.meta.has_video && !item.meta.is_image() && item.compound.is_none())
-                .then_some((clip, item))
+            (item.meta.has_video && item.compound.is_none()).then_some((clip, item))
         };
         let media: Vec<_> = targets
             .iter()
@@ -231,7 +234,7 @@ impl VenturiApp {
         if open {
             match media.first() {
                 None => {
-                    ui.weak(t!("props.cutout_video_only"));
+                    ui.weak(t!("props.cutout_no_media"));
                 }
                 Some(&(_, (clip, item))) => {
                     let mut on = clip.effects.remove_background;
@@ -251,7 +254,7 @@ impl VenturiApp {
                     }
                     if on {
                         let hash = item.content_hash;
-                        self.cutout_status(ui, hash);
+                        self.cutout_status(ui, hash, item.meta.is_image());
                     }
                 }
             }
@@ -335,7 +338,7 @@ impl VenturiApp {
         }
     }
 
-    fn cutout_status(&mut self, ui: &mut egui::Ui, hash: u64) {
+    fn cutout_status(&mut self, ui: &mut egui::Ui, hash: u64, image: bool) {
         use crate::matte_worker::MatteState;
         if vv_media::matte::mattes_complete(hash) {
             ui.weak(t!("props.cutout_ready"));
@@ -345,12 +348,21 @@ impl VenturiApp {
             Some(MatteState::Running(progress)) => {
                 let label = match progress.stage() {
                     vv_matting::Stage::Download => {
-                        t!("props.cutout_download", mb = vv_matting::MODEL_MB)
+                        let model = if image {
+                            &vv_matting::IMAGE_MODEL
+                        } else {
+                            &vv_matting::VIDEO_MODEL
+                        };
+                        t!("props.cutout_download", mb = model.size_mb())
                     }
+                    _ if image => t!("props.cutout_running_image"),
                     _ => t!("props.cutout_running"),
                 };
                 ui.label(label);
-                ui.add(egui::ProgressBar::new(progress.fraction()).show_percentage());
+                // A single image has no steps to count.
+                let pulse = image && progress.stage() != vv_matting::Stage::Download;
+                let bar = egui::ProgressBar::new(progress.fraction()).animate(pulse);
+                ui.add(if pulse { bar } else { bar.show_percentage() });
                 if ui.small_button(t!("common.cancel")).clicked() {
                     self.matte_worker.cancel(hash);
                 }
@@ -599,6 +611,18 @@ impl VenturiApp {
 
     /// The "apply to all subtitles" switch, for a subtitle clip; whether the
     /// look is edited together.
+    /// Middle of `clip` in ms, if it is a text clip of the subtitle track.
+    pub(crate) fn subtitle_clip_ms(&self, clip: &PanelTarget) -> Option<u32> {
+        let timeline = self.session.project.timelines.get(clip.timeline)?;
+        let track = timeline
+            .tracks
+            .get(clip.track_index)
+            .filter(|t| t.subtitles)?;
+        let c = track.clip(clip.clip_id).filter(|_| clip.is_text)?;
+        let middle = c.timeline_start as f64 + c.timeline_len as f64 / 2.0;
+        Some((middle / timeline.fps.as_f64().max(1e-9) * 1000.0).round() as u32)
+    }
+
     pub(crate) fn show_subtitle_link(
         &self,
         ui: &mut egui::Ui,
