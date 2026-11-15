@@ -85,7 +85,8 @@ fn generate_waveform_produces_normalized_peaks_and_caches_to_disk() {
     let wf = generate_waveform(&path, content_hash, 0, 500)
         .expect("waveform generation failed")
         .expect("audio expected");
-    assert_eq!(wf.peaks.len(), 500);
+    // The bins follow the decoded audio: AAC adds a few priming samples.
+    assert!((500..510).contains(&wf.peaks.len()), "{}", wf.peaks.len());
     assert!(waveform_exists(content_hash, 0));
 
     // A 440Hz sine is not silent: the global (normalized) peak must
@@ -305,4 +306,15 @@ fn generate_waveform_selects_the_requested_stream_index() {
             .is_none(),
         "no audio stream at index 2"
     );
+}
+
+#[test]
+fn a_container_that_understates_the_duration_does_not_flatten_the_tail() {
+    let mut bins = PeakBins::new(1.0, 100, 10);
+    // Three seconds of audio where one was announced.
+    bins.push(&vec![0.5; 300], 1);
+    let wf = bins.finish();
+    assert_eq!(wf.peaks.len(), 30);
+    assert!(wf.peaks.iter().all(|&p| p == 1.0));
+    assert!((wf.audio_duration_secs - 3.0).abs() < 1e-9);
 }

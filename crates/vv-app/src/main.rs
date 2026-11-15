@@ -971,7 +971,9 @@ impl VenturiApp {
     /// With "selection follows playhead" on, it selects the video clip under
     /// the playhead and its group (nothing on a gap).
     fn sync_selection_to_playhead(&mut self) {
-        if !self.selection_follows_playhead {
+        // During playback the selection is the user's: losing a selected
+        // audio clip because the video under the playhead changed is a trap.
+        if !self.selection_follows_playhead || self.is_timeline_playing() {
             return;
         }
         let Some((track_index, clip_id)) = self.active_video_clip_at(self.timeline_state.playhead)
@@ -3108,12 +3110,17 @@ impl VenturiApp {
             }
             return;
         }
+        let content = info
+            .title
+            .as_ref()
+            .and_then(|title| title_content_box(title, info.timeline_size));
         let Some(new) = viewer_overlay::show(
             ui,
             rect,
             area,
             info.timeline_size,
             info.source_size,
+            content,
             &info.transform,
             &mut self.overlay_drag,
         ) else {
@@ -4426,18 +4433,7 @@ impl VenturiApp {
             if user_scrubbed_playhead {
                 self.play_scrub_audio();
             }
-            // The selection follows the playhead moved by playback too, but only
-            // if it really moved: it does not touch a selection made in this frame.
-            let playhead_before_playback = self.timeline_state.playhead;
-            let clip_before_playback = self.active_video_clip_at(playhead_before_playback);
             self.drive_playback();
-            // Only on entering another clip: syncing every frame would
-            // overwrite a selection made by hand during playback.
-            if self.timeline_state.playhead != playhead_before_playback
-                && self.active_video_clip_at(self.timeline_state.playhead) != clip_before_playback
-            {
-                self.sync_selection_to_playhead();
-            }
         }
         self.drive_browse_playback();
         self.drive_take();
@@ -4506,7 +4502,7 @@ impl VenturiApp {
         let mut overlay_effects: Vec<BoxedCommand> = Vec::new();
         let mut transport_action = self
             .show_block(ui, &rects, Block::Player, |app, ui| {
-                app.show_player_block(ui, &video_targets, &mut overlay_effects)
+                app.show_player_block(ui, &panel_targets, &mut overlay_effects)
             })
             .unwrap_or_default();
 
@@ -5282,3 +5278,28 @@ mod tests;
 #[cfg(test)]
 #[path = "tests/main_export.rs"]
 mod export_tests;
+
+/// The drawn part of a title, as `viewer_overlay::show` takes it: the union
+/// of its layers (text, outline, shadow, background), from the same cached
+/// raster the viewer shows.
+fn title_content_box(title: &vv_core::TitleParams, timeline_size: (u32, u32)) -> Option<[f32; 4]> {
+    let render = vv_render::text::render_title(title, timeline_size, timeline_size);
+    let (half_w, half_h) = (timeline_size.0 as f32 / 2.0, timeline_size.1 as f32 / 2.0);
+    render
+        .masks()
+        .iter()
+        .filter(|(m, _)| m.mask.data.iter().any(|&c| c > 0))
+        .map(|(m, _)| {
+            let (x, y) = (m.x as f32, m.y as f32);
+            let (w, h) = (m.mask.width as f32, m.mask.height as f32);
+            [x - half_w, x + w - half_w, half_h - y - h, half_h - y]
+        })
+        .reduce(|a, b| {
+            [
+                a[0].min(b[0]),
+                a[1].max(b[1]),
+                a[2].min(b[2]),
+                a[3].max(b[3]),
+            ]
+        })
+}

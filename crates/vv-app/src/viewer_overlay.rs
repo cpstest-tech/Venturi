@@ -249,18 +249,30 @@ pub(crate) fn clockwise_turn(from: [f32; 2], to: [f32; 2]) -> f32 {
 /// timeline frame) and handles the dragging, which can start anywhere in
 /// `area`: the handles can fall outside the frame. Returns the new transform
 /// if the user changed it in this frame.
+/// `content`: the part of the clip that has something drawn, [left, right,
+/// bottom, top] in clip pixels from its centre, Y up. A title covers the
+/// whole frame, so its box would otherwise be the whole screen; such a box
+/// has no crop handles.
 pub fn show(
     ui: &egui::Ui,
     frame_rect: egui::Rect,
     area: egui::Rect,
     timeline_size: (u32, u32),
     source_size: (u32, u32),
+    content: Option<[f32; 4]>,
     transform: &Transform,
     drag: &mut Option<OverlayDrag>,
 ) -> Option<Transform> {
     let scale = frame_rect.width() / timeline_size.0.max(1) as f32;
     let to_screen = |p: [f32; 2]| frame_rect.center() + egui::vec2(p[0] * scale, -p[1] * scale);
-    let clip_box = ClipBox::new(timeline_size, source_size, transform.crop, transform.flip);
+    let make_box = |crop, flip| {
+        let mut b = ClipBox::new(timeline_size, source_size, crop, flip);
+        if let Some([left, right, bottom, top]) = content {
+            (b.left, b.right, b.bottom, b.top) = (left, right, bottom, top);
+        }
+        b
+    };
+    let clip_box = make_box(transform.crop, transform.flip);
 
     let screen_of = |sx, sy| to_screen(clip_to_frame(transform, clip_box.point(sx, sy)));
     let pivot = to_screen([
@@ -274,8 +286,14 @@ pub fn show(
     let scale_handles = [(-1.0, 1.0), (1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)]
         .map(|(sx, sy)| (Handle::Scale(sx, sy), screen_of(sx, sy)));
     // Bar `i` lies along the side from `corners[i]` to `corners[i + 1]`.
-    let crop_bars =
-        [(0.0, 1.0, 0), (1.0, 0.0, 1), (0.0, -1.0, 2), (-1.0, 0.0, 3)].map(|(sx, sy, i)| {
+    let crop_sides: &[(f32, f32, usize)] = if content.is_some() {
+        &[]
+    } else {
+        &[(0.0, 1.0, 0), (1.0, 0.0, 1), (0.0, -1.0, 2), (-1.0, 0.0, 3)]
+    };
+    let crop_bars: Vec<_> = crop_sides
+        .iter()
+        .map(|&(sx, sy, i)| {
             let along = (corners[(i + 1) % 4] - corners[i]).normalized();
             let along = if along.is_finite() {
                 along
@@ -287,7 +305,8 @@ pub fn show(
                 Handle::Crop(sx, sy),
                 [center - along * CROP_BAR.0, center + along * CROP_BAR.0],
             )
-        });
+        })
+        .collect();
 
     let grab = HANDLE_RADIUS + 4.0;
     let handle_at = |pos: egui::Pos2| {
@@ -354,7 +373,7 @@ pub fn show(
                 shift,
             );
             if d.handle == Handle::Move {
-                let start_box = ClipBox::new(timeline_size, source_size, t.crop, t.flip);
+                let start_box = make_box(t.crop, t.flip);
                 guides = snap_to_center(&mut t, &start_box, CENTER_SNAP / scale);
             }
             t

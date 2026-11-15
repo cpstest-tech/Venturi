@@ -153,33 +153,44 @@ fn audio_stream_timing(
         .collect()
 }
 
-/// Peaks under construction for one stream.
+/// Peaks under construction for one stream. The bins grow with the decoded
+/// audio and the duration is the decoded one: a container that misreports
+/// it (VBR mp3, webm, a file still being written) would otherwise leave
+/// part of the waveform flat.
 struct PeakBins {
     peaks: Vec<f32>,
     /// Fractional: truncating it would accumulate lag along the file.
     samples_per_bin: f64,
     /// Audio frames (one sample per channel) seen so far.
     frames_seen: usize,
-    audio_duration_secs: f64,
+    sample_rate: u32,
+    estimated_secs: f64,
 }
 
 impl PeakBins {
-    fn new(audio_duration_secs: f64, sample_rate: u32, num_peaks: usize) -> Self {
-        let num_peaks = num_peaks.max(1);
+    fn new(estimated_secs: f64, sample_rate: u32, num_peaks: usize) -> Self {
+        let samples_per_bin = if estimated_secs > 0.0 {
+            estimated_secs * f64::from(sample_rate) / num_peaks.max(1) as f64
+        } else {
+            f64::from(sample_rate) / PEAKS_PER_SECOND
+        };
         Self {
-            peaks: vec![0.0; num_peaks],
-            samples_per_bin: (audio_duration_secs * sample_rate as f64 / num_peaks as f64).max(1.0),
+            peaks: Vec::new(),
+            samples_per_bin: samples_per_bin.max(1.0),
             frames_seen: 0,
-            audio_duration_secs,
+            sample_rate,
+            estimated_secs,
         }
     }
 
     /// `chunk` interleaved: the bin advances one frame at a time, not one
     /// sample, or multichannel audio would end up squeezed into the first bins.
     fn push(&mut self, chunk: &[f32], channels: usize) {
-        let last = self.peaks.len() - 1;
         for frame in chunk.chunks_exact(channels.max(1)) {
-            let bin = ((self.frames_seen as f64 / self.samples_per_bin) as usize).min(last);
+            let bin = (self.frames_seen as f64 / self.samples_per_bin) as usize;
+            if bin >= self.peaks.len() {
+                self.peaks.resize(bin + 1, 0.0);
+            }
             let peak = frame.iter().fold(0.0f32, |m, s| m.max(s.abs()));
             self.peaks[bin] = self.peaks[bin].max(peak);
             self.frames_seen += 1;
@@ -195,9 +206,17 @@ impl PeakBins {
                 *p /= global_peak;
             }
         }
+        let audio_duration_secs = if self.frames_seen > 0 && self.sample_rate > 0 {
+            self.frames_seen as f64 / f64::from(self.sample_rate)
+        } else {
+            self.estimated_secs
+        };
+        if self.peaks.is_empty() {
+            self.peaks.push(0.0);
+        }
         Waveform {
             peaks: self.peaks,
-            audio_duration_secs: self.audio_duration_secs,
+            audio_duration_secs,
         }
     }
 }
@@ -215,7 +234,8 @@ pub fn load_waveform(content_hash: u64, stream_index: usize) -> Option<Waveform>
 const PEAKS_MAGIC: &[u8; 4] = b"vbwf";
 // v3: audio duration from the stream time_base.
 // v4: bins of fractional samples (truncating them made the waveform slide).
-const PEAKS_VERSION: u32 = 4;
+// v5: bins and duration from the decoded audio, not the container.
+const PEAKS_VERSION: u32 = 5;
 
 fn write_peaks_file(
     path: &Path,
