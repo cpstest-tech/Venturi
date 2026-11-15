@@ -9,7 +9,27 @@ fn git(args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
+// ggml-metal uses `@available`, whose helper lives in clang's runtime
+// library and is not linked by default.
+fn link_clang_runtime() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
+        return;
+    }
+    let Some(dir) = Command::new("clang")
+        .arg("--print-resource-dir")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+    else {
+        return;
+    };
+    println!("cargo:rustc-link-search={dir}/lib/darwin");
+    println!("cargo:rustc-link-lib=static=clang_rt.osx");
+}
+
 fn main() {
+    link_clang_runtime();
     let version = git(&["describe", "--tags", "--exact-match", "HEAD"])
         .or_else(|| git(&["rev-parse", "--short", "HEAD"]))
         .unwrap_or_else(|| "unknown".into());

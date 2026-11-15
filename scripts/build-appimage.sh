@@ -92,10 +92,11 @@ for so in $(patchelf --print-needed "$APPDIR/usr/bin/tandem" "$APPDIR"/usr/lib/l
 done
 
 # The GPU drivers belong to the system: FFmpeg must load them with dlopen,
-# or the AppImage would not start where they are missing.
+# or the AppImage would not start where they are missing. libvulkan is the
+# generic loader that whisper links; the drivers behind it stay on the system.
 for so in $(patchelf --print-needed "$APPDIR/usr/bin/tandem" "$APPDIR"/usr/lib/*.so.*); do
     case "$so" in
-        libva*|libcuda*|libnvcuvid*|libvulkan*|libdrm*)
+        libva*|libcuda*|libnvcuvid*|libdrm*)
             echo "GPU driver library linked instead of loaded at run time: $so" >&2
             exit 1 ;;
     esac
