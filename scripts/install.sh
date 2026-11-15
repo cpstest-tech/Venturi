@@ -46,13 +46,13 @@ refresh_caches() {
 }
 
 if [[ $VERSION == --uninstall ]]; then
-    rm -f -- "$INSTALL_DIR/venturi" "$INSTALL_DIR/vv-app" "$DATA_DIR/applications/venturi.desktop" \
-        "$DATA_DIR/mime/packages/venturi.xml"
-    for icon in "$DATA_DIR"/icons/hicolor/*/apps/venturi.{png,svg}; do
+    rm -f -- "$INSTALL_DIR/tandem" "$INSTALL_DIR/venturi" "$INSTALL_DIR/vv-app" "$DATA_DIR/applications/tandem.desktop" \
+        "$DATA_DIR/mime/packages/tandem.xml"
+    for icon in "$DATA_DIR"/icons/hicolor/*/apps/tandem.{png,svg}; do
         rm -f -- "$icon"
     done
     refresh_caches
-    echo "Removed Venturi from $INSTALL_DIR and $DATA_DIR."
+    echo "Removed Tandem from $INSTALL_DIR and $DATA_DIR."
     exit 0
 fi
 
@@ -71,7 +71,7 @@ else
 fi
 
 mkdir -p "$INSTALL_DIR" "$DATA_DIR/applications"
-STAGING="$(mktemp -d "$INSTALL_DIR/.venturi-install.XXXXXX")"
+STAGING="$(mktemp -d "$INSTALL_DIR/.tandem-install.XXXXXX")"
 DESKTOP_TMP=
 cleanup() {
     rm -rf -- "$STAGING"
@@ -81,48 +81,48 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-echo "Downloading Venturi ($VERSION, $ARCH)..."
+echo "Downloading Tandem ($VERSION, $ARCH)..."
 curl --fail --location --show-error --silent --retry 3 \
     --proto '=https' --proto-redir '=https' \
-    --output "$STAGING/venturi" "$BASE_URL/Venturi-$ARCH.AppImage"
-[[ -s "$STAGING/venturi" ]] || fail "The downloaded AppImage is empty."
+    --output "$STAGING/tandem" "$BASE_URL/Tandem-$ARCH.AppImage"
+[[ -s "$STAGING/tandem" ]] || fail "The downloaded AppImage is empty."
 curl --fail --location --show-error --silent --retry 3 \
     --proto '=https' --proto-redir '=https' \
-    --output "$STAGING/desktop.tar.gz" "$BASE_URL/venturi-desktop.tar.gz" \
+    --output "$STAGING/desktop.tar.gz" "$BASE_URL/tandem-desktop.tar.gz" \
     || fail "This release has no desktop integration package; it predates the installer."
 tar -xzf "$STAGING/desktop.tar.gz" -C "$STAGING" --no-same-owner
-[[ -s $STAGING/packaging/appimage/venturi.desktop && -s $STAGING/packaging/venturi-mime.xml \
+[[ -s $STAGING/packaging/appimage/tandem.desktop && -s $STAGING/packaging/tandem-mime.xml \
     && -s $STAGING/scripts/linux-desktop.sh ]] \
     || fail "The desktop integration package is incomplete."
-chmod 755 "$STAGING/venturi"
+chmod 755 "$STAGING/tandem"
 
 # shellcheck source=scripts/linux-desktop.sh
 source "$STAGING/scripts/linux-desktop.sh"
-DESKTOP_TMP="$(mktemp "$DATA_DIR/applications/.venturi.XXXXXX")"
-write_desktop_entry "$STAGING/packaging/appimage/venturi.desktop" "$INSTALL_DIR/venturi" > "$DESKTOP_TMP"
-install -Dm644 "$STAGING/packaging/venturi-mime.xml" "$DATA_DIR/mime/packages/venturi.xml"
-for icon in "$STAGING"/media/icons/linux/hicolor/*/apps/venturi-video.*; do
+DESKTOP_TMP="$(mktemp "$DATA_DIR/applications/.tandem.XXXXXX")"
+write_desktop_entry "$STAGING/packaging/appimage/tandem.desktop" "$INSTALL_DIR/tandem" > "$DESKTOP_TMP"
+install -Dm644 "$STAGING/packaging/tandem-mime.xml" "$DATA_DIR/mime/packages/tandem.xml"
+for icon in "$STAGING"/media/icons/linux/hicolor/*/apps/tandem.*; do
     size="$(basename "$(dirname "$(dirname "$icon")")")"
-    install -Dm644 "$icon" "$DATA_DIR/icons/hicolor/$size/apps/venturi.${icon##*.}"
+    install -Dm644 "$icon" "$DATA_DIR/icons/hicolor/$size/apps/tandem.${icon##*.}"
 done
-mv -fT -- "$STAGING/venturi" "$INSTALL_DIR/venturi"
+mv -fT -- "$STAGING/tandem" "$INSTALL_DIR/tandem"
 LEGACY_REPLACED=false
 if [[ -e $INSTALL_DIR/vv-app ]]; then
     rm -f -- "$INSTALL_DIR/vv-app"
     LEGACY_REPLACED=true
 fi
 chmod 644 "$DESKTOP_TMP"
-mv -fT -- "$DESKTOP_TMP" "$DATA_DIR/applications/venturi.desktop"
+mv -fT -- "$DESKTOP_TMP" "$DATA_DIR/applications/tandem.desktop"
 refresh_caches
 
-echo "Installed $INSTALL_DIR/venturi. Launch Venturi from your application menu."
+echo "Installed $INSTALL_DIR/tandem. Launch Tandem from your application menu."
 case ":$PATH:" in
-    *":$INSTALL_DIR:"*) echo "You can also run: venturi" ;;
-    *) echo "Add $INSTALL_DIR to PATH to run venturi from the terminal." ;;
+    *":$INSTALL_DIR:"*) echo "You can also run: tandem" ;;
+    *) echo "Add $INSTALL_DIR to PATH to run tandem from the terminal." ;;
 esac
 
-echo "AppImages may require FUSE 2. Without it, run: venturi --appimage-extract-and-run"
+echo "AppImages may require FUSE 2. Without it, run: tandem --appimage-extract-and-run"
 if $LEGACY_REPLACED; then
-    echo "The command is now venturi and $INSTALL_DIR/vv-app was removed."
-    echo "Point MCP configs at \"$INSTALL_DIR/venturi mcp\" (see docs/MCP.md)."
+    echo "The command is now tandem and $INSTALL_DIR/vv-app was removed."
+    echo "Point MCP configs at \"$INSTALL_DIR/tandem mcp\" (see docs/MCP.md)."
 fi

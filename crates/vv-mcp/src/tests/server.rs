@@ -33,9 +33,10 @@ async fn tools_are_listed_with_schemas_and_errors_are_tool_errors() {
     let client = Client.serve(client_io).await.unwrap();
 
     let info = client.peer_info().unwrap();
-    assert_eq!(info.server_info.as_ref().unwrap().name, "venturi");
+    assert_eq!(info.server_info.as_ref().unwrap().name, "tandem");
     let tools = client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 40);
+    assert_eq!(tools.len(), 64);
+    assert!(tools.iter().any(|tool| tool.name == "set_clip_speed"));
     let delete_ranges = tools.iter().find(|t| t.name == "delete_ranges").unwrap();
     assert!(delete_ranges.input_schema.contains_key("properties"));
 

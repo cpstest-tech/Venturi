@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installs vv-app, the .desktop file, the icons and the .vvproj MIME type into
+# Installs Tandem, the .desktop file, the icons and the .tandem MIME type into
 # the given prefix.
 #
 # Usage: scripts/install-linux.sh [--uninstall] [--prefix DIR]
@@ -22,8 +22,8 @@ if [ -z "$PREFIX" ]; then
     if [ "$(id -u)" -eq 0 ]; then PREFIX=/usr/local; else PREFIX="$HOME/.local"; fi
 fi
 
-BIN="$PREFIX/bin/venturi"
-DESKTOP="$PREFIX/share/applications/venturi.desktop"
+BIN="$PREFIX/bin/tandem"
+DESKTOP="$PREFIX/share/applications/tandem.desktop"
 ICONS="$PREFIX/share/icons/hicolor"
 MIME="$PREFIX/share/mime"
 
@@ -38,8 +38,8 @@ refresh_caches() {
 }
 
 if [ "$UNINSTALL" -eq 1 ]; then
-    rm -f "$PREFIX/bin/vv-app" "$BIN" "$DESKTOP" "$MIME/packages/venturi.xml"
-    for icon in "$ICONS"/*/apps/venturi.{png,svg}; do
+    rm -f "$PREFIX/bin/vv-app" "$PREFIX/bin/venturi" "$BIN" "$DESKTOP" "$MIME/packages/tandem.xml"
+    for icon in "$ICONS"/*/apps/tandem.{png,svg}; do
         rm -f -- "$icon"
     done
     refresh_caches
@@ -48,11 +48,11 @@ if [ "$UNINSTALL" -eq 1 ]; then
 fi
 
 TARGET_DIR="$(realpath -m "${CARGO_TARGET_DIR:-target}")"
-if [ ! -x "$TARGET_DIR/release/vv-app" ]; then
+if [ ! -x "$TARGET_DIR/release/tandem" ]; then
     cargo build -p vv-app --release
 fi
 
-install -Dm755 "$TARGET_DIR/release/vv-app" "$BIN"
+install -Dm755 "$TARGET_DIR/release/tandem" "$BIN"
 LEGACY_REPLACED=0
 if [ -e "$PREFIX/bin/vv-app" ]; then
     rm -f "$PREFIX/bin/vv-app"
@@ -60,15 +60,15 @@ if [ -e "$PREFIX/bin/vv-app" ]; then
 fi
 mkdir -p "$(dirname "$DESKTOP")"
 source scripts/linux-desktop.sh
-write_desktop_entry packaging/appimage/venturi.desktop "$BIN" > "$DESKTOP"
+write_desktop_entry packaging/appimage/tandem.desktop "$BIN" > "$DESKTOP"
 chmod 644 "$DESKTOP"
-install -Dm644 packaging/venturi-mime.xml "$MIME/packages/venturi.xml"
+install -Dm644 packaging/tandem-mime.xml "$MIME/packages/tandem.xml"
 
 # The icon file name must match the Icon= key of the .desktop.
 for dir in media/icons/linux/hicolor/*/apps; do
     size="$(basename "$(dirname "$dir")")"
-    for f in "$dir"/venturi-video.*; do
-        install -Dm644 "$f" "$ICONS/$size/apps/venturi.${f##*.}"
+    for f in "$dir"/tandem.*; do
+        install -Dm644 "$f" "$ICONS/$size/apps/tandem.${f##*.}"
     done
 done
 
@@ -80,6 +80,6 @@ case ":$PATH:" in
     *) echo "note: $PREFIX/bin is not in PATH" ;;
 esac
 if [ "$LEGACY_REPLACED" -eq 1 ]; then
-    echo "note: the command is now venturi, $PREFIX/bin/vv-app was removed;"
+    echo "note: the command is now tandem, $PREFIX/bin/vv-app was removed;"
     echo "      point MCP configs at \"$BIN mcp\" (see docs/MCP.md)"
 fi

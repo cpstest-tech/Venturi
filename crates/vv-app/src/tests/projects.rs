@@ -40,7 +40,7 @@ fn new_projects_are_numbered_past_the_highest_one() {
 fn a_created_project_is_a_folder_with_a_loadable_file_named_after_it() {
     let root = temp_root("create");
     let file = create_project(&root, "Progetto_01").unwrap();
-    assert_eq!(file, root.join("Progetto_01").join("Progetto_01.vvproj"));
+    assert_eq!(file, root.join("Progetto_01").join("Progetto_01.tandem"));
     assert!(vv_core::load_project(&file).is_ok());
     assert_eq!(list_projects(&root), vec![file]);
     assert!(matches!(
@@ -53,7 +53,7 @@ fn a_created_project_is_a_folder_with_a_loadable_file_named_after_it() {
 fn a_dot_in_the_name_is_kept_in_the_file_name() {
     assert_eq!(
         project_file(Path::new("/p/Clip 1.5")),
-        PathBuf::from("/p/Clip 1.5/Clip 1.5.vvproj")
+        PathBuf::from("/p/Clip 1.5/Clip 1.5.tandem")
     );
 }
 
@@ -81,7 +81,7 @@ fn renaming_moves_the_folder_and_the_media_copied_into_it() {
 
     let renamed = rename_project(&file, "Vacanze").unwrap();
 
-    assert_eq!(renamed, root.join("Vacanze").join("Vacanze.vvproj"));
+    assert_eq!(renamed, root.join("Vacanze").join("Vacanze.tandem"));
     assert!(!dir.exists());
     let project = vv_core::load_project(&renamed).unwrap();
     assert_eq!(
@@ -200,7 +200,7 @@ fn a_project_opened_from_elsewhere_is_renamed_in_place() {
 
     let renamed = rename_loose_file(&file, "nuovo").unwrap();
 
-    assert_eq!(renamed, dir.join("nuovo.vvproj"));
+    assert_eq!(renamed, dir.join("nuovo.tandem"));
     assert!(renamed.is_file());
     assert!(!file.exists());
 }

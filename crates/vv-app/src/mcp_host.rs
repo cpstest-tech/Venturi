@@ -27,6 +27,7 @@ pub(crate) struct McpHost {
 }
 
 struct Shared {
+    ctx: egui::Context,
     slot: Mutex<Slot>,
     /// Signalled when the UI puts the session back.
     returned: Condvar,
@@ -54,6 +55,14 @@ struct UiSide {
     /// Events the UI ticked, for the calls waiting on them.
     events_for_host: Vec<SessionEvent>,
     open_timeline: Option<TimelineId>,
+    set_playhead: Option<i64>,
+    set_playback: Option<bool>,
+    start_ai_clips: Option<(vv_core::MediaId, String, usize)>,
+    insert_ai_clips: Option<bool>,
+    select_ai_clips: Option<Vec<usize>>,
+    ai_clips_status: serde_json::Value,
+    insert_sticker: Option<String>,
+    sticker_status: serde_json::Value,
     screenshots: Vec<(Reply, Instant)>,
     /// Jobs the agent started: their outcome does not move the user's view.
     agent_jobs: HashSet<JobId>,
@@ -101,6 +110,7 @@ impl McpHost {
             }
         }));
         let shared = Arc::new(Shared {
+            ctx: ctx.clone(),
             slot: Mutex::new(Slot {
                 session: Session::default(),
                 in_ui: true,
@@ -238,7 +248,7 @@ fn expire_screenshots(shared: &Shared) {
     ui.screenshots = waiting;
     for (reply, _) in expired {
         let _ = reply.send(Err(ToolError(
-            "the Venturi window is not being drawn (hidden or on another workspace?): \
+            "the Tandem window is not being drawn (hidden or on another workspace?): \
              bring it to the front and retry"
                 .into(),
         )));
@@ -260,7 +270,7 @@ fn handle_request(
         return reply(
             request,
             Err(ToolError(
-                "the user has a dialog open in Venturi: retry once it is closed".into(),
+                "the user has a dialog open in Tandem: retry once it is closed".into(),
             )),
         );
     }
@@ -283,11 +293,10 @@ fn handle_request(
     let session = &mut slot.session;
     match &request.call {
         ToolCall::GetState => {
-            let state = shared.ui().state.clone();
-            return reply(
-                request,
-                Ok(ToolOutput::json(vv_mcp::state_json(session, &state))),
-            );
+            let ui = shared.ui();
+            let mut state = vv_mcp::state_json(session, &ui.state);
+            state["sticker"] = ui.sticker_status.clone();
+            return reply(request, Ok(ToolOutput::json(state)));
         }
         ToolCall::SetActiveTimeline(args) => {
             let result = vv_mcp::parse_timeline_id(&session.project, &args.timeline_id).map(|id| {
@@ -295,6 +304,157 @@ fn handle_request(
                 ToolOutput::json(serde_json::json!({ "active_timeline": args.timeline_id }))
             });
             return reply(request, result);
+        }
+        ToolCall::SetPlayhead(args) => {
+            let frame = args.frame;
+            if frame < 0 {
+                return reply(request, Err(ToolError("frame must not be negative".into())));
+            }
+            if shared.ui().state.active_timeline.is_none() {
+                return reply(request, Err(ToolError("no active timeline".into())));
+            }
+            shared.ui().set_playhead = Some(frame);
+            ctx.request_repaint();
+            return reply(
+                request,
+                Ok(ToolOutput::json(serde_json::json!({ "frame": frame }))),
+            );
+        }
+        ToolCall::SetPlayback(args) => {
+            let playing = args.playing;
+            if shared.ui().state.active_timeline.is_none() {
+                return reply(request, Err(ToolError("no active timeline".into())));
+            }
+            shared.ui().set_playback = Some(playing);
+            ctx.request_repaint();
+            return reply(
+                request,
+                Ok(ToolOutput::json(serde_json::json!({ "playing": playing }))),
+            );
+        }
+        ToolCall::StartAiClips(args) => {
+            if args.duration > 2 {
+                return reply(request, Err(ToolError("duration must be 0, 1 or 2".into())));
+            }
+            let media = match vv_mcp::parse_media_id(&session.project, &args.media_id) {
+                Ok(id) => id,
+                Err(error) => return reply(request, Err(error)),
+            };
+            let item = &session.project.media_pool[media];
+            if !item.meta.has_video || !item.meta.has_audio || item.compound.is_some() {
+                return reply(
+                    request,
+                    Err(ToolError("AI Clips needs a video with audio".into())),
+                );
+            }
+            shared.ui().start_ai_clips = Some((media, args.prompt.clone(), args.duration));
+            ctx.request_repaint();
+            return reply(
+                request,
+                Ok(ToolOutput::json(
+                    serde_json::json!({ "status": "scheduled" }),
+                )),
+            );
+        }
+        ToolCall::GetAiClips => {
+            return reply(
+                request,
+                Ok(ToolOutput::json(shared.ui().ai_clips_status.clone())),
+            );
+        }
+        ToolCall::SelectAiClips(args) => {
+            let indices = args.indices.clone();
+            let count = shared.ui().ai_clips_status["suggestions"]
+                .as_array()
+                .map_or(0, Vec::len);
+            if indices.iter().any(|&index| index >= count) {
+                return reply(
+                    request,
+                    Err(ToolError(format!("suggestion index must be below {count}"))),
+                );
+            }
+            shared.ui().select_ai_clips = Some(indices.clone());
+            ctx.request_repaint();
+            return reply(
+                request,
+                Ok(ToolOutput::json(serde_json::json!({ "selected": indices }))),
+            );
+        }
+        ToolCall::InsertAiClips(args) => {
+            if shared.ui().state.active_timeline.is_none() {
+                return reply(request, Err(ToolError("no active timeline".into())));
+            }
+            let status = shared.ui().ai_clips_status.clone();
+            if status["running"] == true
+                || status["suggestions"].as_array().is_none_or(Vec::is_empty)
+            {
+                return reply(
+                    request,
+                    Err(ToolError("AI Clips suggestions are not ready".into())),
+                );
+            }
+            shared.ui().insert_ai_clips = Some(args.replace_previous);
+            ctx.request_repaint();
+            return reply(
+                request,
+                Ok(ToolOutput::json(
+                    serde_json::json!({ "status": "scheduled" }),
+                )),
+            );
+        }
+        ToolCall::ListStickers(args) => {
+            let query = args.query.as_deref().unwrap_or_default().to_lowercase();
+            let matches: Vec<_> = crate::stickers::all()
+                .iter()
+                .filter(|sticker| {
+                    args.category
+                        .as_deref()
+                        .is_none_or(|category| sticker.category.id() == category)
+                })
+                .filter(|sticker| {
+                    query.is_empty()
+                        || sticker.name.to_lowercase().contains(&query)
+                        || sticker.id.contains(&query)
+                })
+                .collect();
+            let total = matches.len();
+            let stickers: Vec<_> = matches
+                .into_iter()
+                .skip(args.offset)
+                .take(args.limit.unwrap_or(100).min(500))
+                .map(|sticker| {
+                    serde_json::json!({
+                        "id": sticker.id,
+                        "name": sticker.name,
+                        "category": sticker.category.id(),
+                        "animated": sticker.animated,
+                    })
+                })
+                .collect();
+            return reply(
+                request,
+                Ok(ToolOutput::json(
+                    serde_json::json!({ "stickers": stickers, "total": total }),
+                )),
+            );
+        }
+        ToolCall::InsertSticker(args) => {
+            if crate::stickers::find(&args.sticker_id).is_none() {
+                return reply(request, Err(ToolError("unknown sticker id".into())));
+            }
+            if shared.ui().state.active_timeline.is_none() {
+                return reply(request, Err(ToolError("no active timeline".into())));
+            }
+            shared.ui().insert_sticker = Some(args.sticker_id.clone());
+            shared.ui().sticker_status =
+                serde_json::json!({ "id": args.sticker_id, "status": "pending" });
+            ctx.request_repaint();
+            return reply(
+                request,
+                Ok(ToolOutput::json(
+                    serde_json::json!({ "status": "scheduled" }),
+                )),
+            );
         }
         ToolCall::NewProject if session.has_unsaved_changes() => {
             return reply(request, Err(unsaved_changes()));
@@ -317,7 +477,7 @@ fn handle_request(
 
 fn unsaved_changes() -> ToolError {
     ToolError(
-        "the project open in Venturi has unsaved changes: save it first (save_project) \
+        "the project open in Tandem has unsaved changes: save it first (save_project) \
          or ask the user"
             .into(),
     )
@@ -443,11 +603,26 @@ impl VenturiApp {
         if self.session.epoch() != self.seen_epoch {
             self.reset_for_replaced_project();
         }
-        let (events, open_timeline) = {
+        let (
+            events,
+            open_timeline,
+            set_playhead,
+            set_playback,
+            start_ai_clips,
+            select_ai_clips,
+            insert_ai_clips,
+            insert_sticker,
+        ) = {
             let mut ui = shared.ui();
             (
                 std::mem::take(&mut ui.events_for_ui),
                 ui.open_timeline.take(),
+                ui.set_playhead.take(),
+                ui.set_playback.take(),
+                ui.start_ai_clips.take(),
+                ui.select_ai_clips.take(),
+                ui.insert_ai_clips.take(),
+                ui.insert_sticker.take(),
             )
         };
         for event in events {
@@ -459,6 +634,59 @@ impl VenturiApp {
             self.stop_browsing();
             self.open_timeline(id);
             self.spawn_render_ahead_if_needed(id);
+        }
+        if let Some(frame) = set_playhead {
+            if let Some(id) = self.timeline_id {
+                let end = self.session.project.timelines[id].total_frames();
+                self.timeline_state.playhead = frame.clamp(0, (end - 1).max(0));
+                self.timeline_state.reveal_playhead = true;
+            }
+        }
+        if let Some(playing) = set_playback {
+            if self.timeline_id.is_some() && self.is_timeline_playing() != playing {
+                self.toggle_playback();
+            }
+        }
+        if let Some((media, prompt, duration)) = start_ai_clips {
+            self.mcp_start_ai_clips(media, prompt, duration);
+        }
+        if let Some(indices) = select_ai_clips {
+            self.mcp_select_ai_clips(&indices);
+        }
+        if let Some(replace) = insert_ai_clips {
+            self.mcp_insert_ai_clips(replace);
+        }
+        if let Some(id) = insert_sticker {
+            if self.stickers.store.is_none()
+                && let Some(dir) = crate::stickers::default_dir()
+            {
+                self.stickers.store = Some(crate::stickers::Store::new(dir, &shared.ctx));
+            }
+            if let Some(store) = &mut self.stickers.store {
+                store.poll();
+            }
+            match self.sticker_asset_id(&id) {
+                Some(asset) => {
+                    self.insert_assets_at_playhead(&[asset], true);
+                    shared.ui().sticker_status =
+                        serde_json::json!({ "id": id, "status": "inserted" });
+                }
+                None if self
+                    .stickers
+                    .store
+                    .as_ref()
+                    .is_some_and(|store| store.failed(&id)) =>
+                {
+                    self.import_warnings
+                        .push(format!("sticker {id} could not be downloaded"));
+                    shared.ui().sticker_status =
+                        serde_json::json!({ "id": id, "status": "failed" });
+                }
+                None => {
+                    shared.ui().insert_sticker = Some(id);
+                    shared.ctx.request_repaint_after(Duration::from_millis(100));
+                }
+            }
         }
         // The progress window shows the agent's export like the user's.
         if self.export.is_none()
@@ -519,6 +747,7 @@ impl VenturiApp {
             ui.mid_gesture = self.user_mid_gesture(ctx);
             ui.modal_open = self.modal_open();
             ui.state = self.gui_state();
+            ui.ai_clips_status = self.mcp_ai_clips_status();
         }
         let mut slot = shared.slot.lock().unwrap();
         if slot.in_ui {
@@ -563,6 +792,7 @@ impl VenturiApp {
             active_timeline: self.timeline_id,
             timeline_stack: self.timeline_stack.clone(),
             playhead: self.timeline_state.playhead,
+            playing: self.is_timeline_playing(),
             selected_clips: self
                 .timeline_state
                 .selected

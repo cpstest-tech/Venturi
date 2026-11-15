@@ -96,6 +96,67 @@ fn an_empty_project_has_nothing_to_report() {
 }
 
 #[test]
+fn asset_catalog_lists_built_in_transitions() {
+    let mut session = Session::default();
+    let assets = ok(&mut session, ToolCall::ListAssets);
+    assert!(
+        assets["assets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["kind"] == "transitions")
+    );
+}
+
+#[test]
+fn timeline_rename_updates_pool_and_undoes() {
+    let mut session = Session::default();
+    let created = ok(&mut session, ToolCall::CreateTimeline(create("Before")));
+    let id = created["id"].as_str().unwrap().to_owned();
+    let renamed = ok(
+        &mut session,
+        ToolCall::RenameTimeline(RenameTimelineArgs {
+            timeline_id: id.clone(),
+            if_revision: None,
+            name: "After".into(),
+        }),
+    );
+    assert_eq!(renamed["name"], "After");
+    ok(&mut session, ToolCall::Undo);
+    assert_eq!(
+        ok(
+            &mut session,
+            ToolCall::GetTimeline(TimelineArgs { timeline_id: id })
+        )["name"],
+        "Before"
+    );
+}
+
+#[test]
+fn duplicate_timeline_creates_independent_timeline() {
+    let mut session = Session::default();
+    let created = ok(&mut session, ToolCall::CreateTimeline(create("Original")));
+    let id = created["id"].as_str().unwrap().to_owned();
+    let copy = ok(
+        &mut session,
+        ToolCall::DuplicateTimeline(RenameTimelineArgs {
+            timeline_id: id.clone(),
+            if_revision: None,
+            name: "Copy".into(),
+        }),
+    );
+    assert_eq!(copy["name"], "Copy");
+    assert_ne!(copy["id"], id);
+    assert_eq!(
+        ok(
+            &mut session,
+            ToolCall::GetTimeline(TimelineArgs { timeline_id: id })
+        )["name"],
+        "Original"
+    );
+}
+
+#[test]
 fn import_reports_new_and_existing_media_in_the_given_order() {
     let dir = test_dir("import");
     let a = clip_file(&dir, "a.mp4");

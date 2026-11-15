@@ -109,6 +109,31 @@ pub fn dispatch(session: &mut Session, call: ToolCall) -> Dispatch {
 fn run(session: &mut Session, call: ToolCall) -> ToolResult {
     match call {
         ToolCall::GetProject => Ok(ToolOutput::json(project_json(session))),
+        ToolCall::ListAssets => {
+            let library = vv_render::assets::library();
+            let assets: Vec<_> = vv_render::assets::AssetKind::ALL
+                .into_iter()
+                .flat_map(|kind| {
+                    library.of_kind(kind).map(move |asset| {
+                        json!({
+                            "id": asset.id,
+                            "kind": kind.folder(),
+                            "name": asset.name.get("en"),
+                            "category": asset.category,
+                            "default_secs": asset.default_secs,
+                            "params": asset.params.iter().map(|param| json!({
+                                "id": param.id,
+                                "name": param.name.get("en"),
+                                "min": param.min,
+                                "max": param.max,
+                                "default": param.default,
+                            })).collect::<Vec<_>>(),
+                        })
+                    })
+                })
+                .collect();
+            Ok(ToolOutput::json(json!({ "assets": assets })))
+        }
         ToolCall::GetTimeline(args) => {
             let timeline = ids::timeline_id(&session.project, &args.timeline_id)?;
             Ok(ToolOutput::json(timeline_detail_json(session, timeline)))
@@ -147,15 +172,39 @@ fn run(session: &mut Session, call: ToolCall) -> ToolResult {
                 .map_err(|e| ToolError(format!("cannot save to {}: {e}", path.display())))?;
             Ok(ToolOutput::json(json!({ "path": path })))
         }
+        ToolCall::ExportOtio(args) => {
+            let timeline = ids::timeline_id(&session.project, &args.timeline_id)?;
+            let path = PathBuf::from(&args.path);
+            let measure = |title: &vv_core::TitleParams| vv_render::text::title_metrics(title);
+            vv_core::export_otio(&session.project, timeline, &path, Some(&measure))
+                .map_err(|e| ToolError(format!("cannot export OTIO to {}: {e}", path.display())))?;
+            Ok(ToolOutput::json(json!({ "path": path })))
+        }
         ToolCall::CreateTimeline(args) => create_timeline(session, args),
+        ToolCall::RenameTimeline(args) => rename_timeline(session, args),
+        ToolCall::DuplicateTimeline(args) => duplicate_timeline(session, args),
         ToolCall::AddTrack(args) => edit_tools::add_track(session, args),
         ToolCall::SetTrack(args) => edit_tools::set_track(session, args),
+        ToolCall::SetMixer(args) => edit_tools::set_mixer(session, args),
+        ToolCall::SetMixerEffects(args) => edit_tools::set_mixer_effects(session, args),
         ToolCall::InsertClip(args) => edit_tools::insert_clip(session, args),
         ToolCall::Split(args) => edit_tools::split(session, args),
         ToolCall::DeleteClips(args) => edit_tools::delete_clips(session, args),
         ToolCall::DeleteRanges(args) => edit_tools::delete_ranges(session, args),
         ToolCall::MoveClips(args) => edit_tools::move_clips(session, args),
         ToolCall::TrimClip(args) => edit_tools::trim_clip(session, args),
+        ToolCall::SetClipSpeed(args) => edit_tools::set_clip_speed(session, args),
+        ToolCall::FreezeClips(args) => edit_tools::freeze_clips(session, args),
+        ToolCall::SetKeyframe(args) => edit_tools::set_keyframe(session, args),
+        ToolCall::RemoveKeyframe(args) => edit_tools::remove_keyframe(session, args),
+        ToolCall::MoveKeyframe(args) => edit_tools::move_keyframe(session, args),
+        ToolCall::SetKeyframeInterpolation(args) => {
+            edit_tools::set_keyframe_interpolation(session, args)
+        }
+        ToolCall::MakeCompound(args) => edit_tools::make_compound(session, args),
+        ToolCall::UngroupCompound(args) => edit_tools::ungroup_compound(session, args),
+        ToolCall::SetClipEffects(args) => edit_tools::set_clip_effects(session, args),
+        ToolCall::SetCrossTransition(args) => edit_tools::set_cross_transition(session, args),
         ToolCall::SetClipProperties(args) => edit_tools::set_clip_properties(session, args),
         ToolCall::AddTitle(args) => edit_tools::add_title(session, args),
         ToolCall::AddSolidColor(args) => edit_tools::add_solid_color(session, args),
@@ -191,11 +240,19 @@ fn run(session: &mut Session, call: ToolCall) -> ToolResult {
             session.history.redo(&mut session.project);
             Ok(ToolOutput::json(json!({ "redone": format!("{label:?}") })))
         }
-        ToolCall::GetState | ToolCall::ScreenshotUi | ToolCall::SetActiveTimeline(_) => {
-            Err(ToolError(
-                "only available when attached to the Venturi window (vv-app mcp --attach)".into(),
-            ))
-        }
+        ToolCall::GetState
+        | ToolCall::ScreenshotUi
+        | ToolCall::SetActiveTimeline(_)
+        | ToolCall::SetPlayhead(_)
+        | ToolCall::SetPlayback(_)
+        | ToolCall::StartAiClips(_)
+        | ToolCall::GetAiClips
+        | ToolCall::SelectAiClips(_)
+        | ToolCall::ListStickers(_)
+        | ToolCall::InsertSticker(_)
+        | ToolCall::InsertAiClips(_) => Err(ToolError(
+            "only available when attached to the Tandem window (tandem mcp --attach)".into(),
+        )),
         ToolCall::ImportMedia(_)
         | ToolCall::ImportOtio(_)
         | ToolCall::RenderFrame(_)
@@ -265,6 +322,51 @@ fn create_timeline(session: &mut Session, args: CreateTimelineArgs) -> ToolResul
         master: Default::default(),
     });
     Ok(ToolOutput::json(timeline_json(session, id)))
+}
+
+fn rename_timeline(session: &mut Session, args: RenameTimelineArgs) -> ToolResult {
+    let timeline = ids::timeline_id(&session.project, &args.timeline_id)?;
+    ids::check_revision(session, timeline, args.if_revision.as_deref())?;
+    let name = args.name.trim();
+    if name.is_empty() {
+        return Err(ToolError("timeline name must not be empty".into()));
+    }
+    let media = session
+        .project
+        .media_pool
+        .iter()
+        .find_map(|(id, item)| (item.compound == Some(timeline)).then_some(id))
+        .ok_or_else(|| ToolError("timeline has no media pool entry".into()))?;
+    session.history.do_command(
+        &mut session.project,
+        Box::new(vv_core::RenameTimeline::new(media, name.into())),
+    );
+    Ok(ToolOutput::json(timeline_json(session, timeline)))
+}
+
+fn duplicate_timeline(session: &mut Session, args: RenameTimelineArgs) -> ToolResult {
+    let timeline = ids::timeline_id(&session.project, &args.timeline_id)?;
+    ids::check_revision(session, timeline, args.if_revision.as_deref())?;
+    let name = args.name.trim();
+    if name.is_empty() {
+        return Err(ToolError("timeline name must not be empty".into()));
+    }
+    let source = session
+        .project
+        .media_pool
+        .iter()
+        .find_map(|(id, item)| (item.compound == Some(timeline)).then_some(id))
+        .ok_or_else(|| ToolError("timeline has no media pool entry".into()))?;
+    let (media, command) =
+        vv_core::pool::duplicate_timeline(&mut session.project, source, name.into())
+            .ok_or_else(|| ToolError("cannot duplicate timeline".into()))?;
+    session
+        .history
+        .do_command(&mut session.project, Box::new(command));
+    let new_timeline = session.project.media_pool[media]
+        .compound
+        .ok_or_else(|| ToolError("duplicated timeline is missing".into()))?;
+    Ok(ToolOutput::json(timeline_json(session, new_timeline)))
 }
 
 #[cfg(test)]

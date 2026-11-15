@@ -5,8 +5,8 @@ file_filter.images:
   it: "immagini"
 
 file_filter.project:
-  en: "Venturi video editor"
-  it: "Venturi video editor"
+  en: "Tandem video editor"
+  it: "Editor video Tandem"
 
 project.default_file_name:
   en: "project"
@@ -253,5 +253,5 @@ project.recovered_title:
   it: "Progetto recuperato"
 
 project.recovered:
-  en: "Venturi did not close properly: «%{name}» has been reopened from its last save."
-  it: "Venturi non si è chiuso correttamente: «%{name}» è stato riaperto dall'ultimo salvataggio."
+  en: "Tandem did not close properly: «%{name}» has been reopened from its last save."
+  it: "Tandem non si è chiuso correttamente: «%{name}» è stato riaperto dall'ultimo salvataggio."

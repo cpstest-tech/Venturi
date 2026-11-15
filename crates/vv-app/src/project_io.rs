@@ -2,6 +2,7 @@
 //! export and relink: the UI over the `vv_session::Session` jobs.
 
 use super::*;
+use crate::projects::is_project_extension;
 use std::sync::Arc;
 
 /// Linux dialog filters are case-sensitive globs, so `mp4` becomes `[mM][pP]4`
@@ -402,7 +403,7 @@ impl VenturiApp {
     fn open_paths_in_library(&mut self, paths: Vec<PathBuf>, folder: Option<String>) {
         let (media, other): (Vec<_>, Vec<_>) = paths.into_iter().partition(|p| {
             !p.extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("vvproj") || e.eq_ignore_ascii_case("otio"))
+                .is_some_and(|e| is_project_extension(e) || e.eq_ignore_ascii_case("otio"))
         });
         self.open_paths(other);
         if media.is_empty() {
@@ -425,7 +426,10 @@ impl VenturiApp {
     fn open_paths_into(&mut self, paths: Vec<PathBuf>, folder: Option<FolderId>) {
         let has_extension =
             |p: &Path, ext: &str| p.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext));
-        if let Some(project) = paths.iter().find(|p| has_extension(p, "vvproj")) {
+        if let Some(project) = paths
+            .iter()
+            .find(|p| p.extension().is_some_and(is_project_extension))
+        {
             // Anything else opened with it would land in the project being replaced.
             self.request_project_switch(ProjectSwitch::OpenPath(project.clone()));
             return;
@@ -480,8 +484,8 @@ impl VenturiApp {
     /// Ctrl+Shift+S).
     pub(crate) fn save_project_as(&mut self) {
         self.spawn_file_dialog(DialogKind::SaveProjectAs, |dlg| {
-            dlg.set_file_name(format!("{}.vvproj", t!("project.default_file_name")))
-                .add_filter(t!("file_filter.project"), &["vvproj"])
+            dlg.set_file_name(format!("{}.tandem", t!("project.default_file_name")))
+                .add_filter(t!("file_filter.project"), &["tandem", "vvproj"])
                 .save_file()
         });
     }
@@ -533,9 +537,9 @@ impl VenturiApp {
 
     pub(crate) fn sync_window_title(&mut self, ctx: &egui::Context) {
         let title = match self.screen {
-            Screen::Home => "Venturi".to_owned(),
+            Screen::Home => "Tandem".to_owned(),
             Screen::Editor => format!(
-                "{}{} — Venturi",
+                "{}{} — Tandem",
                 self.project_label(),
                 if self.has_unsaved_changes() { "*" } else { "" },
             ),
@@ -763,7 +767,7 @@ impl VenturiApp {
 
     pub(crate) fn open_project_dialog(&mut self) {
         self.spawn_file_dialog(DialogKind::OpenProject, |dlg| {
-            dlg.add_filter(t!("file_filter.project"), &["vvproj"])
+            dlg.add_filter(t!("file_filter.project"), &["tandem", "vvproj"])
                 .pick_file()
         });
     }

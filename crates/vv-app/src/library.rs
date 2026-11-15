@@ -1,4 +1,4 @@
-//! User library shared by all projects, in `$XDG_DATA_HOME/venturi/library`:
+//! User library shared by all projects, in `$XDG_DATA_HOME/tandem/library`:
 //! assets (pool items, their files copied in) and attribute presets, one
 //! JSON file each so they can be synced or handed around one by one, and the
 //! folders the assets are sorted in.
@@ -131,7 +131,7 @@ impl Library {
             .or_else(|| {
                 std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local").join("share"))
             })?;
-        Some(data.join("venturi").join("library"))
+        Some(data.join("tandem").join("library"))
     }
 
     /// Unreadable entries are skipped with a message, never fatal.
@@ -702,7 +702,7 @@ fn json_files(dir: &Path) -> impl Iterator<Item = (String, String)> {
         })
 }
 
-/// Entries written by a newer Venturi are skipped, not misread.
+/// Entries written by a newer Tandem are skipped, not misread.
 fn parse<T: serde::de::DeserializeOwned>(id: &str, text: &str) -> Option<T> {
     #[derive(Deserialize)]
     struct Versioned {

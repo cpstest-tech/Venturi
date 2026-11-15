@@ -1,5 +1,5 @@
 //! User settings of the program (not of the project), saved in
-//! `~/.config/venturi/settings.json`.
+//! `~/.config/tandem/settings.json`.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -1090,7 +1090,7 @@ impl Settings {
             .filter(|d| !d.is_empty())
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-        Some(config.join("venturi").join("settings.json"))
+        Some(config.join("tandem").join("settings.json"))
     }
 
     /// Missing or unreadable file = default settings; actions absent from

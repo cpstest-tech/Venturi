@@ -1,5 +1,5 @@
 #!/bin/bash
-# Venturi.app + .dmg for macOS (Apple Silicon), with FFmpeg (libx264,
+# Tandem.app + .dmg for macOS (Apple Silicon), with FFmpeg (libx264,
 # VideoToolbox) and libx264 bundled in Contents/Frameworks. Must run on a Mac
 # with the Xcode command line tools; the app is signed ad-hoc only.
 #
@@ -19,8 +19,8 @@ mkdir -p "${CARGO_TARGET_DIR:-target}"
 TARGET_DIR="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)"
 FFMPEG_PREFIX="$TARGET_DIR/ffmpeg-shared"
 OUT_DIR="$TARGET_DIR/macos"
-APP="$OUT_DIR/Venturi.app"
-DMG="$OUT_DIR/Venturi-$ARCH.dmg"
+APP="$OUT_DIR/Tandem.app"
+DMG="$OUT_DIR/Tandem-$ARCH.dmg"
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
 
 scripts/build-ffmpeg.sh "$FFMPEG_PREFIX"
@@ -35,19 +35,19 @@ cargo build -p vv-app --release
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resources"
-cp "$TARGET_DIR/release/vv-app" "$APP/Contents/MacOS/"
-cp media/icons/macos/venturi-video.icns "$APP/Contents/Resources/venturi.icns"
+cp "$TARGET_DIR/release/tandem" "$APP/Contents/MacOS/"
+cp media/icons/macos/tandem.icns "$APP/Contents/Resources/tandem.icns"
 
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>Venturi</string>
-    <key>CFBundleDisplayName</key><string>Venturi</string>
-    <key>CFBundleIdentifier</key><string>com.morrolinux.venturi</string>
-    <key>CFBundleExecutable</key><string>vv-app</string>
-    <key>CFBundleIconFile</key><string>venturi</string>
+    <key>CFBundleName</key><string>Tandem</string>
+    <key>CFBundleDisplayName</key><string>Tandem</string>
+    <key>CFBundleIdentifier</key><string>com.morrolinux.tandem</string>
+    <key>CFBundleExecutable</key><string>tandem</string>
+    <key>CFBundleIconFile</key><string>tandem</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
@@ -79,12 +79,12 @@ for lib in "$APP"/Contents/Frameworks/*.dylib; do
     install_name_tool -id "@rpath/$(basename "$lib")" "$lib"
     relink "$lib"
 done
-relink "$APP/Contents/MacOS/vv-app"
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/vv-app"
+relink "$APP/Contents/MacOS/tandem"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/tandem"
 
 # Every required @rpath library must be in the bundle and nothing may link
 # an absolute path outside the system, which the user's machine lacks.
-for file in "$APP"/Contents/MacOS/vv-app "$APP"/Contents/Frameworks/*.dylib; do
+for file in "$APP"/Contents/MacOS/tandem "$APP"/Contents/Frameworks/*.dylib; do
     for dep in $(otool -L "$file" | awk 'NR > 1 { print $1 }'); do
         case "$dep" in
             /usr/lib/*|/System/*) ;;
@@ -111,7 +111,7 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname Venturi -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+hdiutil create -volname Tandem -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 rm -rf "$STAGE"
 
 echo "App: $APP"

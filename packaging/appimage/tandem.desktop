@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Venturi
+Name=Tandem
 Comment=Video editor
-Exec=vv-app %f
-Icon=venturi
+Exec=tandem %f
+Icon=tandem
 Terminal=false
 Categories=AudioVideo;Video;AudioVideoEditing;
-MimeType=application/x-venturi-project;
+MimeType=application/x-tandem-project;

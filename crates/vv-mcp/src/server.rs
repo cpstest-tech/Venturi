@@ -13,7 +13,7 @@ use crate::tools::*;
 use crate::{McpHandle, channel, run_headless};
 
 const INSTRUCTIONS: &str = "\
-Venturi is a video editor. Ids (media, timelines, clips, markers) are strings. \
+Tandem is a video editor. Ids (media, timelines, clips, markers) are strings. \
 Positions and lengths are integer frames of the timeline (fps in `get_timeline`); \
 only `source_in`/`source_out` are frames of the media. Tracks are named V1, V2... \
 and A1, A2... Every editing call is one undo step (`undo` reverts it); locked tracks \
@@ -23,8 +23,8 @@ with ripple keeps audio and video in sync. \
 Every result describing a timeline carries its `revision`; pass it back as `if_revision` \
 when editing, so an edit computed on a timeline that changed meanwhile (the user may be \
 editing it too) is refused instead of landing in the wrong place. \
-Venturi does not transcribe. To cut by words (repeated takes, a script), use a \
-speech-to-text tool installed once (Venturi's repository has one in container/whisper/), \
+Tandem does not transcribe. To cut by words (repeated takes, a script), use a \
+speech-to-text tool installed once (Tandem's repository has one in container/whisper/), \
 transcribe only the media ranges the timeline uses (clips' source_in/source_out, about \
 2 s of margin each side), not whole files, keep the times as media frames and cut with \
 delete_ranges and media_id. Details in docs/MCP.md, section Transcribing.";
@@ -51,7 +51,7 @@ impl VenturiServer {
             .handle
             .submit(call)
             .await
-            .unwrap_or_else(|_| Err(ToolError("Venturi stopped before answering".into())));
+            .unwrap_or_else(|_| Err(ToolError("Tandem stopped before answering".into())));
         Ok(match result {
             Ok(output) => {
                 let text = serde_json::to_string_pretty(&output.value)
@@ -74,6 +74,29 @@ impl VenturiServer {
     )]
     async fn get_project(&self) -> ToolReturn {
         self.call(ToolCall::GetProject).await
+    }
+
+    #[tool(
+        description = "Lists effect, filter, transition and animation assets with ids and parameter ranges."
+    )]
+    async fn list_assets(&self) -> ToolReturn {
+        self.call(ToolCall::ListAssets).await
+    }
+
+    #[tool(description = "Renames a timeline and its media pool entry.")]
+    async fn rename_timeline(
+        &self,
+        Parameters(args): Parameters<RenameTimelineArgs>,
+    ) -> ToolReturn {
+        self.call(ToolCall::RenameTimeline(args)).await
+    }
+
+    #[tool(description = "Duplicates a timeline as a new media pool item with the given name.")]
+    async fn duplicate_timeline(
+        &self,
+        Parameters(args): Parameters<RenameTimelineArgs>,
+    ) -> ToolReturn {
+        self.call(ToolCall::DuplicateTimeline(args)).await
     }
 
     #[tool(
@@ -121,6 +144,11 @@ impl VenturiServer {
         self.call(ToolCall::ImportOtio(args)).await
     }
 
+    #[tool(description = "Exports a timeline as an OpenTimelineIO file.")]
+    async fn export_otio(&self, Parameters(args): Parameters<ExportOtioArgs>) -> ToolReturn {
+        self.call(ToolCall::ExportOtio(args)).await
+    }
+
     #[tool(
         description = "Creates a timeline with tracks V1 and A1; fps and resolution from `from_media` or given explicitly. Not an undo step."
     )]
@@ -139,6 +167,21 @@ impl VenturiServer {
     #[tool(description = "Mutes, solos or locks a track.")]
     async fn set_track(&self, Parameters(args): Parameters<SetTrackArgs>) -> ToolReturn {
         self.call(ToolCall::SetTrack(args)).await
+    }
+
+    #[tool(description = "Sets gain and/or pan of a mixer track or the master channel.")]
+    async fn set_mixer(&self, Parameters(args): Parameters<SetMixerArgs>) -> ToolReturn {
+        self.call(ToolCall::SetMixer(args)).await
+    }
+
+    #[tool(
+        description = "Replaces the ordered audio effect chain on a mixer track or master, using the complete effects array from get_timeline."
+    )]
+    async fn set_mixer_effects(
+        &self,
+        Parameters(args): Parameters<SetMixerEffectsArgs>,
+    ) -> ToolReturn {
+        self.call(ToolCall::SetMixerEffects(args)).await
     }
 
     #[tool(
@@ -161,7 +204,7 @@ impl VenturiServer {
     }
 
     #[tool(
-        description = "Removes ranges [start, end) from the tracks, cutting the clips at the edges; with `ripple` the later material slides back, keeping all tracks in sync. With `media_id` the ranges are frames of that media (e.g. from its audio levels or a transcript) and Venturi finds where they are on the timeline, even after earlier cuts: prefer it whenever the ranges come from the media. The tool for removing silences or bad takes in one step."
+        description = "Removes ranges [start, end) from the tracks, cutting the clips at the edges; with `ripple` the later material slides back, keeping all tracks in sync. With `media_id` the ranges are frames of that media (e.g. from its audio levels or a transcript) and Tandem finds where they are on the timeline, even after earlier cuts: prefer it whenever the ranges come from the media. The tool for removing silences or bad takes in one step."
     )]
     async fn delete_ranges(&self, Parameters(args): Parameters<DeleteRangesArgs>) -> ToolReturn {
         self.call(ToolCall::DeleteRanges(args)).await
@@ -179,6 +222,84 @@ impl VenturiServer {
     )]
     async fn trim_clip(&self, Parameters(args): Parameters<TrimClipArgs>) -> ToolReturn {
         self.call(ToolCall::TrimClip(args)).await
+    }
+
+    #[tool(
+        description = "Changes media clip speed from 1 to 10000 percent; optionally preserves audio pitch and ripples following material."
+    )]
+    async fn set_clip_speed(&self, Parameters(args): Parameters<SetClipSpeedArgs>) -> ToolReturn {
+        self.call(ToolCall::SetClipSpeed(args)).await
+    }
+
+    #[tool(
+        description = "Freezes media clips on a timeline frame, or unfreezes them when frame is omitted."
+    )]
+    async fn freeze_clips(&self, Parameters(args): Parameters<FreezeClipsArgs>) -> ToolReturn {
+        self.call(ToolCall::FreezeClips(args)).await
+    }
+
+    #[tool(description = "Sets a scalar transform or gain keyframe at a source frame of a clip.")]
+    async fn set_keyframe(&self, Parameters(args): Parameters<SetKeyframeArgs>) -> ToolReturn {
+        self.call(ToolCall::SetKeyframe(args)).await
+    }
+
+    #[tool(
+        description = "Removes a scalar transform or gain keyframe at a source frame of a clip."
+    )]
+    async fn remove_keyframe(
+        &self,
+        Parameters(args): Parameters<RemoveKeyframeArgs>,
+    ) -> ToolReturn {
+        self.call(ToolCall::RemoveKeyframe(args)).await
+    }
+
+    #[tool(
+        description = "Moves a scalar transform or gain keyframe to another source frame of the clip."
+    )]
+    async fn move_keyframe(&self, Parameters(args): Parameters<MoveKeyframeArgs>) -> ToolReturn {
+        self.call(ToolCall::MoveKeyframe(args)).await
+    }
+
+    #[tool(
+        description = "Changes the outgoing interpolation (hold, linear, ease_in, ease_out, ease_in_out) of an existing keyframe."
+    )]
+    async fn set_keyframe_interpolation(
+        &self,
+        Parameters(args): Parameters<SetKeyframeInterpolationArgs>,
+    ) -> ToolReturn {
+        self.call(ToolCall::SetKeyframeInterpolation(args)).await
+    }
+
+    #[tool(
+        description = "Groups selected clips into a compound timeline and replaces them with linked compound clips."
+    )]
+    async fn make_compound(&self, Parameters(args): Parameters<ClipsArgs>) -> ToolReturn {
+        self.call(ToolCall::MakeCompound(args)).await
+    }
+
+    #[tool(description = "Ungroups a compound clip and restores its nested clips on the timeline.")]
+    async fn ungroup_compound(&self, Parameters(args): Parameters<ClipArgs>) -> ToolReturn {
+        self.call(ToolCall::UngroupCompound(args)).await
+    }
+
+    #[tool(
+        description = "Replaces a clip's complete effects object with an edited copy from get_clip, including filters, animations, title styling, masks, blend and asset effects. One undo step."
+    )]
+    async fn set_clip_effects(
+        &self,
+        Parameters(args): Parameters<SetClipEffectsArgs>,
+    ) -> ToolReturn {
+        self.call(ToolCall::SetClipEffects(args)).await
+    }
+
+    #[tool(
+        description = "Sets or removes a crossing transition between adjacent clips on one track. Transition is a complete Transition object, including optional asset effect."
+    )]
+    async fn set_cross_transition(
+        &self,
+        Parameters(args): Parameters<SetCrossTransitionArgs>,
+    ) -> ToolReturn {
+        self.call(ToolCall::SetCrossTransition(args)).await
     }
 
     #[tool(
@@ -308,7 +429,7 @@ impl VenturiServer {
         self.call(ToolCall::GetState).await
     }
 
-    #[tool(description = "Editor window only: a PNG screenshot of the whole Venturi window.")]
+    #[tool(description = "Editor window only: a PNG screenshot of the whole Tandem window.")]
     async fn screenshot_ui(&self) -> ToolReturn {
         self.call(ToolCall::ScreenshotUi).await
     }
@@ -316,6 +437,56 @@ impl VenturiServer {
     #[tool(description = "Editor window only: shows this timeline in the editor.")]
     async fn set_active_timeline(&self, Parameters(args): Parameters<TimelineArgs>) -> ToolReturn {
         self.call(ToolCall::SetActiveTimeline(args)).await
+    }
+
+    #[tool(description = "Editor window only: moves the playhead to a timeline frame.")]
+    async fn set_playhead(&self, Parameters(args): Parameters<SetPlayheadArgs>) -> ToolReturn {
+        self.call(ToolCall::SetPlayhead(args)).await
+    }
+
+    #[tool(description = "Editor window only: starts or pauses timeline playback.")]
+    async fn set_playback(&self, Parameters(args): Parameters<SetPlaybackArgs>) -> ToolReturn {
+        self.call(ToolCall::SetPlayback(args)).await
+    }
+
+    #[tool(
+        description = "Editor window only: starts AI Clips analysis for a source video. Use get_ai_clips to follow progress and inspect suggestions."
+    )]
+    async fn start_ai_clips(&self, Parameters(args): Parameters<StartAiClipsArgs>) -> ToolReturn {
+        self.call(ToolCall::StartAiClips(args)).await
+    }
+
+    #[tool(
+        description = "Editor window only: returns AI Clips progress, message and suggested clips."
+    )]
+    async fn get_ai_clips(&self) -> ToolReturn {
+        self.call(ToolCall::GetAiClips).await
+    }
+
+    #[tool(
+        description = "Editor window only: selects which AI Clips suggestions will be inserted, by index from get_ai_clips."
+    )]
+    async fn select_ai_clips(&self, Parameters(args): Parameters<SelectAiClipsArgs>) -> ToolReturn {
+        self.call(ToolCall::SelectAiClips(args)).await
+    }
+
+    #[tool(
+        description = "Editor window only: inserts the selected AI Clips suggestions into the active timeline."
+    )]
+    async fn insert_ai_clips(&self, Parameters(args): Parameters<InsertAiClipsArgs>) -> ToolReturn {
+        self.call(ToolCall::InsertAiClips(args)).await
+    }
+
+    #[tool(description = "Editor window only: lists catalog stickers with ids and categories.")]
+    async fn list_stickers(&self, Parameters(args): Parameters<ListStickersArgs>) -> ToolReturn {
+        self.call(ToolCall::ListStickers(args)).await
+    }
+
+    #[tool(
+        description = "Editor window only: downloads a catalog sticker if needed and inserts it at the playhead."
+    )]
+    async fn insert_sticker(&self, Parameters(args): Parameters<InsertStickerArgs>) -> ToolReturn {
+        self.call(ToolCall::InsertSticker(args)).await
     }
 
     #[tool(
@@ -335,7 +506,7 @@ impl VenturiServer {
 impl ServerHandler for VenturiServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("venturi", env!("CARGO_PKG_VERSION")))
+            .with_server_info(Implementation::new("tandem", env!("CARGO_PKG_VERSION")))
             .with_instructions(INSTRUCTIONS)
     }
 }

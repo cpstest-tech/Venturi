@@ -14,6 +14,7 @@ pub enum ToolCall {
     SaveProject(SaveProjectArgs),
     ImportMedia(ImportMediaArgs),
     ImportOtio(ImportOtioArgs),
+    ExportOtio(ExportOtioArgs),
     CreateTimeline(CreateTimelineArgs),
     AddTrack(AddTrackArgs),
     SetTrack(SetTrackArgs),
@@ -23,6 +24,21 @@ pub enum ToolCall {
     DeleteRanges(DeleteRangesArgs),
     MoveClips(MoveClipsArgs),
     TrimClip(TrimClipArgs),
+    SetClipSpeed(SetClipSpeedArgs),
+    FreezeClips(FreezeClipsArgs),
+    SetKeyframe(SetKeyframeArgs),
+    RemoveKeyframe(RemoveKeyframeArgs),
+    MoveKeyframe(MoveKeyframeArgs),
+    SetKeyframeInterpolation(SetKeyframeInterpolationArgs),
+    MakeCompound(ClipsArgs),
+    UngroupCompound(ClipArgs),
+    SetClipEffects(SetClipEffectsArgs),
+    SetCrossTransition(SetCrossTransitionArgs),
+    ListAssets,
+    RenameTimeline(RenameTimelineArgs),
+    DuplicateTimeline(RenameTimelineArgs),
+    SetMixer(SetMixerArgs),
+    SetMixerEffects(SetMixerEffectsArgs),
     SetClipProperties(SetClipPropertiesArgs),
     AddTitle(AddTitleArgs),
     AddSolidColor(AddSolidColorArgs),
@@ -46,6 +62,14 @@ pub enum ToolCall {
     GetState,
     ScreenshotUi,
     SetActiveTimeline(TimelineArgs),
+    SetPlayhead(SetPlayheadArgs),
+    SetPlayback(SetPlaybackArgs),
+    StartAiClips(StartAiClipsArgs),
+    GetAiClips,
+    SelectAiClips(SelectAiClipsArgs),
+    InsertAiClips(InsertAiClipsArgs),
+    ListStickers(ListStickersArgs),
+    InsertSticker(InsertStickerArgs),
 }
 
 impl ToolCall {
@@ -59,6 +83,7 @@ impl ToolCall {
             ToolCall::SaveProject(_) => "save_project",
             ToolCall::ImportMedia(_) => "import_media",
             ToolCall::ImportOtio(_) => "import_otio",
+            ToolCall::ExportOtio(_) => "export_otio",
             ToolCall::CreateTimeline(_) => "create_timeline",
             ToolCall::AddTrack(_) => "add_track",
             ToolCall::SetTrack(_) => "set_track",
@@ -68,6 +93,21 @@ impl ToolCall {
             ToolCall::DeleteRanges(_) => "delete_ranges",
             ToolCall::MoveClips(_) => "move_clips",
             ToolCall::TrimClip(_) => "trim_clip",
+            ToolCall::SetClipSpeed(_) => "set_clip_speed",
+            ToolCall::FreezeClips(_) => "freeze_clips",
+            ToolCall::SetKeyframe(_) => "set_keyframe",
+            ToolCall::RemoveKeyframe(_) => "remove_keyframe",
+            ToolCall::MoveKeyframe(_) => "move_keyframe",
+            ToolCall::SetKeyframeInterpolation(_) => "set_keyframe_interpolation",
+            ToolCall::MakeCompound(_) => "make_compound",
+            ToolCall::UngroupCompound(_) => "ungroup_compound",
+            ToolCall::SetClipEffects(_) => "set_clip_effects",
+            ToolCall::SetCrossTransition(_) => "set_cross_transition",
+            ToolCall::ListAssets => "list_assets",
+            ToolCall::RenameTimeline(_) => "rename_timeline",
+            ToolCall::DuplicateTimeline(_) => "duplicate_timeline",
+            ToolCall::SetMixer(_) => "set_mixer",
+            ToolCall::SetMixerEffects(_) => "set_mixer_effects",
             ToolCall::SetClipProperties(_) => "set_clip_properties",
             ToolCall::AddTitle(_) => "add_title",
             ToolCall::AddSolidColor(_) => "add_solid_color",
@@ -91,6 +131,14 @@ impl ToolCall {
             ToolCall::GetState => "get_state",
             ToolCall::ScreenshotUi => "screenshot_ui",
             ToolCall::SetActiveTimeline(_) => "set_active_timeline",
+            ToolCall::SetPlayhead(_) => "set_playhead",
+            ToolCall::SetPlayback(_) => "set_playback",
+            ToolCall::StartAiClips(_) => "start_ai_clips",
+            ToolCall::GetAiClips => "get_ai_clips",
+            ToolCall::SelectAiClips(_) => "select_ai_clips",
+            ToolCall::InsertAiClips(_) => "insert_ai_clips",
+            ToolCall::ListStickers(_) => "list_stickers",
+            ToolCall::InsertSticker(_) => "insert_sticker",
         }
     }
 
@@ -109,6 +157,9 @@ impl ToolCall {
                 | ToolCall::CancelExport(_)
                 | ToolCall::GetState
                 | ToolCall::ScreenshotUi
+                | ToolCall::ListAssets
+                | ToolCall::GetAiClips
+                | ToolCall::ListStickers(_)
         )
     }
 }
@@ -116,6 +167,55 @@ impl ToolCall {
 #[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
 pub struct TimelineArgs {
     pub timeline_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct SetPlayheadArgs {
+    pub frame: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct SetPlaybackArgs {
+    pub playing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct StartAiClipsArgs {
+    pub media_id: String,
+    #[serde(default)]
+    pub prompt: String,
+    /// 0 = 15-30 s, 1 = 30-60 s, 2 = 60-90 s.
+    #[serde(default)]
+    pub duration: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct InsertAiClipsArgs {
+    #[serde(default)]
+    pub replace_previous: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct SelectAiClipsArgs {
+    pub indices: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct InsertStickerArgs {
+    pub sticker_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct ListStickersArgs {
+    #[serde(default)]
+    pub query: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub offset: usize,
+    /// Defaults to 100, maximum 500.
+    #[serde(default)]
+    pub limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
@@ -135,6 +235,162 @@ pub struct ClipsArgs {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct SetClipSpeedArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    pub clip_ids: Vec<String>,
+    /// Speed from 1 to 10000 percent.
+    pub percent: f64,
+    #[serde(default)]
+    pub pitch_correction: bool,
+    /// Move following material to follow the changed length. Defaults to true.
+    #[serde(default = "yes")]
+    pub ripple: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct FreezeClipsArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    pub clip_ids: Vec<String>,
+    /// Timeline frame to hold, or null to unfreeze.
+    #[serde(default)]
+    pub frame: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ScalarKeyframeParam {
+    ZoomX,
+    ZoomY,
+    PositionX,
+    PositionY,
+    Rotation,
+    AnchorX,
+    AnchorY,
+    CropLeft,
+    CropTop,
+    CropRight,
+    CropBottom,
+    CropSoftness,
+    Opacity,
+    GainDb,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyframeInterpolationArg {
+    Hold,
+    Linear,
+    EaseInOut,
+    EaseIn,
+    EaseOut,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct SetKeyframeArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    pub clip_id: String,
+    /// Frame in the clip's source coordinates, as returned by get_clip.
+    pub frame: i64,
+    pub parameter: ScalarKeyframeParam,
+    pub value: f32,
+    #[serde(default)]
+    pub interpolation: Option<KeyframeInterpolationArg>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct RemoveKeyframeArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    pub clip_id: String,
+    pub frame: i64,
+    pub parameter: ScalarKeyframeParam,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct MoveKeyframeArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    pub clip_id: String,
+    /// Current frame of the keyframe, in source frames.
+    pub frame: i64,
+    pub parameter: ScalarKeyframeParam,
+    /// Destination frame, in source frames.
+    pub to_frame: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct SetKeyframeInterpolationArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    pub clip_id: String,
+    pub frame: i64,
+    pub parameter: ScalarKeyframeParam,
+    pub interpolation: KeyframeInterpolationArg,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct SetClipEffectsArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    pub clip_id: String,
+    /// Complete effects object from get_clip, with the desired changes.
+    pub effects: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct SetCrossTransitionArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    pub left_clip_id: String,
+    pub right_clip_id: String,
+    /// Complete transition object; null or omitted removes it.
+    #[serde(default)]
+    pub transition: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct RenameTimelineArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct SetMixerArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    /// Track name or `master`.
+    pub channel: String,
+    #[serde(default)]
+    pub gain_db: Option<f32>,
+    #[serde(default)]
+    pub pan: Option<f32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct SetMixerEffectsArgs {
+    pub timeline_id: String,
+    #[serde(default)]
+    pub if_revision: Option<String>,
+    pub channel: String,
+    /// Complete effects array from get_timeline, with the desired changes.
+    pub effects: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
 pub struct ImportOtioArgs {
     /// Path of an `.otio` file.
     pub path: String,
@@ -143,6 +399,13 @@ pub struct ImportOtioArgs {
     /// (default) imports them again into a new folder.
     #[serde(default)]
     pub reuse_existing_media: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, JsonSchema)]
+pub struct ExportOtioArgs {
+    pub timeline_id: String,
+    /// Output .otio file, replacing it if present.
+    pub path: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]

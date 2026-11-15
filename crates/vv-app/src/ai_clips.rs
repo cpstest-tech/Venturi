@@ -8,8 +8,8 @@ use std::sync::mpsc;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use vv_core::{
-    CaptionWord, Clip, ClipId, ClipSource, CommandLabel, InsertClip, LiftDelete, MediaId, Rational,
-    SetCaptions, SubtitleTemplate, TimelineId, TrackKind,
+    CaptionWord, Clip, ClipId, ClipSource, CommandLabel, Id, InsertClip, LiftDelete, MediaId,
+    Rational, SetCaptions, SubtitleTemplate, TimelineId, TrackKind,
 };
 use vv_transcribe::{Progress, Transcript};
 
@@ -200,7 +200,7 @@ pub(crate) fn key_path() -> Result<PathBuf, String> {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
         .ok_or("Cannot locate the user configuration directory")?;
-    Ok(config.join("venturi").join("gemini.key"))
+    Ok(config.join("tandem").join("gemini.key"))
 }
 
 pub(crate) fn load_key() -> Result<String, String> {
@@ -656,6 +656,40 @@ fn refine(
 }
 
 impl VenturiApp {
+    pub(crate) fn mcp_start_ai_clips(&mut self, media: MediaId, prompt: String, duration: usize) {
+        self.ai_clips.source_choice = Some(media);
+        self.ai_clips.prompt = prompt;
+        self.ai_clips.duration = duration;
+        self.start_ai_clips();
+    }
+
+    pub(crate) fn mcp_ai_clips_status(&self) -> serde_json::Value {
+        serde_json::json!({
+            "running": self.ai_clips.job.is_some(),
+            "message": self.ai_clips.message,
+            "source_media_id": self.ai_clips.source.map(|id| id.raw().to_string()),
+            "suggestions": self.ai_clips.results.iter().enumerate().map(|(index, clip)| serde_json::json!({
+                "index": index,
+                "start_ms": clip.start_ms,
+                "end_ms": clip.end_ms,
+                "title": clip.title,
+                "description": clip.description,
+                "score": clip.score,
+                "reason": clip.reason,
+                "selected": clip.selected,
+            })).collect::<Vec<_>>(),
+        })
+    }
+
+    pub(crate) fn mcp_insert_ai_clips(&mut self, replace_previous: bool) {
+        self.insert_ai_clips(replace_previous);
+    }
+
+    pub(crate) fn mcp_select_ai_clips(&mut self, indices: &[usize]) {
+        for (index, suggestion) in self.ai_clips.results.iter_mut().enumerate() {
+            suggestion.selected = indices.contains(&index);
+        }
+    }
     fn sync_ai_clips_source(&mut self, ctx: &egui::Context) {
         let Some(media) = self.ai_clips.source_choice else {
             return;

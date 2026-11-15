@@ -120,6 +120,109 @@ fn get_state_reports_what_the_user_saw_last() {
 }
 
 #[test]
+fn agent_can_seek_the_editor_playhead() {
+    let (mut app, handle, ctx) = attached();
+    solid_clip(&mut app);
+    let result = call_hidden(
+        &mut app,
+        &handle,
+        &ctx,
+        ToolCall::SetPlayhead(vv_mcp::SetPlayheadArgs { frame: 5 }),
+    );
+    assert!(result.is_ok());
+    assert_eq!(app.timeline_state.playhead, 5);
+    assert!(app.timeline_state.reveal_playhead);
+}
+
+#[test]
+fn ai_clips_tools_report_state_and_validate_source() {
+    let (mut app, handle, ctx) = attached();
+    let status = call_hidden(&mut app, &handle, &ctx, ToolCall::GetAiClips).unwrap();
+    assert_eq!(status.value["running"], false);
+    let failed = call_hidden(
+        &mut app,
+        &handle,
+        &ctx,
+        ToolCall::StartAiClips(vv_mcp::StartAiClipsArgs {
+            media_id: "999999".into(),
+            prompt: String::new(),
+            duration: 0,
+        }),
+    );
+    assert!(failed.is_err());
+}
+
+#[test]
+fn sticker_catalog_is_available_to_the_agent() {
+    let (mut app, handle, ctx) = attached();
+    let listed = call_hidden(
+        &mut app,
+        &handle,
+        &ctx,
+        ToolCall::ListStickers(vv_mcp::ListStickersArgs {
+            query: None,
+            category: Some("shapes".into()),
+            offset: 0,
+            limit: Some(10),
+        }),
+    )
+    .unwrap();
+    assert!(
+        listed.value["stickers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["category"] == "shapes")
+    );
+    let failed = call_hidden(
+        &mut app,
+        &handle,
+        &ctx,
+        ToolCall::InsertSticker(vv_mcp::InsertStickerArgs {
+            sticker_id: "missing".into(),
+        }),
+    );
+    assert!(failed.is_err());
+}
+
+#[test]
+fn agent_inserts_a_catalog_sticker_into_the_timeline() {
+    let dir = vv_media::test_support::TempDir::new("vv-mcp-sticker");
+    let (mut app, handle, ctx) = attached();
+    solid_clip(&mut app);
+    app.stickers.store = Some(crate::stickers::Store::new(dir.join("stickers"), &ctx));
+    let before = app.session.project.timelines[app.timeline_id.unwrap()]
+        .tracks
+        .iter()
+        .map(|t| t.clips.len())
+        .sum::<usize>();
+    let result = call_hidden(
+        &mut app,
+        &handle,
+        &ctx,
+        ToolCall::InsertSticker(vv_mcp::InsertStickerArgs {
+            sticker_id: "shape:star".into(),
+        }),
+    );
+    assert!(result.is_ok());
+    for _ in 0..300 {
+        let _ = app.library.poll();
+        app.mcp_checkin(&ctx);
+        app.mcp_checkout();
+        let now = app.session.project.timelines[app.timeline_id.unwrap()]
+            .tracks
+            .iter()
+            .map(|t| t.clips.len())
+            .sum::<usize>();
+        if now > before {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!("sticker was not inserted");
+}
+
+#[test]
 fn edits_wait_for_the_users_gesture_and_stay_a_separate_undo_step() {
     let (mut app, handle, ctx) = attached();
     let (timeline, clip) = solid_clip(&mut app);

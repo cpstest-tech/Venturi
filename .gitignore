@@ -1,6 +1,6 @@
 /target
-.venturi/proxies/
-.venturi/waveforms/
-*.vvproj.bak
+.tandem/proxies/
+.tandem/waveforms/
+*.tandem.bak
 /container/shots/
 /CLAUDE.local.md

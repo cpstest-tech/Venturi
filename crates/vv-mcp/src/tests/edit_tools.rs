@@ -75,6 +75,339 @@ fn insert(timeline: &str, media: &str) -> InsertClipArgs {
 }
 
 #[test]
+fn speed_changes_linked_media_as_one_undo_step() {
+    let dir = test_dir("speed");
+    let file = clip_file(&dir, "clip.mp4");
+    let mut session = Session::default();
+    let media = import(&mut session, &[&file])["media"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let timeline = with_timeline(&mut session);
+    let inserted = ok(
+        &mut session,
+        ToolCall::InsertClip(insert(&timeline, &media)),
+    );
+    let clip_id = inserted["clips"][0]["id"].as_str().unwrap().to_owned();
+    let before = session.history.position();
+    let changed = ok(
+        &mut session,
+        ToolCall::SetClipSpeed(SetClipSpeedArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            clip_ids: vec![clip_id.clone()],
+            percent: 200.0,
+            pitch_correction: true,
+            ripple: true,
+        }),
+    );
+    assert_eq!(session.history.position(), before + 1);
+    assert!(changed["clips"].as_array().unwrap().len() >= 2);
+    assert!(
+        changed["clips"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|c| c["speed"] == 2.0)
+    );
+    ok(&mut session, ToolCall::Undo);
+    let clip = ok(
+        &mut session,
+        ToolCall::GetClip(ClipArgs {
+            timeline_id: timeline,
+            clip_id,
+        }),
+    );
+    assert_eq!(clip["speed"], Value::Null);
+}
+
+#[test]
+fn freeze_frame_is_undoable() {
+    let dir = test_dir("freeze");
+    let file = clip_file(&dir, "clip.mp4");
+    let mut session = Session::default();
+    let media = import(&mut session, &[&file])["media"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let timeline = with_timeline(&mut session);
+    let inserted = ok(
+        &mut session,
+        ToolCall::InsertClip(insert(&timeline, &media)),
+    );
+    let id = inserted["clips"][0]["id"].as_str().unwrap().to_owned();
+    ok(
+        &mut session,
+        ToolCall::FreezeClips(FreezeClipsArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            clip_ids: vec![id.clone()],
+            frame: Some(5),
+        }),
+    );
+    let clip = || {
+        ToolCall::GetClip(ClipArgs {
+            timeline_id: timeline.clone(),
+            clip_id: id.clone(),
+        })
+    };
+    assert!(ok(&mut session, clip())["freeze_frame"].is_number());
+    ok(&mut session, ToolCall::Undo);
+    assert!(ok(&mut session, clip())["freeze_frame"].is_null());
+}
+
+#[test]
+fn keyframe_can_be_added_removed_and_undone() {
+    let mut session = Session::default();
+    let timeline = with_timeline(&mut session);
+    let clip_id = solid(&mut session, &timeline, 0, 20);
+    let clip = || {
+        ToolCall::GetClip(ClipArgs {
+            timeline_id: timeline.clone(),
+            clip_id: clip_id.clone(),
+        })
+    };
+    let before = ok(&mut session, clip());
+    ok(
+        &mut session,
+        ToolCall::SetKeyframe(SetKeyframeArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            clip_id: clip_id.clone(),
+            frame: 5,
+            parameter: ScalarKeyframeParam::Opacity,
+            value: 40.0,
+            interpolation: Some(KeyframeInterpolationArg::EaseInOut),
+        }),
+    );
+    let with_key = ok(&mut session, clip());
+    assert_ne!(before["effects"], with_key["effects"]);
+    ok(
+        &mut session,
+        ToolCall::RemoveKeyframe(RemoveKeyframeArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            clip_id: clip_id.clone(),
+            frame: 5,
+            parameter: ScalarKeyframeParam::Opacity,
+        }),
+    );
+    assert_eq!(ok(&mut session, clip())["effects"], before["effects"]);
+    ok(&mut session, ToolCall::Undo);
+    assert_eq!(ok(&mut session, clip())["effects"], with_key["effects"]);
+}
+
+#[test]
+fn keyframe_can_be_moved_and_retimed() {
+    let mut session = Session::default();
+    let timeline = with_timeline(&mut session);
+    let clip_id = solid(&mut session, &timeline, 0, 20);
+    let clip = || {
+        ToolCall::GetClip(ClipArgs {
+            timeline_id: timeline.clone(),
+            clip_id: clip_id.clone(),
+        })
+    };
+    ok(
+        &mut session,
+        ToolCall::SetKeyframe(SetKeyframeArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            clip_id: clip_id.clone(),
+            frame: 5,
+            parameter: ScalarKeyframeParam::Opacity,
+            value: 40.0,
+            interpolation: None,
+        }),
+    );
+    let placed = ok(&mut session, clip());
+    ok(
+        &mut session,
+        ToolCall::MoveKeyframe(MoveKeyframeArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            clip_id: clip_id.clone(),
+            frame: 5,
+            parameter: ScalarKeyframeParam::Opacity,
+            to_frame: 9,
+        }),
+    );
+    let moved = ok(&mut session, clip());
+    assert_ne!(placed["effects"], moved["effects"]);
+    ok(
+        &mut session,
+        ToolCall::SetKeyframeInterpolation(SetKeyframeInterpolationArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            clip_id: clip_id.clone(),
+            frame: 9,
+            parameter: ScalarKeyframeParam::Opacity,
+            interpolation: KeyframeInterpolationArg::Hold,
+        }),
+    );
+    assert_ne!(ok(&mut session, clip())["effects"], moved["effects"]);
+    ok(&mut session, ToolCall::Undo);
+    assert_eq!(ok(&mut session, clip())["effects"], moved["effects"]);
+    ok(&mut session, ToolCall::Undo);
+    assert_eq!(ok(&mut session, clip())["effects"], placed["effects"]);
+}
+
+#[test]
+fn compound_round_trip_uses_undo_history() {
+    let mut session = Session::default();
+    let timeline = with_timeline(&mut session);
+    let first = solid(&mut session, &timeline, 0, 10);
+    let second = solid(&mut session, &timeline, 10, 10);
+    let before = session.history.position();
+    let grouped = ok(
+        &mut session,
+        ToolCall::MakeCompound(ClipsArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            clip_ids: vec![first, second],
+        }),
+    );
+    assert_eq!(session.history.position(), before + 1);
+    let host = grouped["clips"][0]["id"].as_str().unwrap().to_owned();
+    let restored = ok(
+        &mut session,
+        ToolCall::UngroupCompound(ClipArgs {
+            timeline_id: timeline,
+            clip_id: host,
+        }),
+    );
+    assert_eq!(restored["clips"].as_array().unwrap().len(), 2);
+    assert_eq!(session.history.position(), before + 2);
+}
+
+#[test]
+fn complete_effects_round_trip_is_undoable() {
+    let mut session = Session::default();
+    let timeline = with_timeline(&mut session);
+    let clip_id = solid(&mut session, &timeline, 0, 20);
+    let clip = || {
+        ToolCall::GetClip(ClipArgs {
+            timeline_id: timeline.clone(),
+            clip_id: clip_id.clone(),
+        })
+    };
+    let before = ok(&mut session, clip());
+    let mut effects = before["effects"].clone();
+    effects["animations"]["pulse"] = json!(true);
+    ok(
+        &mut session,
+        ToolCall::SetClipEffects(SetClipEffectsArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            clip_id: clip_id.clone(),
+            effects,
+        }),
+    );
+    assert_eq!(
+        ok(&mut session, clip())["effects"]["animations"]["pulse"],
+        true
+    );
+    ok(&mut session, ToolCall::Undo);
+    assert_eq!(ok(&mut session, clip())["effects"], before["effects"]);
+}
+
+#[test]
+fn crossing_transition_is_reported_and_undoable() {
+    let mut session = Session::default();
+    let timeline = with_timeline(&mut session);
+    let left = solid(&mut session, &timeline, 0, 10);
+    let right = solid(&mut session, &timeline, 10, 10);
+    let transition = serde_json::to_value(Transition {
+        kind: TransitionKind::CrossDissolve,
+        duration: 8,
+        direction: PushDirection::Right,
+        ease: Ease::None,
+        curve: 0.5,
+        asset: None,
+    })
+    .unwrap();
+    ok(
+        &mut session,
+        ToolCall::SetCrossTransition(SetCrossTransitionArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            left_clip_id: left,
+            right_clip_id: right,
+            transition: Some(transition),
+        }),
+    );
+    assert_eq!(
+        tracks(&mut session, &timeline)[0]["cross_transitions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    ok(&mut session, ToolCall::Undo);
+    assert!(
+        tracks(&mut session, &timeline)[0]["cross_transitions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn mixer_gain_and_pan_are_one_undo_step() {
+    let mut session = Session::default();
+    let timeline = with_timeline(&mut session);
+    let before = session.history.position();
+    let result = ok(
+        &mut session,
+        ToolCall::SetMixer(SetMixerArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            channel: "A1".into(),
+            gain_db: Some(-6.0),
+            pan: Some(0.25),
+        }),
+    );
+    assert_eq!(session.history.position(), before + 1);
+    assert_eq!(result["gain_db"], -6.0);
+    assert_eq!(result["pan"], 0.25);
+    ok(&mut session, ToolCall::Undo);
+    assert_eq!(tracks(&mut session, &timeline)[1]["mixer"]["gain_db"], 0.0);
+}
+
+#[test]
+fn mixer_effect_chain_is_replaceable_and_undoable() {
+    let mut session = Session::default();
+    let timeline = with_timeline(&mut session);
+    let effects = serde_json::to_value(vec![vv_core::AudioEffect::new(
+        vv_core::AudioEffectKind::Mono,
+    )])
+    .unwrap();
+    ok(
+        &mut session,
+        ToolCall::SetMixerEffects(SetMixerEffectsArgs {
+            timeline_id: timeline.clone(),
+            if_revision: None,
+            channel: "A1".into(),
+            effects,
+        }),
+    );
+    assert_eq!(
+        tracks(&mut session, &timeline)[1]["mixer"]["effects"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    ok(&mut session, ToolCall::Undo);
+    assert!(
+        tracks(&mut session, &timeline)[1]["mixer"]["effects"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn every_edit_is_one_undo_step_and_a_failed_one_leaves_none() {
     let mut session = Session::default();
     let timeline = with_timeline(&mut session);

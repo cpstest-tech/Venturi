@@ -16,7 +16,7 @@ pub enum PersistenceError {
     #[error("RON error: {0}")]
     RonParse(#[from] ron::error::SpannedError),
     #[error(
-        "saved by a newer version of Venturi (format {found}, this one reads up to {supported})"
+        "saved by a newer version of Tandem (format {found}, this one reads up to {supported})"
     )]
     NewerFormat { found: u32, supported: u32 },
 }

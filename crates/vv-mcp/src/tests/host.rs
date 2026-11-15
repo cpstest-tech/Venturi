@@ -31,7 +31,7 @@ fn a_call_after_the_host_is_gone_fails_cleanly() {
     let (handle, inbox) = channel(|| {});
     drop(inbox);
     let result = handle.submit(ToolCall::GetProject).blocking_recv().unwrap();
-    assert_eq!(result.unwrap_err().0, "Venturi is shutting down");
+    assert_eq!(result.unwrap_err().0, "Tandem is shutting down");
 }
 
 #[test]

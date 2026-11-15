@@ -1,4 +1,4 @@
-//! Model Context Protocol server for Venturi. The tool logic runs on a
+//! Model Context Protocol server for Tandem. The tool logic runs on a
 //! `vv_session::Session` owned by a host (headless, or the GUI); the MCP
 //! transport only sends it `ToolCall`s through a `McpHandle`.
 
@@ -17,6 +17,7 @@ pub use dispatch::{Dispatch, Pending, dispatch};
 pub use host::{
     Disconnected, McpHandle, McpInbox, McpRequest, PendingCalls, Reply, channel, run_headless,
 };
+pub use ids::media_id as parse_media_id;
 pub use ids::timeline_id as parse_timeline_id;
 pub use json::{GuiState, project_json, state_json};
 pub use media_tools::encode_png;

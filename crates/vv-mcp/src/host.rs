@@ -43,7 +43,7 @@ impl McpHandle {
         {
             let _ = request
                 .reply
-                .send(Err(ToolError("Venturi is shutting down".into())));
+                .send(Err(ToolError("Tandem is shutting down".into())));
         }
         (self.notify)();
         result

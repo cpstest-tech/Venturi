@@ -11,9 +11,9 @@ use crate::McpHandle;
 /// Where the editors put their sockets, one per process.
 pub fn socket_dir() -> PathBuf {
     match std::env::var_os("XDG_RUNTIME_DIR").filter(|d| !d.is_empty()) {
-        Some(runtime) => PathBuf::from(runtime).join("venturi"),
+        Some(runtime) => PathBuf::from(runtime).join("tandem"),
         None => std::env::temp_dir().join(format!(
-            "venturi-{}",
+            "tandem-{}",
             std::env::var("USER").unwrap_or_default()
         )),
     }
@@ -167,7 +167,7 @@ async fn accept(
     }
 }
 
-/// `vv-app mcp --attach [--pid N]`: connects stdin/stdout to the socket of
+/// `tandem mcp --attach [--pid N]`: connects stdin/stdout to the socket of
 /// a running editor, until either side closes.
 #[cfg(unix)]
 pub fn bridge_stdio(pid: Option<u32>) -> std::io::Result<()> {
@@ -181,15 +181,15 @@ pub fn bridge_stdio(pid: Option<u32>) -> std::io::Result<()> {
             .ok_or_else(|| {
                 Error::new(
                     ErrorKind::NotFound,
-                    format!("no Venturi window with pid {pid} is serving MCP"),
+                    format!("no Tandem window with pid {pid} is serving MCP"),
                 )
             })?,
         (None, [(_, path)]) => path.clone(),
         (None, []) => {
             return Err(Error::new(
                 ErrorKind::NotFound,
-                "no Venturi window is serving MCP: enable it in Settings > Integrations, \
-                 or start Venturi with --mcp",
+                "no Tandem window is serving MCP: enable it in Settings > Integrations, \
+                 or start Tandem with --mcp",
             ));
         }
         (None, several) => {
@@ -197,7 +197,7 @@ pub fn bridge_stdio(pid: Option<u32>) -> std::io::Result<()> {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
                 format!(
-                    "several Venturi windows serve MCP (pids {}): choose one with --pid",
+                    "several Tandem windows serve MCP (pids {}): choose one with --pid",
                     pids.join(", ")
                 ),
             ));

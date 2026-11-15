@@ -1,5 +1,5 @@
 //! Projects on disk: one folder per project in the projects folder, with the
-//! `.vvproj` inside named like the folder. Media stay where they are: the
+//! `.tandem` inside named like the folder. Media stay where they are: the
 //! folder holds the project file, its cover and what the editor copies next
 //! to it (library media, voiceover takes).
 
@@ -8,7 +8,8 @@ use std::time::SystemTime;
 
 use vv_core::{ClipSource, Project, TimelineId, TrackKind};
 
-pub const PROJECT_EXTENSION: &str = "vvproj";
+pub const PROJECT_EXTENSION: &str = "tandem";
+pub const LEGACY_PROJECT_EXTENSION: &str = "vvproj";
 const COVER_FILE: &str = ".cover.png";
 const CUSTOM_COVER_FILE: &str = ".cover-custom.png";
 const COVER_WIDTH: u32 = 320;
@@ -35,6 +36,11 @@ pub fn project_file(dir: &Path) -> PathBuf {
     dir.join(name)
 }
 
+pub fn is_project_extension(extension: &std::ffi::OsStr) -> bool {
+    extension.eq_ignore_ascii_case(PROJECT_EXTENSION)
+        || extension.eq_ignore_ascii_case(LEGACY_PROJECT_EXTENSION)
+}
+
 /// The folder `file` is the project file of, if it follows the layout.
 fn project_dir(file: &Path) -> Result<&Path, ProjectFsError> {
     file.parent()
@@ -56,8 +62,20 @@ pub fn list_projects(root: &Path) -> Vec<PathBuf> {
     entries
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-        .map(|e| project_file(&e.path()))
-        .filter(|file| file.is_file())
+        .filter_map(|e| {
+            let dir = e.path();
+            let current = project_file(&dir);
+            if current.is_file() {
+                Some(current)
+            } else {
+                let legacy = dir.join(format!(
+                    "{}.{}",
+                    dir.file_name().unwrap_or_default().to_string_lossy(),
+                    LEGACY_PROJECT_EXTENSION
+                ));
+                legacy.is_file().then_some(legacy)
+            }
+        })
         .collect()
 }
 

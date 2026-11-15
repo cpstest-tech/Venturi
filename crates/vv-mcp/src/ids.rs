@@ -17,7 +17,7 @@ fn parse_u64(id: &str, what: &str) -> Result<u64, ToolError> {
         .map_err(|_| ToolError(format!("malformed {what} id \"{id}\"")))
 }
 
-pub(crate) fn media_id(project: &Project, id: &str) -> Result<MediaId, ToolError> {
+pub fn media_id(project: &Project, id: &str) -> Result<MediaId, ToolError> {
     let key = MediaId::from_raw(parse_u64(id, "media")?);
     project
         .media_pool

@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="media/icons/png/vv-icon-256.png" width="128" alt="Venturi logo">
+<img src="media/icons/png/tandem-icon-256.png" width="128" alt="Tandem logo">
 
-# Venturi
+# Tandem
 
 **A Linux-first, performance-oriented video editor written in Rust.**
 
@@ -23,13 +23,13 @@ Built for editing, picture and sound, with timelines that travel to and from oth
 [Architecture](ARCHITECTURE.md) •
 [Contributing](#contributing)
 
-<img src="media/venturi.png" alt="Venturi editing a multi-track timeline, with the animation curve editor and the Color window open" width="100%">
+<img src="media/tandem.png" alt="Tandem editing a multi-track timeline, with the animation curve editor and the Color window open" width="100%">
 
 </div>
 
 ---
 
-Venturi does little, and does it well. It is an editing-focused NLE:
+Tandem does little, and does it well. It is an editing-focused NLE:
 multi-track cutting, the transforms and tools you actually reach for while
 editing, keyframes on every parameter, transitions, compound clips, ripple
 delete, and the audio tools to finish the sound in place: a mixer with an
@@ -37,7 +37,7 @@ effect chain per track and voiceover recording. No node editor, no grading
 suite, no node-based compositor. Editing is where the time goes, so that is
 the part that has to be perfect.
 
-**NOTE: Venturi is alpha software and is considered unstable, especially the save format. Please use at your own risk.**
+**NOTE: Tandem is alpha software and is considered unstable, especially the save format. Please use at your own risk.**
 
 
 ## Features
@@ -49,7 +49,7 @@ the part that has to be perfect.
   VideoToolbox, with software as the fallback.
 - **Professional timeline workflow.** Track scrubbing with audio, ripple
   delete, compound clips, copy/paste properties, copy/paste of clips and
-  media between projects and Venturi windows, magnet snapping, clip speed
+  media between projects and Tandem windows, magnet snapping, clip speed
   from 1% to 10,000%, unlimited undo with a jumpable history.
 - **A library shared by all projects.** Media and compound clips you reuse
   everywhere, and property presets (a 2x punch-in with its easing, a drop
@@ -92,38 +92,37 @@ The downloaded installer stays pinned to that release; use
 `bash install.sh latest` to install a newer release later.
 
 The installer requires Bash, curl and tar. It installs the release's AppImage as
-`~/.local/bin/venturi` and adds Venturi to your application menu, without sudo.
+`~/.local/bin/tandem` and adds Tandem to your application menu, without sudo.
 Pass a release tag such as `bash install.sh v0.9.0` to select a version
 (releases before the installer existed are not supported). Set `INSTALL_DIR` to
 choose another binary directory; desktop entries respect `XDG_DATA_HOME`.
-Add the binary directory to your `PATH` to run `venturi` from the terminal.
+Add the binary directory to your `PATH` to run `tandem` from the terminal.
 To uninstall, run `bash install.sh --uninstall` with the same `INSTALL_DIR`
 and `XDG_DATA_HOME` settings used for installation. This removes the binary,
 menu entry, icons and MIME registration; your projects are preserved.
 
 AppImages may require FUSE 2; without it, run
-`venturi --appimage-extract-and-run`.
+`tandem --appimage-extract-and-run`.
 
 For macOS or a manual Linux installation, grab the latest build from the
 [Releases](https://github.com/VenturiVideo/Venturi/releases/latest) page:
 
 | Platform | File | Notes |
 |---|---|---|
-| Linux x86_64 / aarch64 | `Venturi-<arch>.AppImage` | FFmpeg bundled. Needs a Vulkan driver. |
-| macOS (Apple Silicon) | `Venturi-arm64.dmg` | Ad-hoc signed, see [first launch on macOS](docs/BUILDING.md#opening-the-app-on-another-mac). |
+| Linux x86_64 / aarch64 | `Tandem-<arch>.AppImage` | FFmpeg bundled. Needs a Vulkan driver. |
+| macOS (Apple Silicon) | `Tandem-arm64.dmg` | Ad-hoc signed, see [first launch on macOS](docs/BUILDING.md#opening-the-app-on-another-mac). |
 
 ```sh
-chmod +x Venturi-x86_64.AppImage
-./Venturi-x86_64.AppImage
+chmod +x Tandem-x86_64.AppImage
+./Tandem-x86_64.AppImage
 ```
 
 To build from source, see [docs/BUILDING.md](docs/BUILDING.md).
 
 ## The name
 
-The Venturi effect: when a fluid passes through a constriction, it doesn't
-slow down, it speeds up. Tight constraints make Venturi faster, so your edits
-stay fluid even on modest hardware.
+Tandem is built for the rhythm of editing: picture, sound and story moving
+together in one focused workspace.
 
 ## Contributing
 
@@ -147,5 +146,5 @@ and [AGENTS.md](AGENTS.md); the design is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 GPL-3.0-or-later, see [LICENSE](LICENSE).
 
-DaVinci Resolve is a trademark of Blackmagic Design Pty Ltd. Venturi is an
+DaVinci Resolve is a trademark of Blackmagic Design Pty Ltd. Tandem is an
 independent project, not affiliated with or endorsed by Blackmagic Design.

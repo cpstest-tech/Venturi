@@ -3370,7 +3370,7 @@ impl VenturiApp {
         true
     }
 
-    /// Text from the system clipboard: clips or media copied by Venturi,
+    /// Text from the system clipboard: clips or media copied by Tandem,
     /// maybe another instance or project. Any other text pastes what this
     /// instance copied last.
     fn paste_text(&mut self, text: &str) {
@@ -5034,7 +5034,7 @@ impl VenturiApp {
 }
 
 fn app_icon() -> Option<egui::IconData> {
-    const PNG: &[u8] = include_bytes!("../../../media/icons/png/vv-icon-256.png");
+    const PNG: &[u8] = include_bytes!("../../../media/icons/png/tandem-icon-256.png");
     let decoder = png::Decoder::new(std::io::Cursor::new(PNG));
     let mut reader = decoder.read_info().ok()?;
     let mut buf = vec![0; reader.output_buffer_size()?];
@@ -5060,7 +5060,7 @@ fn main() -> eframe::Result<()> {
     let mcp_forced = args.iter().any(|a| a == "--mcp");
     args.retain(|a| a != "--mcp");
     // Files to open at startup, as if dropped on the window: this is also how
-    // the file manager opens a `.vvproj` (`Exec=vv-app %f`).
+    // the file manager opens a `.tandem` project (`Exec=tandem %f`).
     let startup_paths: Vec<PathBuf> = args.into_iter().map(PathBuf::from).collect();
     let settings_path = settings::Settings::default_path();
     let settings = settings_path
@@ -5077,10 +5077,10 @@ fn main() -> eframe::Result<()> {
     });
 
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("Venturi")
+        .with_title("Tandem")
         // It must match the name of the .desktop, otherwise the Wayland
         // compositors do not associate the icon with the window.
-        .with_app_id("venturi");
+        .with_app_id("tandem");
     if let Some(icon) = app_icon() {
         viewport = viewport.with_icon(icon);
     }
@@ -5104,7 +5104,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "venturi",
+        "tandem",
         options,
         Box::new(move |cc| {
             // Timeline zoom with Ctrl+scroll. Shift+scroll is left free for the
@@ -5169,7 +5169,7 @@ fn main() -> eframe::Result<()> {
     )
 }
 
-/// `vv-app mcp [project.vvproj]`: an MCP server on stdin/stdout, no window.
+/// `tandem mcp [project.tandem]`: an MCP server on stdin/stdout, no window.
 /// `vv-app mcp --attach [--pid N]`: the same, served by a running editor.
 /// Stdout carries the protocol: nothing else may print there.
 fn run_mcp_command(args: &[String]) -> ! {

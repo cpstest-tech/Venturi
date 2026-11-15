@@ -67,8 +67,8 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: Venturi-appimage-${{ runner.arch }}
-          path: target/appimage/Venturi-*.AppImage*
+          name: Tandem-appimage-${{ runner.arch }}
+          path: target/appimage/Tandem-*.AppImage*
           if-no-files-found: error
 
   macos:
@@ -104,8 +104,8 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: Venturi-macos-arm64
-          path: target/macos/Venturi-*.dmg
+          name: Tandem-macos-arm64
+          path: target/macos/Tandem-*.dmg
           if-no-files-found: error
 
   release:
@@ -128,7 +128,7 @@ jobs:
         run: |
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]
           sed "s/^DEFAULT_VERSION=latest$/DEFAULT_VERSION=$RELEASE_TAG/" scripts/install.sh > dist/install.sh
-          tar -czf dist/venturi-desktop.tar.gz scripts/linux-desktop.sh packaging/appimage/venturi.desktop packaging/venturi-mime.xml media/icons/linux/hicolor
+          tar -czf dist/tandem-desktop.tar.gz scripts/linux-desktop.sh packaging/appimage/tandem.desktop packaging/tandem-mime.xml media/icons/linux/hicolor
           chmod +x dist/install.sh
           bash -n dist/install.sh
 

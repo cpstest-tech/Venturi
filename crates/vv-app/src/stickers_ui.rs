@@ -19,7 +19,7 @@ const TEXTURES_PER_FRAME: usize = 12;
 
 #[derive(Default)]
 pub(crate) struct StickerState {
-    store: Option<Store>,
+    pub(crate) store: Option<Store>,
     textures: HashMap<String, egui::TextureHandle>,
     search: String,
     emoji_group: Option<u8>,

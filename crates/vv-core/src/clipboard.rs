@@ -1,4 +1,4 @@
-//! Clips and media copied as text, so another Venturi instance (or another
+//! Clips and media copied as text, so another Tandem instance (or another
 //! project) can paste them: the payload carries the pool items and the
 //! nested timelines they need, under its own ids.
 
@@ -12,7 +12,7 @@ use crate::{
     TrackKind,
 };
 
-const HEADER: &str = "venturi-clipboard/";
+const HEADER: &str = "tandem-clipboard/";
 const VERSION: u32 = 1;
 
 /// A copied clip. Id and group are reassigned on paste; the position

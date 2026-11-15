@@ -17,6 +17,7 @@ pub struct GuiState {
     /// From the root timeline down to the compound clip being edited.
     pub timeline_stack: Vec<TimelineId>,
     pub playhead: vv_core::FrameIdx,
+    pub playing: bool,
     pub selected_clips: Vec<vv_core::ClipId>,
     pub selected_media: Vec<MediaId>,
     /// Media previewed from the media pool instead of the timeline.
@@ -32,6 +33,7 @@ pub fn state_json(session: &Session, state: &GuiState) -> Value {
         "active_timeline": active.map(|id| timeline_json(session, id)),
         "timeline_stack": state.timeline_stack.iter().map(|&id| key_to_string(id)).collect::<Vec<_>>(),
         "playhead": state.playhead,
+        "playing": state.playing,
         "selected_clips": state.selected_clips.iter().map(|id| id.0.to_string()).collect::<Vec<_>>(),
         "selected_media": state.selected_media.iter().map(|&id| key_to_string(id)).collect::<Vec<_>>(),
         "previewed_media": state.previewed_media.map(key_to_string),
@@ -165,10 +167,17 @@ pub(crate) fn timeline_detail_json(session: &Session, id: TimelineId) -> Value {
                 "muted": track.muted,
                 "solo": track.solo,
                 "locked": track.locked,
+                "mixer": { "gain_db": track.mix.gain_db, "pan": track.mix.pan, "effects": track.mix.effects },
                 "clips": track.clips.iter().map(|clip| clip_json(project, id, index, clip)).collect::<Vec<_>>(),
+                "cross_transitions": track.crossings.iter().map(|crossing| json!({
+                    "left_clip_id": crossing.left_clip.0.to_string(),
+                    "right_clip_id": crossing.right_clip.0.to_string(),
+                    "transition": crossing.transition,
+                })).collect::<Vec<_>>(),
             })
         })
         .collect();
+    value["master_mixer"] = json!({ "gain_db": timeline.master.gain_db, "pan": timeline.master.pan, "effects": timeline.master.effects });
     value["markers"] = timeline.markers.iter().map(marker_json).collect();
     value
 }

@@ -17,7 +17,7 @@ ARCH="$(uname -m)"
 TARGET_DIR="$(realpath -m "${CARGO_TARGET_DIR:-target}")"
 FFMPEG_PREFIX="$TARGET_DIR/ffmpeg-shared"
 APPDIR="$TARGET_DIR/appimage/AppDir"
-OUT="$TARGET_DIR/appimage/Venturi-$ARCH.AppImage"
+OUT="$TARGET_DIR/appimage/Tandem-$ARCH.AppImage"
 
 scripts/build-ffmpeg.sh "$FFMPEG_PREFIX"
 
@@ -44,27 +44,27 @@ cargo build -p vv-app --release
 
 rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib"
-cp "$TARGET_DIR/release/vv-app" "$APPDIR/usr/bin/"
+cp "$TARGET_DIR/release/tandem" "$APPDIR/usr/bin/"
 cp -a "$FFMPEG_PREFIX"/lib/*.so.* "$APPDIR/usr/lib/"
-cp packaging/appimage/venturi.desktop "$APPDIR/"
+cp packaging/appimage/tandem.desktop "$APPDIR/"
 mkdir -p "$APPDIR/usr/share/applications"
-cp packaging/appimage/venturi.desktop "$APPDIR/usr/share/applications/"
-# Read by the AppImage integrators (Gear Lever, appimaged…) to register .vvproj.
+cp packaging/appimage/tandem.desktop "$APPDIR/usr/share/applications/"
+# Read by the AppImage integrators (Gear Lever, appimaged…) to register .tandem.
 mkdir -p "$APPDIR/usr/share/mime/packages"
-cp packaging/venturi-mime.xml "$APPDIR/usr/share/mime/packages/venturi.xml"
+cp packaging/tandem-mime.xml "$APPDIR/usr/share/mime/packages/tandem.xml"
 
 # The icon file names must match the Icon= key of the .desktop.
-cp media/icons/svg/vv-icon.svg "$APPDIR/venturi.svg"
+cp media/icons/svg/tandem-icon.svg "$APPDIR/tandem.svg"
 for dir in media/icons/linux/hicolor/*/apps; do
     size="$(basename "$(dirname "$dir")")"
     dest="$APPDIR/usr/share/icons/hicolor/$size/apps"
     mkdir -p "$dest"
-    for f in "$dir"/venturi-video.*; do
-        cp "$f" "$dest/venturi.${f##*.}"
+    for f in "$dir"/tandem.*; do
+        cp "$f" "$dest/tandem.${f##*.}"
     done
 done
-cp media/icons/png/vv-icon-256.png "$APPDIR/.DirIcon"
-ln -s usr/bin/vv-app "$APPDIR/AppRun"
+cp media/icons/png/tandem-icon-256.png "$APPDIR/.DirIcon"
+ln -s usr/bin/tandem "$APPDIR/AppRun"
 
 # The rpath must be set here, not via a cargo link-arg: the arguments after
 # `--` to `cargo rustc` do not enter the fingerprint, so if the crate is
@@ -72,7 +72,7 @@ ln -s usr/bin/vv-app "$APPDIR/AppRun"
 # binary without an rpath. patchelf acts on the copied file, regardless of
 # the cache. --force-rpath => DT_RPATH (not RUNPATH), so it applies to
 # indirect dependencies too, e.g. libavcodec -> libx264.
-patchelf --force-rpath --set-rpath '$ORIGIN/../lib' "$APPDIR/usr/bin/vv-app"
+patchelf --force-rpath --set-rpath '$ORIGIN/../lib' "$APPDIR/usr/bin/tandem"
 
 # Honest bundle check: the build machine has system ffmpeg, so `ldd` would
 # resolve the libav from there, masking a broken bundle (missing rpath or
@@ -81,7 +81,7 @@ patchelf --force-rpath --set-rpath '$ORIGIN/../lib' "$APPDIR/usr/bin/vv-app"
 # inside the AppDir.
 # The codec libraries are needed by libavcodec, not by vv-app: its
 # dependencies are checked too.
-for so in $(patchelf --print-needed "$APPDIR/usr/bin/vv-app" "$APPDIR"/usr/lib/libavcodec.so.*); do
+for so in $(patchelf --print-needed "$APPDIR/usr/bin/tandem" "$APPDIR"/usr/lib/libavcodec.so.*); do
     case "$so" in
         libav*|libsw*|libpostproc*|libx264*|libmp3lame*|libopus*|libvorbis*|libogg*)
             if [ ! -e "$APPDIR/usr/lib/$so" ]; then
@@ -93,7 +93,7 @@ done
 
 # The GPU drivers belong to the system: FFmpeg must load them with dlopen,
 # or the AppImage would not start where they are missing.
-for so in $(patchelf --print-needed "$APPDIR/usr/bin/vv-app" "$APPDIR"/usr/lib/*.so.*); do
+for so in $(patchelf --print-needed "$APPDIR/usr/bin/tandem" "$APPDIR"/usr/lib/*.so.*); do
     case "$so" in
         libva*|libcuda*|libnvcuvid*|libvulkan*|libdrm*)
             echo "GPU driver library linked instead of loaded at run time: $so" >&2
@@ -108,7 +108,7 @@ if [ ! -x "$TOOL" ]; then
     chmod +x "$TOOL"
 fi
 # No FUSE in containers: appimagetool extracts itself.
-UPDATE_INFO="gh-releases-zsync|VenturiVideo|Venturi|latest|Venturi-$ARCH.AppImage.zsync"
+UPDATE_INFO="gh-releases-zsync|VenturiVideo|Venturi|latest|Tandem-$ARCH.AppImage.zsync"
 (
     # appimagetool writes the .zsync sidecar in its working directory.
     cd "$(dirname "$OUT")"

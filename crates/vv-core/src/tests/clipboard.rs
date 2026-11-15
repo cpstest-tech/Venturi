@@ -97,7 +97,7 @@ fn foreign_text_is_not_a_payload() {
 
 #[test]
 fn a_newer_version_is_refused() {
-    let text = "venturi-clipboard/2\n{}";
+    let text = "tandem-clipboard/2\n{}";
     assert!(matches!(
         ClipboardPayload::from_text(text),
         Some(Err(PayloadError::UnsupportedVersion(2)))

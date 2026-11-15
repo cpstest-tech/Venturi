@@ -1,13 +1,13 @@
-# Driving Venturi from an AI agent (MCP)
+# Driving Tandem from an AI agent (MCP)
 
-Venturi speaks the [Model Context Protocol](https://modelcontextprotocol.io):
+Tandem speaks the [Model Context Protocol](https://modelcontextprotocol.io):
 an agent such as Claude Code can import media, build and cut timelines, add
 titles, look at frames, measure audio and export, through the same editing
 code the UI uses. It works in two ways:
 
 - **Headless**: `vv-app mcp` runs without a window. The agent has a project
   of its own.
-- **Attached**: the agent works in the Venturi window you have open, on the
+- **Attached**: the agent works in the Tandem window you have open, on the
   project you are editing. You see every change, and you can undo it.
 
 Both speak MCP over stdin/stdout, so any MCP client can use them.
@@ -15,49 +15,49 @@ Both speak MCP over stdin/stdout, so any MCP client can use them.
 ## Setup
 
 The commands below use `vv-app`, the binary built from source. Installed by
-`install.sh` or `scripts/install-linux.sh`, the command is `venturi`
-(`~/.local/bin/venturi mcp`); the old `vv-app` there is removed, so update
+`install.sh` or `scripts/install-linux.sh`, the command is `tandem`
+(`~/.local/bin/tandem mcp`); the old `vv-app` there is removed, so update
 existing MCP configs. With a release AppImage, use the AppImage itself
-(`/path/to/Venturi-x86_64.AppImage mcp`) or, on macOS,
-`/Applications/Venturi.app/Contents/MacOS/vv-app mcp`.
+(`/path/to/Tandem-x86_64.AppImage mcp`) or, on macOS,
+`/Applications/Tandem.app/Contents/MacOS/tandem mcp`.
 
 ### Headless
 
 ```sh
-claude mcp add venturi -- /path/to/vv-app mcp
+claude mcp add tandem -- /path/to/tandem mcp
 ```
 
 To start from an existing project, add its path:
-`vv-app mcp /path/to/project.vvproj`. The agent saves with `save_project`.
+`tandem mcp /path/to/project.tandem`. The agent saves with `save_project`.
 Nothing is saved automatically.
 
 In other MCP clients, the server entry looks like this:
 
 ```json
-{ "mcpServers": { "venturi": { "command": "/path/to/vv-app", "args": ["mcp"] } } }
+{ "mcpServers": { "tandem": { "command": "/path/to/tandem", "args": ["mcp"] } } }
 ```
 
 ### Attached to the editor window
 
-1. In Venturi, turn on **Settings > Integrations > Let AI agents work in this
+1. In Tandem, turn on **Settings > Integrations > Let AI agents work in this
    window (MCP)**. It stays on across restarts. To turn it on for one run
-   only, start Venturi with `--mcp`. The Integrations section shows the
+   only, start Tandem with `--mcp`. The Integrations section shows the
    exact command to use.
 2. Register the command:
 
    ```sh
-   claude mcp add venturi -- /path/to/vv-app mcp --attach
+   claude mcp add tandem -- /path/to/tandem mcp --attach
    ```
 
-`--attach` connects to the Venturi window that is running. With several
+`--attach` connects to the Tandem window that is running. With several
 windows open, pick one with `--pid <process id>`; the error message lists the
 candidates. While a client is connected, the toolbar shows an orange
 **● MCP**. Its tooltip shows the last tool the agent called.
 
 The window listens on a Unix socket,
-`$XDG_RUNTIME_DIR/venturi/mcp-<pid>.sock` (in the temporary folder when
+`$XDG_RUNTIME_DIR/tandem/mcp-<pid>.sock` (in the temporary folder when
 `XDG_RUNTIME_DIR` is not set), that only your user can open.
-Venturi opens no network port. Windows and the Flatpak build do not support
+Tandem opens no network port. Windows and the Flatpak build do not support
 attaching yet.
 
 While attached, the agent shares the window with you:
@@ -109,6 +109,7 @@ While attached, the agent shares the window with you:
 | `get_timeline(timeline_id)` | Tracks with their clips (start, end, source media and in/out, link group, fades, effects set) and markers |
 | `get_clip(timeline_id, clip_id)` | One clip with all its effect values, keyframes included |
 | `get_markers(timeline_id)` | The markers: id, start, duration, note, color |
+| `list_assets` | Effect, filter, transition and animation asset ids with names and parameter ranges |
 
 ### Project
 
@@ -118,9 +119,14 @@ While attached, the agent shares the window with you:
 | `save_project(path?)` | Without `path`, saves to the current file |
 | `import_media(paths)` | Answers once every file is probed, with ids and metadata; files already in the pool are reported with their existing ids |
 | `import_otio(path, reuse_existing_media?)` | Timelines from an OpenTimelineIO file (e.g. from DaVinci Resolve) |
+| `export_otio(timeline_id, path)` | Writes a timeline to an OpenTimelineIO file |
 | `create_timeline(name, from_media?, fps?, resolution?)` | Tracks V1 and A1. Format taken from `from_media`, or given; default 25 fps, 1920×1080 |
+| `rename_timeline(timeline_id, name)` | Renames the timeline and its media pool entry |
+| `duplicate_timeline(timeline_id, name)` | Duplicates a timeline as a new media pool entry |
 | `add_track(timeline_id, kind)` | `video` or `audio`; returns the new track's name |
 | `set_track(timeline_id, track, muted?, solo?, locked?)` | |
+| `set_mixer(timeline_id, channel, gain_db?, pan?)` | Sets mixer gain and pan for a track or `master`; `get_timeline` reports mixer state |
+| `set_mixer_effects(timeline_id, channel, effects)` | Replaces the ordered audio effect chain from `get_timeline`, including EQ, compression and plugins |
 
 ### Editing
 
@@ -134,6 +140,12 @@ Every call below is one undo step.
 | `delete_ranges(timeline_id, ranges, ripple?, tracks?, media_id?)` | Removes `[start, end)` ranges, cutting clips at the edges. With `ripple`, every unlocked track closes up, so audio and video stay in sync. With `media_id` the ranges are frames of that media: Venturi finds that material wherever it is on the timeline, after any earlier cut, and reports the timeline ranges it removed |
 | `move_clips(timeline_id, moves)` | `moves`: `{clip_id, start, track?}`. Overwrites what is at the destination; linked clips must be listed too |
 | `trim_clip(timeline_id, clip_id, edge, frame)` | `edge` is `start` or `end`; the error names the allowed range |
+| `set_clip_speed(timeline_id, clip_ids, percent, pitch_correction?, ripple?)` | Sets media clip speed from 1% to 10,000%; `ripple` defaults to true, moving following material with the changed length |
+| `freeze_clips(timeline_id, clip_ids, frame?)` | Holds a frame of media clips, or unfreezes them when `frame` is omitted |
+| `set_keyframe(timeline_id, clip_id, frame, parameter, value, interpolation?)`, `remove_keyframe(timeline_id, clip_id, frame, parameter)`, `move_keyframe(timeline_id, clip_id, frame, parameter, to_frame)`, `set_keyframe_interpolation(timeline_id, clip_id, frame, parameter, interpolation)` | Scalar transform and gain keyframes. `frame` is in the clip's source frames; interpolation: `hold`, `linear`, `ease_in`, `ease_out`, `ease_in_out` |
+| `make_compound(timeline_id, clip_ids)`, `ungroup_compound(timeline_id, clip_id)` | Group clips into a nested timeline or restore the nested clips |
+| `set_clip_effects(timeline_id, clip_id, effects)` | Replaces the complete `effects` object returned by `get_clip`, for filters, animations, title styling, blending and asset effects. Read and edit that object before calling; fields omitted from it revert to defaults |
+| `set_cross_transition(timeline_id, left_clip_id, right_clip_id, transition?)` | Sets a transition across adjacent clips on one track, including an asset transition, or removes it when `transition` is omitted |
 | `set_clip_properties(timeline_id, clip_ids, …)` | Static values: `opacity` (0-100), `position` and `scale` (`[x, y]`), `rotation` (degrees), `gain_db`, `disabled`, `fade_in`/`fade_out` (frames), `fill_color` (solid color clips), `matte` (`alpha`, `alpha_inverted`, `luma`, `luma_inverted` or `none`: the clip is hidden and cuts out the layer below it). Values with keyframes keep following them; a warning says so |
 | `set_transition(timeline_id, clip_ids, edge, kind?, duration?, direction?, ease?, curve?)` | Video clips. On the `start` or `end` edge, `push` (default) slides the clip in from, or out to, the edge of the frame over what is below, `cross_dissolve` fades it against what is below; `kind: none` removes it. Defaults: 0.45 s, `right`, `in_out` (`none` for a dissolve), curve 0.5; options not given keep the value already on that edge. Reported by `get_clip` as `transition_in`/`transition_out` |
 | `add_title(timeline_id, text, at, duration?, track?, size?, color?, position?)` | |
@@ -169,6 +181,9 @@ Without `--attach` these return an error asking to attach to the window.
 | `get_state` | The open timeline, the playhead and your selection, so you can tell the agent "cut *this*" |
 | `screenshot_ui` | A PNG of the whole window |
 | `set_active_timeline(timeline_id)` | Shows that timeline in the editor |
+| `set_playhead(frame)`, `set_playback(playing)` | Moves the playhead, starts or pauses playback |
+| `start_ai_clips(media_id, prompt?, duration?)`, `get_ai_clips`, `select_ai_clips(indices)`, `insert_ai_clips(replace_previous?)` | Starts AI Clips in the editor, reports suggestions, selects them and inserts them into the active timeline; duration is 0, 1 or 2 for the three length ranges |
+| `list_stickers(query?, category?, offset?, limit?)`, `insert_sticker(sticker_id)` | Searches catalog stickers (100 per page by default) and inserts one at the playhead, downloading it first if needed |
 
 ## Example: removing the pauses from a recording
 
@@ -336,7 +351,6 @@ those frames, not the timeline's.
 - `get_audio_levels` on a timeline decodes the whole audio files involved,
   so it is slow with long media. On a media it decodes only up to the end of
   the range, so measure the media when you can.
-- Not available yet: keyframe editing, speed changes, transitions between
-  two adjacent clips (only one edge against what is below), compound
-  clips, pasting properties, OTIO export, playback control, a ripple
-  (insert) mode for `insert_clip`.
+- Dedicated tools for some keyframe parameters and curves, selected attribute
+  pasting and ripple insertion are not available yet. The complete clip
+  effects object is editable through `set_clip_effects`.

@@ -452,7 +452,7 @@ impl VenturiApp {
         }
     }
 
-    /// A `.vvproj` from anywhere becomes a project of the Home, then opens.
+    /// A project file from anywhere becomes a project of the Home, then opens.
     pub(crate) fn import_and_open_project(&mut self, src: &Path) {
         let Some(root) = self.settings.projects_dir() else {
             self.report_project_error(t!("home.no_folder").into_owned());

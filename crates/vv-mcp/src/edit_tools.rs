@@ -151,6 +151,96 @@ pub(crate) fn set_track(session: &mut Session, args: SetTrackArgs) -> ToolResult
     })
 }
 
+pub(crate) fn set_mixer(session: &mut Session, args: SetMixerArgs) -> ToolResult {
+    let project = &session.project;
+    let timeline = ids::timeline_id(project, &args.timeline_id)?;
+    ids::check_revision(session, timeline, args.if_revision.as_deref())?;
+    let channel = if args.channel == "master" {
+        vv_core::MixerChannel::Master
+    } else {
+        let track = ids::track_index(project, timeline, &args.channel)?;
+        ensure_kind(project, timeline, track, TrackKind::Audio)?;
+        ensure_unlocked(project, timeline, track)?;
+        vv_core::MixerChannel::Track(track)
+    };
+    if args.gain_db.is_none() && args.pan.is_none() {
+        return fail("pass gain_db or pan");
+    }
+    for (param, value) in [
+        (vv_core::MixerParam::GainDb, args.gain_db),
+        (vv_core::MixerParam::Pan, args.pan),
+    ] {
+        if let Some(value) = value {
+            if !value.is_finite() || !param.range().contains(&value) {
+                return fail(format!(
+                    "{param:?} must be from {} to {}",
+                    param.range().start(),
+                    param.range().end()
+                ));
+            }
+        }
+    }
+    one_step(session, timeline, None, |s| {
+        for (param, value) in [
+            (vv_core::MixerParam::GainDb, args.gain_db),
+            (vv_core::MixerParam::Pan, args.pan),
+        ] {
+            if let Some(value) = value {
+                s.history.do_command(
+                    &mut s.project,
+                    Box::new(vv_core::SetMixerParam::new(timeline, channel, param, value)),
+                );
+            }
+        }
+        let strip = match channel {
+            vv_core::MixerChannel::Track(track) => &s.project.timelines[timeline].tracks[track].mix,
+            vv_core::MixerChannel::Master => &s.project.timelines[timeline].master,
+        };
+        Ok(json!({ "gain_db": strip.gain_db, "pan": strip.pan }))
+    })
+}
+
+pub(crate) fn set_mixer_effects(session: &mut Session, args: SetMixerEffectsArgs) -> ToolResult {
+    let project = &session.project;
+    let timeline = ids::timeline_id(project, &args.timeline_id)?;
+    ids::check_revision(session, timeline, args.if_revision.as_deref())?;
+    let channel = if args.channel == "master" {
+        vv_core::MixerChannel::Master
+    } else {
+        let track = ids::track_index(project, timeline, &args.channel)?;
+        ensure_kind(project, timeline, track, TrackKind::Audio)?;
+        ensure_unlocked(project, timeline, track)?;
+        vv_core::MixerChannel::Track(track)
+    };
+    let effects: Vec<vv_core::AudioEffect> = serde_json::from_value(args.effects)
+        .map_err(|e| ToolError(format!("invalid mixer effects array: {e}")))?;
+    let old_count = match channel {
+        vv_core::MixerChannel::Track(track) => {
+            project.timelines[timeline].tracks[track].mix.effects.len()
+        }
+        vv_core::MixerChannel::Master => project.timelines[timeline].master.effects.len(),
+    };
+    one_step(session, timeline, None, |s| {
+        for index in (0..old_count).rev() {
+            s.history.do_command(
+                &mut s.project,
+                Box::new(vv_core::RemoveAudioEffect::new(timeline, channel, index)),
+            );
+        }
+        for effect in effects {
+            s.history.do_command(
+                &mut s.project,
+                Box::new(vv_core::AddAudioEffect::new(timeline, channel, effect)),
+            );
+        }
+        let strip = match channel {
+            vv_core::MixerChannel::Track(track) => &s.project.timelines[timeline].tracks[track].mix,
+            vv_core::MixerChannel::Master => &s.project.timelines[timeline].master,
+        };
+        Ok(json!({ "effects": strip.effects }))
+    })
+}
+
 pub(crate) fn insert_clip(session: &mut Session, args: InsertClipArgs) -> ToolResult {
     let project = &session.project;
     let timeline = ids::timeline_id(project, &args.timeline_id)?;
@@ -484,6 +574,426 @@ pub(crate) fn trim_clip(session: &mut Session, args: TrimClipArgs) -> ToolResult
             args.frame,
         );
         Ok(json!({ "clips": clips_json(&s.project, timeline, &[clip_ref]) }))
+    })
+}
+
+pub(crate) fn set_clip_speed(session: &mut Session, args: SetClipSpeedArgs) -> ToolResult {
+    let project = &session.project;
+    let timeline = ids::timeline_id(project, &args.timeline_id)?;
+    ids::check_revision(session, timeline, args.if_revision.as_deref())?;
+    if !args.percent.is_finite() || !(1.0..=10_000.0).contains(&args.percent) {
+        return fail("speed percent must be from 1 to 10000");
+    }
+    if args.clip_ids.is_empty() {
+        return fail("clip_ids must not be empty");
+    }
+    let refs = ids::clip_refs(project, timeline, &args.clip_ids)?;
+    let tl = &project.timelines[timeline];
+    let mut targets: BTreeSet<ClipRef> = refs.iter().copied().collect();
+    for &(track, id) in &refs {
+        targets.extend(tl.linked_members(track, id));
+    }
+    let refs: Vec<_> = targets.into_iter().collect();
+    for &(track, id) in &refs {
+        ensure_unlocked(project, timeline, track)?;
+        let clip = project.timelines[timeline]
+            .clip(track, id)
+            .expect("found above");
+        if !matches!(clip.source, ClipSource::Media(_)) {
+            return fail(format!("clip {} is not a media clip", id.0));
+        }
+    }
+    one_step(session, timeline, Some(CommandLabel::ClipSpeed), |s| {
+        s.history.do_command(
+            &mut s.project,
+            Box::new(vv_core::SetClipSpeed::new(
+                timeline,
+                refs.clone(),
+                vv_core::Rational::from_percent(args.percent),
+                args.pitch_correction,
+                if args.ripple {
+                    vv_core::SpeedFit::Ripple
+                } else {
+                    vv_core::SpeedFit::KeepLength
+                },
+            )),
+        );
+        Ok(json!({ "clips": clips_json(&s.project, timeline, &refs) }))
+    })
+}
+
+pub(crate) fn freeze_clips(session: &mut Session, args: FreezeClipsArgs) -> ToolResult {
+    let project = &session.project;
+    let timeline = ids::timeline_id(project, &args.timeline_id)?;
+    ids::check_revision(session, timeline, args.if_revision.as_deref())?;
+    if args.clip_ids.is_empty() {
+        return fail("clip_ids must not be empty");
+    }
+    if args.frame.is_some_and(|frame| frame < 0) {
+        return fail("frame must not be negative");
+    }
+    let refs = ids::clip_refs(project, timeline, &args.clip_ids)?;
+    for &(track, id) in &refs {
+        ensure_unlocked(project, timeline, track)?;
+        ensure_kind(project, timeline, track, TrackKind::Video)?;
+        let clip = project.timelines[timeline]
+            .clip(track, id)
+            .expect("found above");
+        if !matches!(clip.source, ClipSource::Media(_)) {
+            return fail(format!("clip {} is not a media clip", id.0));
+        }
+    }
+    one_step(session, timeline, Some(CommandLabel::FreezeFrame), |s| {
+        s.history.do_command(
+            &mut s.project,
+            Box::new(vv_core::SetClipFreeze::new(
+                timeline,
+                refs.clone(),
+                args.frame,
+            )),
+        );
+        Ok(json!({ "clips": clips_json(&s.project, timeline, &refs) }))
+    })
+}
+
+fn keyframe_target(param: ScalarKeyframeParam) -> vv_core::KeyframeTarget {
+    use ScalarKeyframeParam as P;
+    let transform = match param {
+        P::ZoomX => TransformParam::ZoomX,
+        P::ZoomY => TransformParam::ZoomY,
+        P::PositionX => TransformParam::PositionX,
+        P::PositionY => TransformParam::PositionY,
+        P::Rotation => TransformParam::Rotation,
+        P::AnchorX => TransformParam::AnchorX,
+        P::AnchorY => TransformParam::AnchorY,
+        P::CropLeft => TransformParam::CropLeft,
+        P::CropTop => TransformParam::CropTop,
+        P::CropRight => TransformParam::CropRight,
+        P::CropBottom => TransformParam::CropBottom,
+        P::CropSoftness => TransformParam::CropSoftness,
+        P::Opacity => TransformParam::Opacity,
+        P::GainDb => return vv_core::KeyframeTarget::Gain,
+    };
+    vv_core::KeyframeTarget::TransformParam(transform)
+}
+
+fn interpolation_of(arg: KeyframeInterpolationArg) -> vv_core::Interpolation {
+    match arg {
+        KeyframeInterpolationArg::Hold => vv_core::Interpolation::Hold,
+        KeyframeInterpolationArg::Linear => vv_core::Interpolation::Linear,
+        KeyframeInterpolationArg::EaseInOut => vv_core::Interpolation::EaseInOut,
+        KeyframeInterpolationArg::EaseIn => vv_core::Interpolation::EaseIn,
+        KeyframeInterpolationArg::EaseOut => vv_core::Interpolation::EaseOut,
+    }
+}
+
+fn keyframe_clip(
+    session: &Session,
+    timeline_id: &str,
+    revision: Option<&str>,
+    clip_id: &str,
+    frame: i64,
+) -> Result<(TimelineId, ClipRef)> {
+    let project = &session.project;
+    let timeline = ids::timeline_id(project, timeline_id)?;
+    ids::check_revision(session, timeline, revision)?;
+    let clip_ref = ids::clip_ref(project, timeline, clip_id)?;
+    ensure_unlocked(project, timeline, clip_ref.0)?;
+    let clip = project.timelines[timeline]
+        .clip(clip_ref.0, clip_ref.1)
+        .expect("found above");
+    if !(clip.source_in()..clip.source_out()).contains(&frame) {
+        return fail(format!(
+            "frame must be from {} to {}",
+            clip.source_in(),
+            clip.source_out() - 1
+        ));
+    }
+    Ok((timeline, clip_ref))
+}
+
+pub(crate) fn set_keyframe(session: &mut Session, args: SetKeyframeArgs) -> ToolResult {
+    let (timeline, (track, id)) = keyframe_clip(
+        session,
+        &args.timeline_id,
+        args.if_revision.as_deref(),
+        &args.clip_id,
+        args.frame,
+    )?;
+    if !args.value.is_finite() {
+        return fail("keyframe value must be finite");
+    }
+    let target = keyframe_target(args.parameter);
+    let value = match target {
+        vv_core::KeyframeTarget::TransformParam(param) => {
+            vv_core::KeyframeValue::TransformParam(param, args.value)
+        }
+        vv_core::KeyframeTarget::Gain => vv_core::KeyframeValue::Gain(args.value),
+        _ => unreachable!(),
+    };
+    let interpolation = interpolation_of(
+        args.interpolation
+            .unwrap_or(KeyframeInterpolationArg::Linear),
+    );
+    one_step(session, timeline, Some(CommandLabel::SetKeyframe), |s| {
+        s.history.do_command(
+            &mut s.project,
+            Box::new(vv_core::UpsertKeyframe::new(
+                timeline,
+                track,
+                id,
+                args.frame,
+                value,
+                interpolation,
+            )),
+        );
+        let clip = s.project.timelines[timeline]
+            .clip(track, id)
+            .expect("found above");
+        Ok(json!({ "clip": clip_json(&s.project, timeline, track, clip) }))
+    })
+}
+
+pub(crate) fn remove_keyframe(session: &mut Session, args: RemoveKeyframeArgs) -> ToolResult {
+    let (timeline, (track, id)) = keyframe_clip(
+        session,
+        &args.timeline_id,
+        args.if_revision.as_deref(),
+        &args.clip_id,
+        args.frame,
+    )?;
+    let target = keyframe_target(args.parameter);
+    one_step(session, timeline, Some(CommandLabel::RemoveKeyframe), |s| {
+        s.history.do_command(
+            &mut s.project,
+            Box::new(vv_core::RemoveKeyframe::new(
+                timeline, track, id, target, args.frame,
+            )),
+        );
+        let clip = s.project.timelines[timeline]
+            .clip(track, id)
+            .expect("found above");
+        Ok(json!({ "clip": clip_json(&s.project, timeline, track, clip) }))
+    })
+}
+
+pub(crate) fn move_keyframe(session: &mut Session, args: MoveKeyframeArgs) -> ToolResult {
+    let (timeline, (track, id)) = keyframe_clip(
+        session,
+        &args.timeline_id,
+        args.if_revision.as_deref(),
+        &args.clip_id,
+        args.frame,
+    )?;
+    keyframe_clip(
+        session,
+        &args.timeline_id,
+        args.if_revision.as_deref(),
+        &args.clip_id,
+        args.to_frame,
+    )?;
+    let target = keyframe_target(args.parameter);
+    one_step(session, timeline, Some(CommandLabel::MoveKeyframes), |s| {
+        s.history.do_command(
+            &mut s.project,
+            Box::new(vv_core::MoveKeyframes::new(
+                timeline,
+                track,
+                id,
+                vec![(target, args.frame)],
+                args.to_frame - args.frame,
+            )),
+        );
+        let clip = s.project.timelines[timeline]
+            .clip(track, id)
+            .expect("found above");
+        Ok(json!({ "clip": clip_json(&s.project, timeline, track, clip) }))
+    })
+}
+
+pub(crate) fn set_keyframe_interpolation(
+    session: &mut Session,
+    args: SetKeyframeInterpolationArgs,
+) -> ToolResult {
+    let (timeline, (track, id)) = keyframe_clip(
+        session,
+        &args.timeline_id,
+        args.if_revision.as_deref(),
+        &args.clip_id,
+        args.frame,
+    )?;
+    let target = keyframe_target(args.parameter);
+    let interpolation = interpolation_of(args.interpolation);
+    one_step(
+        session,
+        timeline,
+        Some(CommandLabel::SetInterpolation),
+        |s| {
+            s.history.do_command(
+                &mut s.project,
+                Box::new(vv_core::SetKeyframeInterpolation::new(
+                    timeline,
+                    track,
+                    id,
+                    vec![(target, args.frame)],
+                    interpolation,
+                )),
+            );
+            let clip = s.project.timelines[timeline]
+                .clip(track, id)
+                .expect("found above");
+            Ok(json!({ "clip": clip_json(&s.project, timeline, track, clip) }))
+        },
+    )
+}
+
+pub(crate) fn make_compound(session: &mut Session, args: ClipsArgs) -> ToolResult {
+    let project = &session.project;
+    let timeline = ids::timeline_id(project, &args.timeline_id)?;
+    ids::check_revision(session, timeline, args.if_revision.as_deref())?;
+    if args.clip_ids.is_empty() {
+        return fail("clip_ids must not be empty");
+    }
+    let refs = ids::clip_refs(project, timeline, &args.clip_ids)?;
+    for &(track, _) in &refs {
+        ensure_unlocked(project, timeline, track)?;
+    }
+    let plan = vv_core::plan_compound_clip(project, timeline, &refs)
+        .ok_or_else(|| ToolError("no clips to group".into()))?;
+    one_step(
+        session,
+        timeline,
+        Some(CommandLabel::MakeCompoundClip),
+        |s| {
+            let (media, commands) =
+                vv_core::compound_clip_commands(&mut s.project, timeline, &refs, &plan);
+            s.history.do_command(
+                &mut s.project,
+                Box::new(vv_core::CompositeCommand::new(
+                    CommandLabel::MakeCompoundClip,
+                    commands,
+                )),
+            );
+            let tl = &s.project.timelines[timeline];
+            let mut clips = Vec::new();
+            for (track, t) in tl.tracks.iter().enumerate() {
+                for clip in &t.clips {
+                    if matches!(clip.source, ClipSource::Media(id) if id == media) {
+                        clips.push(clip_json(&s.project, timeline, track, clip));
+                    }
+                }
+            }
+            Ok(json!({ "media_id": ids::key_to_string(media), "clips": clips }))
+        },
+    )
+}
+
+pub(crate) fn ungroup_compound(session: &mut Session, args: ClipArgs) -> ToolResult {
+    let project = &session.project;
+    let timeline = ids::timeline_id(project, &args.timeline_id)?;
+    let (track, id) = ids::clip_ref(project, timeline, &args.clip_id)?;
+    ensure_unlocked(project, timeline, track)?;
+    for (linked_track, _) in project.timelines[timeline].linked_members(track, id) {
+        ensure_unlocked(project, timeline, linked_track)?;
+    }
+    let refs = vv_core::fx::ungroup_compound_clip(
+        &mut session.project,
+        &mut session.history,
+        timeline,
+        track,
+        id,
+    )
+    .map_err(|e| ToolError(format!("cannot ungroup compound clip: {e:?}")))?;
+    session.sync_timeline_media(timeline);
+    Ok(ToolOutput::json(json!({
+        "clips": clips_json(&session.project, timeline, &refs),
+        "revision": session.timeline_revision(timeline),
+    })))
+}
+
+pub(crate) fn set_clip_effects(session: &mut Session, args: SetClipEffectsArgs) -> ToolResult {
+    let project = &session.project;
+    let timeline = ids::timeline_id(project, &args.timeline_id)?;
+    ids::check_revision(session, timeline, args.if_revision.as_deref())?;
+    let (track, id) = ids::clip_ref(project, timeline, &args.clip_id)?;
+    ensure_unlocked(project, timeline, track)?;
+    let effects: vv_core::EffectStack = serde_json::from_value(args.effects)
+        .map_err(|e| ToolError(format!("invalid effects object: {e}")))?;
+    let clip = project.timelines[timeline]
+        .clip(track, id)
+        .expect("found above");
+    if effects.title.is_some() && !matches!(clip.source, ClipSource::Text) {
+        return fail("title effects require a text clip");
+    }
+    one_step(session, timeline, None, |s| {
+        s.history.do_command(
+            &mut s.project,
+            Box::new(vv_core::SetClipValue::new(
+                timeline,
+                track,
+                id,
+                CommandLabel::ApplyPreset,
+                effects,
+                |clip| &mut clip.effects,
+            )),
+        );
+        let clip = s.project.timelines[timeline]
+            .clip(track, id)
+            .expect("found above");
+        Ok(json!({ "clip": crate::json::clip_detail_json(&s.project, timeline, track, clip) }))
+    })
+}
+
+pub(crate) fn set_cross_transition(
+    session: &mut Session,
+    args: SetCrossTransitionArgs,
+) -> ToolResult {
+    let project = &session.project;
+    let timeline = ids::timeline_id(project, &args.timeline_id)?;
+    ids::check_revision(session, timeline, args.if_revision.as_deref())?;
+    let (track, left_id) = ids::clip_ref(project, timeline, &args.left_clip_id)?;
+    let (right_track, right_id) = ids::clip_ref(project, timeline, &args.right_clip_id)?;
+    if track != right_track {
+        return fail("crossing clips must be on the same track");
+    }
+    ensure_unlocked(project, timeline, track)?;
+    ensure_kind(project, timeline, track, TrackKind::Video)?;
+    let tl_track = &project.timelines[timeline].tracks[track];
+    let left = tl_track.clip(left_id).expect("found above");
+    let right = tl_track.clip(right_id).expect("found above");
+    if left.timeline_end() != right.timeline_start || left.is_adjustment() || right.is_adjustment()
+    {
+        return fail("crossing clips must be adjacent video clips, not adjustments");
+    }
+    let value = args
+        .transition
+        .map(|value| {
+            serde_json::from_value::<Transition>(value)
+                .map_err(|e| ToolError(format!("invalid transition object: {e}")))
+        })
+        .transpose()?;
+    if let Some(transition) = &value {
+        let max = vv_core::CrossTransition::max_duration(left, right);
+        if !(1..=max).contains(&transition.duration) {
+            return fail(format!("transition duration must be from 1 to {max}"));
+        }
+        if !transition.curve.is_finite() || !(0.0..=1.0).contains(&transition.curve) {
+            return fail("transition curve must be from 0 to 1");
+        }
+    }
+    let crossing = value.map(|transition| vv_core::CrossTransition {
+        left_clip: left_id,
+        right_clip: right_id,
+        transition,
+    });
+    one_step(session, timeline, Some(CommandLabel::Transition), |s| {
+        s.history.do_command(
+            &mut s.project,
+            Box::new(vv_core::SetCrossTransition::new(
+                timeline, track, left_id, crossing,
+            )),
+        );
+        Ok(json!({ "left_clip_id": args.left_clip_id, "right_clip_id": args.right_clip_id }))
     })
 }
 

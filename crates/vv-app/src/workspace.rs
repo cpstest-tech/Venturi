@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use egui_tiles::{Container, Linear, LinearDir, Tile, TileId, Tiles, Tree};
 use serde::{Deserialize, Serialize};
 
-const TREE_ID: &str = "venturi_workspace";
+const TREE_ID: &str = "tandem_workspace";
 const DEFAULT_WINDOW_SIZE: [f32; 2] = [800.0, 500.0];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -36,7 +36,7 @@ impl Block {
     }
 
     pub fn viewport_id(self) -> egui::ViewportId {
-        egui::ViewportId::from_hash_of(("venturi_block", self))
+        egui::ViewportId::from_hash_of(("tandem_block", self))
     }
 }
 
@@ -248,8 +248,8 @@ impl Workspace {
         let detached = self.detached.iter_mut().find(|d| d.block == block)?;
         let opened = *detached.opened_with.get_or_insert(detached.window);
         let mut builder = egui::ViewportBuilder::default()
-            .with_title(format!("{} — Venturi", block.title()))
-            .with_app_id("venturi")
+            .with_title(format!("{} — Tandem", block.title()))
+            .with_app_id("tandem")
             .with_inner_size(opened.size);
         if let Some(pos) = opened.pos {
             builder = builder.with_position(pos);

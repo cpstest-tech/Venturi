@@ -101,8 +101,8 @@ menu.paste_hint:
   it: "Incolla alla posizione del playhead"
 
 menu.paste_unsupported:
-  en: "The clipboard comes from a newer Venturi (format %{version}): update to paste it."
-  it: "Gli appunti vengono da un Venturi più recente (formato %{version}): aggiorna per incollarli."
+  en: "The clipboard comes from a newer Tandem (format %{version}): update to paste it."
+  it: "Gli appunti vengono da un Tandem più recente (formato %{version}): aggiorna per incollarli."
 
 menu.paste_malformed:
   en: "Could not read the copied clips: %{error}"
@@ -233,12 +233,12 @@ menu.discord:
   it: "Entra nel server Discord"
 
 menu.about:
-  en: "About Venturi..."
-  it: "Informazioni su Venturi..."
+  en: "About Tandem..."
+  it: "Informazioni su Tandem..."
 
 about.title:
-  en: "About Venturi"
-  it: "Informazioni su Venturi"
+  en: "About Tandem"
+  it: "Informazioni su Tandem"
 
 about.version:
   en: "Version %{version}"
