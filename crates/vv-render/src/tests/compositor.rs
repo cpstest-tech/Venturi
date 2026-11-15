@@ -30,6 +30,7 @@ impl OwnedYuvFrame {
             matrix: self.matrix,
             full_range: self.full_range,
             alpha: OPAQUE,
+            alpha_size: None,
         }
     }
 }
@@ -1168,6 +1169,7 @@ fn a_videos_own_alpha_plane_lets_the_layer_below_show_through() {
             LayerContent::Video {
                 frame: YuvFrame {
                     alpha: &alpha,
+                    alpha_size: None,
                     ..frame.as_yuv_frame()
                 },
                 source_size: (4, 4),
@@ -1606,6 +1608,7 @@ fn an_interleaved_chroma_renders_like_the_planar_one() {
         matrix: ColorMatrix::Bt709,
         full_range: false,
         alpha: OPAQUE,
+        alpha_size: None,
     };
     let render = |chroma| {
         compositor.render_frame(

@@ -2792,7 +2792,9 @@ impl VenturiApp {
                                             match (tab, sub) {
                                                 (properties_tabs::ClipTab::Adjust, _) => properties_tabs::adjust_placeholders(ui),
                                                 (_, properties_tabs::VideoSubTab::Mask) => properties_tabs::mask_shapes_placeholder(ui),
-                                                (_, properties_tabs::VideoSubTab::RemoveBackground) => properties_tabs::remove_background_tab(ui),
+                                                (_, properties_tabs::VideoSubTab::RemoveBackground) => {
+                                                    self.show_remove_background_tab(ui, targets, &info.filters, &mut pending_effects)
+                                                }
                                                 (_, properties_tabs::VideoSubTab::Retouch) => properties_tabs::retouch_tab(ui),
                                                 _ => {}
                                             }

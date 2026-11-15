@@ -71,6 +71,7 @@ pub enum CommandLabel {
     Filters,
     Masks,
     BlendMode,
+    RemoveBackground,
     Matte,
     Transition,
     MakeCompoundClip,
@@ -2061,6 +2062,23 @@ pub fn set_clip_blend_mode(
         CommandLabel::BlendMode,
         value,
         |c| &mut c.effects.blend_mode,
+    )
+}
+
+/// Cuts the person out of the clip's background (see `EffectStack::remove_background`).
+pub fn set_clip_remove_background(
+    timeline: TimelineId,
+    track_index: usize,
+    clip_id: ClipId,
+    value: bool,
+) -> SetClipValue<bool> {
+    SetClipValue::new(
+        timeline,
+        track_index,
+        clip_id,
+        CommandLabel::RemoveBackground,
+        value,
+        |c| &mut c.effects.remove_background,
     )
 }
 

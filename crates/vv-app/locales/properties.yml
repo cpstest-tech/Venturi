@@ -1048,3 +1048,43 @@ props.key_softness:
 props.key_spill:
   en: "Spill removal"
   it: "Rimozione riflessi"
+
+props.cutout_video_only:
+  en: "Select a video clip to cut its subject out."
+  it: "Seleziona una clip video per scontornarne il soggetto."
+
+props.cutout_toggle:
+  en: "Remove background"
+  it: "Rimuovi sfondo"
+
+props.cutout_hint:
+  en: "Finds the people in the video and makes everything else transparent. Analysed once per video, in the background."
+  it: "Trova le persone nel video e rende trasparente il resto. Il video viene analizzato una volta, in background."
+
+props.cutout_ready:
+  en: "Background removed."
+  it: "Sfondo rimosso."
+
+props.cutout_download:
+  en: "Downloading the model (%{mb} MB)…"
+  it: "Download del modello (%{mb} MB)…"
+
+props.cutout_running:
+  en: "Analysing the frames…"
+  it: "Analisi dei fotogrammi…"
+
+props.cutout_queued:
+  en: "Waiting…"
+  it: "In attesa…"
+
+props.cutout_stopped:
+  en: "Analysis stopped."
+  it: "Analisi interrotta."
+
+props.cutout_failed:
+  en: "Background removal failed: %{error}"
+  it: "Rimozione sfondo non riuscita: %{error}"
+
+props.cutout_retry:
+  en: "Retry"
+  it: "Riprova"

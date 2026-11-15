@@ -31,6 +31,7 @@ mod library_ribbon;
 mod library_ui;
 mod mask_overlay;
 mod mask_panel;
+mod matte_worker;
 mod mcp_host;
 mod media_pool;
 mod media_pool_ui;
@@ -566,6 +567,7 @@ struct VenturiApp {
     audiometer_level: (f32, f32),
     viewer_fullscreen: bool,
     project_loading: Option<project_io::ProjectLoading>,
+    matte_worker: matte_worker::MatteWorker,
     settings: settings::Settings,
     /// `None` in the tests: the settings are never written to disk.
     settings_path: Option<PathBuf>,
@@ -713,6 +715,7 @@ impl Default for VenturiApp {
             audiometer_level: (0.0, 0.0),
             viewer_fullscreen: false,
             project_loading: None,
+            matte_worker: matte_worker::MatteWorker::default(),
             settings: settings::Settings::default(),
             settings_path: None,
             settings_dialog: None,
@@ -4247,6 +4250,7 @@ impl VenturiApp {
         }
         self.poll_dropped_files(&ui.ctx().clone());
         self.poll_clipboard_image();
+        self.poll_background_removal(&ui.ctx().clone());
         self.poll_plugin_scan();
         self.follow_hw_decode_fallback();
         // What the session applies would land inside the open group.
@@ -4888,6 +4892,7 @@ impl VenturiApp {
                     content: frame_provider::OwnedContent::Video {
                         source_size: (frame.width, frame.height),
                         frame,
+                        matte: None,
                     },
                     transform: vv_core::Transform::default(),
                     opacity: 1.0,
@@ -5305,4 +5310,41 @@ fn title_content_box(title: &vv_core::TitleParams, timeline_size: (u32, u32)) ->
                 a[3].max(b[3]),
             ]
         })
+}
+
+impl VenturiApp {
+    /// Queues the mattes the clips that remove their background still lack,
+    /// and redraws while they arrive.
+    fn poll_background_removal(&mut self, ctx: &egui::Context) {
+        if let Some(timeline_id) = self.timeline_id {
+            let project = &self.session.project;
+            for clip in project.timelines[timeline_id]
+                .tracks
+                .iter()
+                .flat_map(|t| t.clips.iter())
+                .filter(|c| c.effects.remove_background)
+            {
+                let vv_core::ClipSource::Media(id) = clip.source else {
+                    continue;
+                };
+                let Some(item) = project.media_pool.get(id).filter(|i| i.compound.is_none()) else {
+                    continue;
+                };
+                self.matte_worker.request(matte_worker::MatteRequest {
+                    content_hash: item.content_hash,
+                    path: item.path.clone(),
+                    frames: item.meta.duration_frames,
+                    fps: item.meta.fps.as_f64(),
+                });
+            }
+        }
+        let progressed = self.matte_worker.poll();
+        if self.matte_worker.is_busy() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(if progressed {
+                250
+            } else {
+                500
+            }));
+        }
+    }
 }

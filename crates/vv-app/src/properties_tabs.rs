@@ -197,21 +197,179 @@ pub(crate) fn canvas_section(ui: &mut egui::Ui) {
     }
 }
 
-pub(crate) fn remove_background_tab(ui: &mut egui::Ui) {
-    ui.add_space(6.0);
-    let (open, _) = section_header(ui, &t!("props.chroma_key"), false);
-    if open {
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(t!("props.chroma_color")).color(theme::TEXT_DISABLED));
-            soon(ui.add_enabled(
-                false,
-                egui::Button::new("").min_size(egui::vec2(24.0, 18.0)),
+type ChromaEdit = Box<dyn Fn(&mut vv_core::ClipFilter)>;
+
+impl VenturiApp {
+    /// Automatic cutout (the matting model) and chroma key of the clips.
+    pub(crate) fn show_remove_background_tab(
+        &mut self,
+        ui: &mut egui::Ui,
+        targets: &[PanelTarget],
+        filters: &[crate::FilterPanelInfo],
+        pending: &mut Vec<BoxedCommand>,
+    ) {
+        let Some(timeline_id) = self.timeline_id else {
+            return;
+        };
+        let timeline = &self.session.project.timelines[timeline_id];
+        let media_of = |t: &PanelTarget| {
+            let clip = timeline.clip(t.track_index, t.clip_id)?;
+            let vv_core::ClipSource::Media(id) = clip.source else {
+                return None;
+            };
+            let item = self.session.project.media_pool.get(id)?;
+            (item.meta.has_video && !item.meta.is_image() && item.compound.is_none())
+                .then_some((clip, item))
+        };
+        let media: Vec<_> = targets
+            .iter()
+            .filter_map(|t| Some((*t, media_of(t)?)))
+            .collect();
+
+        ui.add_space(6.0);
+        let (open, _) = section_header(ui, &t!("props.auto_cutout"), false);
+        if open {
+            match media.first() {
+                None => {
+                    ui.weak(t!("props.cutout_video_only"));
+                }
+                Some(&(_, (clip, item))) => {
+                    let mut on = clip.effects.remove_background;
+                    if ui
+                        .checkbox(&mut on, t!("props.cutout_toggle"))
+                        .on_hover_text(t!("props.cutout_hint"))
+                        .changed()
+                    {
+                        for (t, _) in &media {
+                            pending.push(Box::new(vv_core::set_clip_remove_background(
+                                t.timeline,
+                                t.track_index,
+                                t.clip_id,
+                                on,
+                            )));
+                        }
+                    }
+                    if on {
+                        let hash = item.content_hash;
+                        self.cutout_status(ui, hash);
+                    }
+                }
+            }
+        }
+
+        ui.add_space(6.0);
+        let chroma = filters
+            .iter()
+            .find(|f| f.kind == vv_core::FilterKind::ChromaKey);
+        let (open, _) = section_header(ui, &t!("props.chroma_key"), false);
+        if !open {
+            return;
+        }
+        let mut on = chroma.is_some();
+        if ui.checkbox(&mut on, t!("filter.chroma_key")).changed() {
+            let tl = Some(&self.session.project.timelines[timeline_id]);
+            pending.extend(crate::properties_panel::toggle_filter_commands(
+                tl,
+                targets,
+                vv_core::FilterKind::ChromaKey,
+                on,
             ));
+        }
+        let Some(chroma) = chroma else {
+            return;
+        };
+        let mut edit: Option<ChromaEdit> = None;
+        let mut color = chroma.color;
+        if crate::properties_panel::color_row(ui, &t!("props.key_color"), &mut color).changed {
+            edit = Some(Box::new(move |f| f.color = color));
+        }
+        ui.horizontal(|ui| {
+            for (label, rgb) in [
+                (t!("props.key_green"), [0.0, 1.0, 0.0]),
+                (t!("props.key_blue"), [0.0, 0.28, 1.0]),
+            ] {
+                if ui.small_button(label).clicked() {
+                    let c = vv_core::Rgba {
+                        r: rgb[0],
+                        g: rgb[1],
+                        b: rgb[2],
+                        a: 1.0,
+                    };
+                    edit = Some(Box::new(move |f| f.color = c));
+                }
+            }
         });
-        placeholder_row(ui, &t!("props.strength"));
-        placeholder_row(ui, &t!("props.shadow"));
+        type Field = fn(&mut vv_core::ClipFilter) -> &mut vv_core::Keyframed<f32>;
+        let rows: [(_, f32, Field); 3] = [
+            (t!("props.key_tolerance"), chroma.amount, |f| &mut f.amount),
+            (t!("props.key_softness"), chroma.grow, |f| &mut f.grow),
+            (t!("props.key_spill"), chroma.radius, |f| &mut f.radius),
+        ];
+        for (label, value, field) in rows {
+            let mut value = value;
+            let row = crate::properties_panel::param_row(ui, &label, None, |ui| {
+                crate::properties_panel::slider_field(ui, &mut value, 0.0..=100.0, 0.5, 1)
+            });
+            if row.changed {
+                edit = Some(Box::new(move |f| field(f).default = value));
+            }
+        }
+        if let Some(edit) = edit {
+            let tl = Some(&self.session.project.timelines[timeline_id]);
+            for t in targets {
+                let Some(effects) = crate::properties_panel::target_effects(tl, t) else {
+                    continue;
+                };
+                let mut new_filters = effects.filters.clone();
+                for f in new_filters
+                    .iter_mut()
+                    .filter(|f| f.kind == vv_core::FilterKind::ChromaKey)
+                {
+                    edit(f);
+                }
+                pending.push(crate::properties_panel::set_filters(
+                    (t.timeline, t.track_index, t.clip_id),
+                    new_filters,
+                ));
+            }
+        }
     }
-    placeholder_button_section(ui, &t!("props.auto_cutout"), &t!("props.auto_cutout"));
+
+    fn cutout_status(&mut self, ui: &mut egui::Ui, hash: u64) {
+        use crate::matte_worker::MatteState;
+        if vv_media::matte::mattes_complete(hash) {
+            ui.weak(t!("props.cutout_ready"));
+            return;
+        }
+        match self.matte_worker.state(hash) {
+            Some(MatteState::Running(progress)) => {
+                let label = match progress.stage() {
+                    vv_matting::Stage::Download => {
+                        t!("props.cutout_download", mb = vv_matting::MODEL_MB)
+                    }
+                    _ => t!("props.cutout_running"),
+                };
+                ui.label(label);
+                ui.add(egui::ProgressBar::new(progress.fraction()).show_percentage());
+                if ui.small_button(t!("common.cancel")).clicked() {
+                    self.matte_worker.cancel(hash);
+                }
+            }
+            Some(MatteState::Queued) | None => {
+                ui.weak(t!("props.cutout_queued"));
+            }
+            Some(MatteState::Failed(error)) => {
+                if error.is_empty() {
+                    ui.weak(t!("props.cutout_stopped"));
+                } else {
+                    ui.colored_label(theme::ERROR, t!("props.cutout_failed", error = error));
+                }
+                if ui.small_button(t!("props.cutout_retry")).clicked() {
+                    self.matte_worker.retry(hash);
+                }
+            }
+        }
+    }
 }
 
 pub(crate) fn mask_shapes_placeholder(ui: &mut egui::Ui) {

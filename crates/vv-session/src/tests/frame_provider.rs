@@ -641,6 +641,7 @@ fn video_layer(frame: Arc<FrameYuv420>, opacity: f32) -> OwnedLayer {
         content: OwnedContent::Video {
             frame,
             source_size: (2, 2),
+            matte: None,
         },
         transform: Transform::default(),
         opacity,

@@ -9,6 +9,7 @@ pub mod cache;
 pub mod decode;
 pub mod encode;
 pub mod hw;
+pub mod matte;
 pub mod probe;
 pub mod proxy;
 pub mod thumbnail;

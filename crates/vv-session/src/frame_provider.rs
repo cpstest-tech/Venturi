@@ -110,6 +110,18 @@ pub fn clip_source_size(project: &Project, clip: &Clip, timeline_size: (u32, u32
 
 /// vv-render does not depend on vv-media: it takes raw byte planes.
 pub fn as_render_yuv_frame(frame: &FrameYuv420) -> vv_render::YuvFrame<'_> {
+    with_matte(frame, None)
+}
+
+/// Like `as_render_yuv_frame`, the coverage taken from `matte` if any.
+pub fn with_matte<'a>(
+    frame: &'a FrameYuv420,
+    matte: Option<&'a vv_media::matte::Matte>,
+) -> vv_render::YuvFrame<'a> {
+    let (alpha, alpha_size) = match matte {
+        Some(m) => (m.data.as_slice(), Some((m.width, m.height))),
+        None => (frame.alpha.as_deref().unwrap_or(&[255]), None),
+    };
     vv_render::YuvFrame {
         y: &frame.y,
         width: frame.width,
@@ -122,7 +134,8 @@ pub fn as_render_yuv_frame(frame: &FrameYuv420) -> vv_render::YuvFrame<'_> {
         chroma_height: frame.chroma_height,
         matrix: frame.matrix,
         full_range: frame.full_range,
-        alpha: frame.alpha.as_deref().unwrap_or(&[255]),
+        alpha,
+        alpha_size,
     }
 }
 
@@ -206,6 +219,8 @@ pub enum OwnedContent {
         frame: Arc<FrameYuv420>,
         /// Native resolution of the media (not of the proxy): the units of the crop.
         source_size: (u32, u32),
+        /// Background removal: the frame's coverage.
+        matte: Option<Arc<vv_media::matte::Matte>>,
     },
     /// Compound clip composed on the GPU (see `FrameProvider::compound_texture`).
     Texture {
@@ -222,8 +237,12 @@ pub enum OwnedContent {
 impl OwnedLayer {
     pub fn as_render(&self) -> vv_render::Layer<'_> {
         let content = match &self.content {
-            OwnedContent::Video { frame, source_size } => vv_render::LayerContent::Video {
-                frame: as_render_yuv_frame(frame),
+            OwnedContent::Video {
+                frame,
+                source_size,
+                matte,
+            } => vv_render::LayerContent::Video {
+                frame: with_matte(frame, matte.as_deref()),
                 source_size: *source_size,
             },
             OwnedContent::Texture {
@@ -253,12 +272,25 @@ impl OwnedLayer {
     fn renders_same(&self, other: &OwnedLayer) -> bool {
         let same_content = match (&self.content, &other.content) {
             (
-                OwnedContent::Video { frame, source_size },
+                OwnedContent::Video {
+                    frame,
+                    source_size,
+                    matte,
+                },
                 OwnedContent::Video {
                     frame: frame2,
                     source_size: source_size2,
+                    matte: matte2,
                 },
-            ) => Arc::ptr_eq(frame, frame2) && source_size == source_size2,
+            ) => {
+                Arc::ptr_eq(frame, frame2)
+                    && source_size == source_size2
+                    && match (matte, matte2) {
+                        (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+                        (None, None) => true,
+                        _ => false,
+                    }
+            }
             (OwnedContent::Solid(color), OwnedContent::Solid(color2)) => color == color2,
             (OwnedContent::Text(title), OwnedContent::Text(title2)) => title == title2,
             // What it adjusts is the rest of the stack, compared on its own.
@@ -743,9 +775,14 @@ fn build_layer(
         ClipSource::Adjustment => OwnedContent::Adjustment,
         ClipSource::Media(_) => {
             let source_size = clip_source_size(project, clip, timeline_size);
+            let frame_at = frame;
             match content {
                 ClipContent::None => return None,
-                ClipContent::Yuv(frame) => OwnedContent::Video { frame, source_size },
+                ClipContent::Yuv(frame) => OwnedContent::Video {
+                    frame,
+                    source_size,
+                    matte: background_matte(project, clip, frame_at),
+                },
                 ClipContent::Texture(texture) => OwnedContent::Texture {
                     texture,
                     source_size,
@@ -762,6 +799,23 @@ fn build_layer(
         masks,
         assets: Vec::new(),
     })
+}
+
+/// The matte of the media frame `clip` shows at timeline `frame`, if the
+/// clip removes its background and the matte is ready.
+fn background_matte(
+    project: &Project,
+    clip: &Clip,
+    frame: FrameIdx,
+) -> Option<Arc<vv_media::matte::Matte>> {
+    if !clip.effects.remove_background {
+        return None;
+    }
+    let ClipSource::Media(media_id) = &clip.source else {
+        return None;
+    };
+    let item = project.media_pool.get(*media_id)?;
+    vv_media::matte::load_matte(item.content_hash, clip.picture_frame_at(frame))
 }
 
 /// The timeline frame to take the content from: `timeline_frame`, or that of

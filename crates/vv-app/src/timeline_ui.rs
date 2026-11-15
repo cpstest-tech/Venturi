@@ -2995,7 +2995,7 @@ pub fn show_timeline(
                         len,
                         &visuals,
                         &exclude,
-                        &snap_extra,
+                        snap_extra,
                         px_per_frame,
                         snapping_enabled,
                     )
@@ -3013,7 +3013,7 @@ pub fn show_timeline(
                         0,
                         &visuals,
                         &exclude,
-                        &snap_extra,
+                        snap_extra,
                         px_per_frame,
                         snapping_enabled,
                     );
@@ -3029,7 +3029,7 @@ pub fn show_timeline(
                         0,
                         &visuals,
                         &exclude,
-                        &snap_extra,
+                        snap_extra,
                         px_per_frame,
                         snapping_enabled,
                     );
@@ -3803,7 +3803,7 @@ pub fn show_timeline(
                                         0,
                                         &visuals,
                                         &[],
-                                        &snap_extra,
+                                        snap_extra,
                                         px_per_frame,
                                         snapping_enabled,
                                     );

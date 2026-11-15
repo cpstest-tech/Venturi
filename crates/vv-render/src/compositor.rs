@@ -42,6 +42,7 @@ const SOLID_PLACEHOLDER: YuvFrame<'static> = YuvFrame {
     matrix: ColorMatrix::Bt601,
     full_range: true,
     alpha: OPAQUE,
+    alpha_size: None,
 };
 /// Placeholder for `YuvFrame::alpha` when the layer carries no real
 /// per-pixel coverage: a single byte, sampled everywhere (`ClampToEdge`) —
@@ -83,6 +84,9 @@ pub struct YuvFrame<'a> {
     /// has no alpha channel), otherwise `width`x`height` bytes like Y — see
     /// `FrameYuv420::alpha`, where it comes from when it is not the placeholder.
     pub alpha: &'a [u8],
+    /// Size of `alpha` when it is not the frame's: a background-removal matte
+    /// is computed smaller and sampled by uv.
+    pub alpha_size: Option<(u32, u32)>,
 }
 
 #[derive(Clone, Copy)]
@@ -2641,7 +2645,7 @@ impl Compositor {
         let (alpha_w, alpha_h) = if frame.alpha.len() == 1 {
             (1, 1)
         } else {
-            (frame.width, frame.height)
+            frame.alpha_size.unwrap_or((frame.width, frame.height))
         };
         let a_texture = self.plane_texture(frame.alpha, alpha_w, alpha_h);
         let y_view = y_texture.create_view(&wgpu::TextureViewDescriptor::default());

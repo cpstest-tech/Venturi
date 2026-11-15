@@ -65,7 +65,11 @@ pub fn split_layers(
         .into_iter()
         .zip([-quarter, quarter])
         .map(|(frame, x)| OwnedLayer {
-            content: OwnedContent::Video { frame, source_size },
+            content: OwnedContent::Video {
+                frame,
+                source_size,
+                matte: None,
+            },
             transform: vv_core::Transform {
                 zoom: [0.5, 0.5],
                 position: [x, 0.0],

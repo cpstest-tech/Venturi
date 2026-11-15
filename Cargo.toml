@@ -9,6 +9,7 @@ members = [
     "crates/vv-plugin-fixture",
     "crates/vv-session",
     "crates/vv-vad",
+    "crates/vv-matting",
     "crates/vv-transcribe",
     "crates/vv-mcp",
     "crates/vv-app",

@@ -815,6 +815,20 @@ impl VenturiApp {
                 Err(t!("project.load_interrupted").into_owned())
             }
         };
+        self.finish_project_loading(loaded);
+    }
+
+    /// Blocks until the project `open_project_in_background` reads is in.
+    #[cfg(test)]
+    pub(crate) fn wait_for_project_loading(&mut self) {
+        let loaded = match &self.project_loading {
+            Some(loading) => loading.rx.recv().map_err(|e| e.to_string()).and_then(|r| r),
+            None => return,
+        };
+        self.finish_project_loading(loaded);
+    }
+
+    fn finish_project_loading(&mut self, loaded: Result<vv_core::Project, String>) {
         let Some(ProjectLoading { path, .. }) = self.project_loading.take() else {
             return;
         };

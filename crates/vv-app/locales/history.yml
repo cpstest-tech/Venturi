@@ -291,3 +291,7 @@ history.move_to_folder:
 history.delete_folder:
   en: "Delete folder"
   it: "Elimina cartella"
+
+history.remove_background:
+  en: "Remove background"
+  it: "Rimuovi sfondo"

@@ -8,5 +8,6 @@ workspace = true
 
 [dependencies]
 ffmpeg-next = "9.0.0"
+png = "0.18"
 thiserror = "2.0.20"
 vv-core = { path = "../vv-core" }

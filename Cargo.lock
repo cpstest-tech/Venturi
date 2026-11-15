@@ -4967,6 +4967,7 @@ dependencies = [
  "ureq",
  "vv-audio",
  "vv-core",
+ "vv-matting",
  "vv-mcp",
  "vv-media",
  "vv-plugin",
@@ -4998,6 +4999,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vv-matting"
+version = "0.8.3"
+dependencies = [
+ "tract-onnx",
+ "ureq",
+ "vv-core",
+ "vv-media",
+]
+
+[[package]]
 name = "vv-mcp"
 version = "0.8.3"
 dependencies = [
@@ -5021,6 +5032,7 @@ name = "vv-media"
 version = "0.8.3"
 dependencies = [
  "ffmpeg-next",
+ "png 0.18.1",
  "thiserror 2.0.20",
  "vv-core",
 ]

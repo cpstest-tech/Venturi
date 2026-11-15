@@ -2544,16 +2544,17 @@ fn playback_follows_the_clock_across_a_cut() {
     assert!(app.is_timeline_playing());
 }
 
-/// Bug: "the selection does not follow during playback".
+/// During playback the selection is the user's: a selected audio clip
+/// must survive the video under the playhead changing.
 #[test]
-fn selection_follows_playhead_during_normal_playback() {
+fn playback_leaves_the_selection_alone() {
     let mut app = VenturiApp::default();
     assert!(app.selection_follows_playhead, "on by default");
     let clip_a = make_timeline_with_clip(&mut app, 0, 0, 25);
-    let clip_b = make_timeline_with_clip(&mut app, 0, 25, 25);
-    app.toggle_playback();
+    make_timeline_with_clip(&mut app, 0, 25, 25);
     app.sync_selection_to_playhead();
     assert_eq!(app.timeline_state.selected, BTreeSet::from([(0, clip_a)]));
+    app.toggle_playback();
 
     move_clock_to(&mut app, 30);
     let playhead_before = app.timeline_state.playhead;
@@ -2561,7 +2562,7 @@ fn selection_follows_playhead_during_normal_playback() {
     assert_ne!(app.timeline_state.playhead, playhead_before);
     app.sync_selection_to_playhead();
 
-    assert_eq!(app.timeline_state.selected, BTreeSet::from([(0, clip_b)]));
+    assert_eq!(app.timeline_state.selected, BTreeSet::from([(0, clip_a)]));
 }
 
 #[test]
@@ -4069,6 +4070,7 @@ fn dropping_a_project_opens_it_after_the_unsaved_changes_question() {
         Some(ProjectSwitch::OpenPath(project_path.clone()))
     );
     app.resolve_unsaved_changes(UnsavedChoice::Discard);
+    app.wait_for_project_loading();
 
     assert_eq!(app.session.path(), Some(project_path.as_path()));
     let timeline_id = app.timeline_id.unwrap();

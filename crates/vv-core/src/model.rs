@@ -1749,6 +1749,10 @@ pub struct EffectStack {
     /// filters, in order. On an adjustment clip they process the tracks below.
     #[serde(default)]
     pub assets: Vec<AssetFx>,
+    /// The person is cut out of the background by the matting model; the
+    /// mattes are computed in the background, per media.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub remove_background: bool,
 }
 
 /// `EffectStack` as saved, older files included.
@@ -1775,6 +1779,8 @@ struct StoredEffectStack {
     matte: Option<MatteMode>,
     #[serde(default)]
     assets: Vec<AssetFx>,
+    #[serde(default)]
+    remove_background: bool,
 }
 
 impl From<StoredEffectStack> for EffectStack {
@@ -1799,6 +1805,7 @@ impl From<StoredEffectStack> for EffectStack {
             masks: stored.masks,
             matte: stored.matte,
             assets: stored.assets,
+            remove_background: stored.remove_background,
         }
     }
 }
@@ -1818,6 +1825,7 @@ impl Default for EffectStack {
             masks: Vec::new(),
             matte: None,
             assets: Vec::new(),
+            remove_background: false,
         }
     }
 }
