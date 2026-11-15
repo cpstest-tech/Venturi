@@ -106,6 +106,10 @@ filter.colorize:
   en: "Colorize"
   it: "Colora"
 
+filter.chroma_key:
+  en: "Chroma Key"
+  it: "Chroma key"
+
 pool.drag_to_clip:
   en: "Drag onto a video clip"
   it: "Trascina su una clip video"

@@ -1175,6 +1175,10 @@ pub enum FilterKind {
     /// Multiplies the clip by `ClipFilter::color`: white stickers take any
     /// color, keeping their alpha and the shading of the glyph.
     Colorize,
+    /// Makes `ClipFilter::color` transparent (green/blue screen):
+    /// `amount` is the tolerance, `grow` the edge softness and `radius` the
+    /// spill removal, all 0-100.
+    ChromaKey,
 }
 
 impl FilterKind {
@@ -1195,7 +1199,7 @@ impl FilterKind {
 
     /// Whether `ClipFilter::color` applies to it.
     pub fn has_color(self) -> bool {
-        matches!(self, Self::DropShadow | Self::Colorize)
+        matches!(self, Self::DropShadow | Self::Colorize | Self::ChromaKey)
     }
 }
 
@@ -1350,6 +1354,7 @@ enum StoredFilterKind {
     Exposure,
     DropShadow,
     Colorize,
+    ChromaKey,
 }
 
 impl From<StoredClipFilter> for ClipFilter {
@@ -1365,6 +1370,7 @@ impl From<StoredClipFilter> for ClipFilter {
             StoredFilterKind::Exposure => (FilterKind::Exposure, stored.grade),
             StoredFilterKind::DropShadow => (FilterKind::DropShadow, stored.grade),
             StoredFilterKind::Colorize => (FilterKind::Colorize, stored.grade),
+            StoredFilterKind::ChromaKey => (FilterKind::ChromaKey, stored.grade),
         };
         Self {
             kind,
@@ -1423,6 +1429,12 @@ pub const DEFAULT_COLORIZE: Rgba = Rgba {
 const fn default_filter_color(kind: FilterKind) -> Rgba {
     match kind {
         FilterKind::Colorize => DEFAULT_COLORIZE,
+        FilterKind::ChromaKey => Rgba {
+            r: 0.0,
+            g: 1.0,
+            b: 0.0,
+            a: 1.0,
+        },
         _ => Rgba::BLACK,
     }
 }
@@ -1430,21 +1442,36 @@ const fn default_filter_color(kind: FilterKind) -> Rgba {
 const fn default_amount(kind: FilterKind) -> f32 {
     match kind {
         FilterKind::DropShadow => DEFAULT_SHADOW_OPACITY,
+        FilterKind::ChromaKey => CHROMA_DEFAULT_TOLERANCE,
         _ => 0.0,
     }
 }
 
+/// Defaults of a new `ChromaKey`, 0-100 (see `FilterKind::ChromaKey`).
+pub const CHROMA_DEFAULT_TOLERANCE: f32 = 40.0;
+pub const CHROMA_DEFAULT_SOFTNESS: f32 = 15.0;
+pub const CHROMA_DEFAULT_SPILL: f32 = 50.0;
+
 impl ClipFilter {
     pub fn new(kind: FilterKind) -> Self {
+        let chroma = kind == FilterKind::ChromaKey;
         Self {
             kind,
             enabled: true,
-            radius: Keyframed::constant(DEFAULT_BLUR_RADIUS),
+            radius: Keyframed::constant(if chroma {
+                CHROMA_DEFAULT_SPILL
+            } else {
+                DEFAULT_BLUR_RADIUS
+            }),
             direction: Keyframed::constant(BlurDirection::Both),
             amount: Keyframed::constant(default_amount(kind)),
             grade: GradeTracks::default(),
             offset: default_shadow_offset(),
-            grow: default_shadow_grow(),
+            grow: if chroma {
+                Keyframed::constant(CHROMA_DEFAULT_SOFTNESS)
+            } else {
+                default_shadow_grow()
+            },
             color: default_filter_color(kind),
         }
     }

@@ -2776,3 +2776,36 @@ fn an_empty_matte_hides_the_layer() {
     let (center, _) = matted_red_over_blue(&[], vv_core::MatteMode::Alpha);
     assert_close_rgba(center, [0, 0, 255, 255]);
 }
+
+#[test]
+fn chroma_key_shows_what_is_under_the_key_color_and_keeps_the_rest() {
+    let compositor = Compositor::new_headless();
+    let filters = [vv_core::FilterValue::new(vv_core::FilterKind::ChromaKey)];
+    let green = vv_core::Rgba {
+        r: 0.1,
+        g: 0.9,
+        b: 0.15,
+        a: 1.0,
+    };
+    let blue = vv_core::Rgba {
+        r: 0.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    };
+    let render = |top: vv_core::Rgba| {
+        let out = compositor.render_layers(
+            &[
+                Layer::new(LayerContent::Solid(blue), Transform::default()),
+                Layer {
+                    filters: &filters,
+                    ..Layer::new(LayerContent::Solid(top), Transform::default())
+                },
+            ],
+            OutputFrame::exact(4, 4),
+        );
+        out.as_chunks::<4>().0[0]
+    };
+    assert_eq!(render(green)[..3], [0, 0, 255], "the screen is keyed out");
+    assert_eq!(render(RED)[..3], [255, 0, 0], "other colors stay");
+}

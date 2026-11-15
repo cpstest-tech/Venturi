@@ -170,6 +170,7 @@ fn filter_shader_id(kind: vv_core::FilterKind) -> f32 {
         vv_core::FilterKind::ColorCorrection => 1.0,
         vv_core::FilterKind::Exposure => 2.0,
         vv_core::FilterKind::Colorize => 3.0,
+        vv_core::FilterKind::ChromaKey => 4.0,
         vv_core::FilterKind::BoxBlur
         | vv_core::FilterKind::GaussianBlur
         | vv_core::FilterKind::DropShadow => 0.0,
@@ -464,6 +465,31 @@ struct TransformUniform {
     filters: [[f32; 4]; MAX_LAYER_FILTERS / 4],
     /// The scalar parameter of each slot of `filters` (`FilterValue::amount`).
     filter_params: [[f32; 4]; MAX_LAYER_FILTERS / 4],
+    /// The first chroma key: its color, then tolerance, softness and spill
+    /// removal, already in the shader's units (see `chroma_uniform`).
+    chroma_key: [f32; 4],
+    chroma_params: [f32; 4],
+}
+
+/// One chroma key per layer is enough: a second would key out a color the
+/// first already left.
+fn chroma_uniform(filters: &[vv_core::FilterValue]) -> ([f32; 4], [f32; 4]) {
+    let Some(f) = filters
+        .iter()
+        .find(|f| f.kind == vv_core::FilterKind::ChromaKey)
+    else {
+        return ([0.0; 4], [0.0; 4]);
+    };
+    let unit = |v: f32| (v / 100.0).clamp(0.0, 1.0);
+    (
+        [f.color.r, f.color.g, f.color.b, 1.0],
+        [
+            unit(f.amount) * 0.5,
+            unit(f.grow) * 0.3 + 0.002,
+            unit(f.radius),
+            0.0,
+        ],
+    )
 }
 
 impl TransformUniform {
@@ -541,6 +567,8 @@ impl TransformUniform {
             planes,
             filters: pack_filter_slots(filters, |f| filter_shader_id(f.kind)),
             filter_params: pack_filter_slots(filters, filter_param),
+            chroma_key: chroma_uniform(filters).0,
+            chroma_params: chroma_uniform(filters).1,
         }
     }
 }

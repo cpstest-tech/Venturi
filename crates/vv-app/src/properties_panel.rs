@@ -2499,6 +2499,43 @@ impl VenturiApp {
                                                         }
                                                         reset_color |= row.reset;
                                                     }
+                                                    if kind == vv_core::FilterKind::ChromaKey {
+                                                        let mut color = filter.color;
+                                                        let row = color_row(ui, &t!("props.key_color"), &mut color);
+                                                        if row.changed {
+                                                            new_color = Some(color);
+                                                        }
+                                                        reset_color |= row.reset;
+                                                        ui.horizontal(|ui| {
+                                                            ui.add_space(PARAM_LABEL_WIDTH);
+                                                            for (label, rgb) in [
+                                                                (t!("props.key_green"), [0.0, 1.0, 0.0]),
+                                                                (t!("props.key_blue"), [0.0, 0.28, 1.0]),
+                                                            ] {
+                                                                if ui.small_button(label).clicked() {
+                                                                    new_color = Some(vv_core::Rgba { r: rgb[0], g: rgb[1], b: rgb[2], a: 1.0 });
+                                                                }
+                                                            }
+                                                        });
+                                                        for (label, value, key, set, reset) in [
+                                                            (t!("props.key_tolerance"), filter.amount, filter.amount_key, vv_core::KeyframeValue::FilterAmount as fn(_, _) -> _, &mut reset_amount),
+                                                            (t!("props.key_softness"), filter.grow, filter.grow_key, vv_core::KeyframeValue::FilterGrow, &mut reset_grow),
+                                                            (t!("props.key_spill"), filter.radius, filter.radius_key, vv_core::KeyframeValue::FilterRadius, &mut reset_radius),
+                                                        ] {
+                                                            let mut value = value;
+                                                            let row = param_row(ui, &label, Some(key), |ui| slider_field(ui, &mut value, 0.0..=100.0, 0.5, 1));
+                                                            let set = set(kind, value);
+                                                            let target = set.target();
+                                                            if row.changed {
+                                                                keyframes.push((KeyframeEdit::Set(set), target));
+                                                            }
+                                                            if row.toggled_keyframe {
+                                                                keyframes.push((KeyframeEdit::Toggle(key.on_keyframe), target));
+                                                            }
+                                                            *reset |= row.reset;
+                                                            goto = goto.or(row.goto);
+                                                        }
+                                                    }
                                                     if kind == vv_core::FilterKind::DropShadow {
                                                         let mut color = filter.color;
                                                         let row = color_row(ui, &t!("props.color"), &mut color);

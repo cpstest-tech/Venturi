@@ -34,6 +34,10 @@ struct TransformUniform {
     filters: array<vec4<f32>, 2>,
     // The scalar parameter of each slot of `filters`.
     filter_params: array<vec4<f32>, 2>,
+    // Chroma key (`chroma_uniform`): rgb of the key; tolerance, softness and
+    // spill removal in x/y/z.
+    chroma_key: vec4<f32>,
+    chroma_params: vec4<f32>,
 };
 
 @group(0) @binding(0) var y_tex: texture_2d<f32>;
@@ -162,6 +166,36 @@ fn apply_filter(rgb: vec3<f32>, id: f32, param: f32) -> vec3<f32> {
         return rgb * tint;
     }
     return rgb;
+}
+
+fn chroma_of(rgb: vec3<f32>) -> vec2<f32> {
+    return vec2<f32>(
+        dot(rgb, vec3<f32>(-0.1687, -0.3313, 0.5)),
+        dot(rgb, vec3<f32>(0.5, -0.4187, -0.0813)),
+    );
+}
+
+// Coverage left by the chroma key: 0 on the key color, 1 past the tolerance
+// plus the softness. The distance is on the chroma plane, so the shadows
+// on a green screen go too.
+fn chroma_matte(rgb: vec3<f32>) -> f32 {
+    let d = distance(chroma_of(rgb), chroma_of(transform.chroma_key.rgb));
+    let tolerance = transform.chroma_params.x;
+    return smoothstep(tolerance, tolerance + transform.chroma_params.y, d);
+}
+
+// Takes the key's tint out of what is left (the green bouncing on hair and
+// edges), more where the pixel is closer to the key.
+fn chroma_despill(rgb: vec3<f32>, matte: f32) -> vec3<f32> {
+    let key = transform.chroma_key.rgb;
+    let tint = key - vec3<f32>(luma(key));
+    let len2 = dot(tint, tint);
+    if (len2 < 1e-6) {
+        return rgb;
+    }
+    let along = max(dot(rgb - vec3<f32>(luma(rgb)), tint) / len2, 0.0);
+    let amount = transform.chroma_params.z * mix(1.0, 0.5, matte);
+    return clamp(rgb - tint * along * amount, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 // Shadows/midtones/highlights weights of a pixel of luma `y`: soft, summing to 1.
@@ -409,7 +443,11 @@ fn shade(in: VertexOutput) -> vec4<f32> {
     }
     for (var slot = 0; slot < 8; slot = slot + 1) {
         let id = filter_id_at(transform.filters, slot);
-        if (id > 0.5) {
+        if (id > 3.5 && id < 4.5) {
+            let matte = chroma_matte(rgb);
+            out_alpha = out_alpha * matte;
+            rgb = chroma_despill(rgb, matte);
+        } else if (id > 0.5) {
             rgb = apply_filter(rgb, id, filter_id_at(transform.filter_params, slot));
         }
     }

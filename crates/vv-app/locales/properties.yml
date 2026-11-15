@@ -1024,3 +1024,27 @@ props.swatch_pink:
 props.swatch_black:
   en: "Black"
   it: "Nero"
+
+props.key_color:
+  en: "Key color"
+  it: "Colore chiave"
+
+props.key_green:
+  en: "Green"
+  it: "Verde"
+
+props.key_blue:
+  en: "Blue"
+  it: "Blu"
+
+props.key_tolerance:
+  en: "Tolerance"
+  it: "Tolleranza"
+
+props.key_softness:
+  en: "Edge softness"
+  it: "Morbidezza bordi"
+
+props.key_spill:
+  en: "Spill removal"
+  it: "Rimozione riflessi"
