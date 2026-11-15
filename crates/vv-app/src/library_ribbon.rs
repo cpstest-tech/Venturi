@@ -1672,6 +1672,12 @@ impl VenturiApp {
                         *preview_action = Some(Browsed::Media(media));
                     }
                 }
+                PoolEvent::Clicked(path) => {
+                    if let Some(media) = self.pool_media_for_path(Path::new(&path)) {
+                        *preview_action = Some(Browsed::Media(media));
+                        self.library_ribbon.autoplay = true;
+                    }
+                }
                 _ => {}
             }
         }

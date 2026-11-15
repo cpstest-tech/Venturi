@@ -665,7 +665,18 @@ impl VenturiApp {
                         *preview_action = Some(Browsed::Media(id));
                     }
                 }
-                PoolEvent::Clicked(_) => {}
+                PoolEvent::Clicked(id) => {
+                    if self
+                        .session
+                        .project
+                        .media_pool
+                        .get(id)
+                        .is_some_and(|item| item.compound.is_none())
+                    {
+                        *preview_action = Some(Browsed::Media(id));
+                        self.library_ribbon.autoplay = true;
+                    }
+                }
                 PoolEvent::ToggleFavorite(id) => {
                     if let Some(item) = self.session.project.media_pool.get(id) {
                         let key = library_ribbon::media_key(&item.path.to_string_lossy());

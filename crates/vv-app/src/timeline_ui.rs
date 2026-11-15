@@ -414,7 +414,7 @@ impl EdgeZone {
 /// Distance (in screen pixels) from the edge of a clip within which a drag
 /// starts as a trim instead of as a move; reduced for very
 /// narrow clips, otherwise the whole clip would be "only edges".
-const TRIM_HANDLE_PX: f32 = 12.0;
+const TRIM_HANDLE_PX: f32 = 8.0;
 /// Half-width of the roll zone around the contact point between two
 /// adjacent clips; the trim zone starts right after, towards the inside.
 const ROLL_HANDLE_PX: f32 = 4.0;
@@ -3907,14 +3907,6 @@ pub fn show_timeline(
                             state.selection_anchor = anchor;
                             state.selected_gap = None;
                             state.selected_transition = None;
-                            state.playhead = state.playhead.clamp(
-                                visual.clip.timeline_start,
-                                visual
-                                    .clip
-                                    .timeline_end()
-                                    .saturating_sub(1)
-                                    .max(visual.clip.timeline_start),
-                            );
                         }
                     }
 
