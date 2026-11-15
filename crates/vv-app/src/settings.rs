@@ -77,10 +77,11 @@ pub enum Action {
     ShuttleForward,
     ExtractAudio,
     GroupClips,
+    ToggleLinkage,
 }
 
 impl Action {
-    pub const ALL: [Action; 63] = [
+    pub const ALL: [Action; 64] = [
         Action::TogglePlayback,
         Action::FastPlayback,
         Action::StepBackward,
@@ -144,6 +145,7 @@ impl Action {
         Action::ShuttleForward,
         Action::ExtractAudio,
         Action::GroupClips,
+        Action::ToggleLinkage,
     ];
 
     /// Key in the settings file: must never be changed.
@@ -212,6 +214,7 @@ impl Action {
             Action::ShuttleForward => "shuttle_forward",
             Action::ExtractAudio => "extract_audio",
             Action::GroupClips => "group_clips",
+            Action::ToggleLinkage => "toggle_linkage",
         }
     }
 
@@ -284,6 +287,7 @@ impl Action {
             | Action::ToggleMagnet
             | Action::ToggleSnapping
             | Action::TogglePreviewAxis
+            | Action::ToggleLinkage
             | Action::FitTimeline
             | Action::MakeCompound
             | Action::UngroupCompound => {
@@ -320,13 +324,13 @@ impl Action {
                 alt: true,
                 ..plain(Key::X)
             }],
-            Action::FullscreenViewer => vec![ctrl(Key::F)],
-            Action::ViewerZoomFit => vec![plain(Key::Z)],
-            Action::ViewerZoomActual => vec![Shortcut {
+            Action::FullscreenViewer => vec![ctrl_shift(Key::F)],
+            Action::ViewerZoomFit => vec![Shortcut {
                 alt: true,
                 shift: true,
                 ..plain(Key::Z)
             }],
+            Action::ViewerZoomActual => vec![],
             Action::Undo => vec![ctrl(Key::Z)],
             Action::Redo => vec![ctrl_shift(Key::Z), ctrl(Key::Y)],
             Action::Copy => vec![ctrl(Key::C)],
@@ -381,6 +385,8 @@ impl Action {
             Action::ToggleMagnet => vec![plain(Key::P)],
             Action::ToggleSnapping => vec![plain(Key::N)],
             Action::TogglePreviewAxis => vec![plain(Key::S)],
+            // CapCut's "~" key.
+            Action::ToggleLinkage => vec![plain(Key::Backtick)],
             Action::MakeCompound => vec![Shortcut {
                 alt: true,
                 ..plain(Key::G)
@@ -701,6 +707,10 @@ impl Keymap {
 
 const MAX_RECENT_PROJECTS: usize = 10;
 
+/// Bumped when the defaults change wholesale: 2 is the CapCut layout, which
+/// replaced the full dump of the old defaults saved by every earlier version.
+const KEYMAP_VERSION: u32 = 2;
+
 /// State of the UI panels (size, open/closed): saved to find the interface
 /// as it was left on reopening.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -902,6 +912,10 @@ impl Settings {
 
 #[derive(Serialize, Deserialize, Default)]
 struct SettingsFile {
+    /// `shortcuts` written against these defaults; the older ones are dropped.
+    #[serde(default)]
+    keymap_version: Option<u32>,
+    /// Only the bindings that differ from the defaults.
     #[serde(default)]
     shortcuts: BTreeMap<String, Vec<String>>,
     #[serde(default)]
@@ -1173,8 +1187,12 @@ impl Settings {
             media_pool_layout: file.panels.media_pool_layout.unwrap_or_default(),
             library_layout: file.panels.library_layout.unwrap_or_default(),
         };
-        let saved_bindings: BTreeMap<_, _> = file
-            .shortcuts
+        let saved_shortcuts = if file.keymap_version == Some(KEYMAP_VERSION) {
+            file.shortcuts
+        } else {
+            BTreeMap::new()
+        };
+        let saved_bindings: BTreeMap<_, _> = saved_shortcuts
             .into_iter()
             .filter_map(|(id, shortcuts)| {
                 Action::from_id(&id).map(|action| {
@@ -1203,10 +1221,12 @@ impl Settings {
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let file = SettingsFile {
+            keymap_version: Some(KEYMAP_VERSION),
             shortcuts: self
                 .keymap
                 .bindings
                 .iter()
+                .filter(|(action, shortcuts)| **shortcuts != action.default_shortcuts())
                 .map(|(action, shortcuts)| {
                     (
                         action.id().to_owned(),

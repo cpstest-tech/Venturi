@@ -369,6 +369,10 @@ action.toggle_snapping:
   en: "Auto Snapping"
   it: "Auto Snapping"
 
+action.toggle_linkage:
+  en: "Linkage"
+  it: "Linkage"
+
 action.toggle_preview_axis:
   en: "Preview Axis"
   it: "Preview Axis"

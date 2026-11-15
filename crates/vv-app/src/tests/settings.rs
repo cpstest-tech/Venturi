@@ -95,7 +95,7 @@ fn save_then_load_keeps_custom_shortcuts_and_defaults_for_the_rest() {
 
     std::fs::write(
         &path,
-        r#"{"shortcuts": {"split": ["Alt+K"]}, "proxy_enabled": true}"#,
+        r#"{"keymap_version": 2, "shortcuts": {"split": ["Alt+K"]}, "proxy_enabled": true}"#,
     )
     .unwrap();
     let loaded = Settings::load(&path);
@@ -133,7 +133,11 @@ fn save_then_load_keeps_custom_shortcuts_and_defaults_for_the_rest() {
 fn loading_legacy_shortcuts_prioritizes_saved_bindings_over_defaults() {
     let dir = TempDir::new("vv-settings-shortcut-migration");
     let path = dir.join("settings.json");
-    std::fs::write(&path, r#"{"shortcuts":{"cut":["Alt+V"]}}"#).unwrap();
+    std::fs::write(
+        &path,
+        r#"{"keymap_version":2,"shortcuts":{"cut":["Alt+V"]}}"#,
+    )
+    .unwrap();
 
     let loaded = Settings::load(&path);
     let alt_v = Shortcut {
@@ -604,6 +608,24 @@ fn the_default_shortcuts_follow_the_timeline_spec() {
         (Action::ExtractAudio, ctrl_shift(Key::S)),
         (Action::GroupClips, ctrl(Key::G)),
         (Action::ToggleDisabled, plain(Key::V)),
+        (Action::ToggleLinkage, plain(Key::Backtick)),
+        (Action::FullscreenViewer, ctrl_shift(Key::F)),
+        (
+            Action::ViewerZoomFit,
+            Shortcut {
+                alt: true,
+                ..shift(Key::Z)
+            },
+        ),
+        (
+            Action::MakeCompound,
+            Shortcut {
+                alt: true,
+                ..plain(Key::G)
+            },
+        ),
+        (Action::Export, ctrl(Key::E)),
+        (Action::ImportMedia, ctrl(Key::I)),
     ];
     for (action, shortcut) in expected {
         assert!(
@@ -611,4 +633,35 @@ fn the_default_shortcuts_follow_the_timeline_spec() {
             "{action:?} should use {shortcut}"
         );
     }
+}
+
+#[test]
+fn shortcuts_saved_before_the_capcut_keymap_are_reset_to_the_defaults() {
+    let loaded = load_json(
+        "old-keymap",
+        r#"{"shortcuts": {"split": ["T"], "select_tool": ["V"], "toggle_disabled": ["D"]}}"#,
+    );
+    assert_eq!(loaded.keymap, Keymap::default());
+}
+
+#[test]
+fn only_the_shortcuts_changed_from_the_defaults_are_saved() {
+    let dir = TempDir::new("vv-settings-keymap-diff");
+    let path = dir.join("settings.json");
+    let mut settings = Settings::default();
+    settings
+        .keymap
+        .assign(Action::Split, Some(0), Shortcut::plain(egui::Key::V));
+    settings.save(&path).unwrap();
+
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let saved: Vec<&str> = json["shortcuts"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(saved, ["split", "toggle_disabled"]);
+    assert_eq!(Settings::load(&path).keymap, settings.keymap);
 }

@@ -118,6 +118,9 @@ impl VenturiApp {
             if pressed(Action::TogglePreviewAxis) {
                 self.timeline_state.preview_axis = !self.timeline_state.preview_axis;
             }
+            if pressed(Action::ToggleLinkage) {
+                self.timeline_state.linkage = !self.timeline_state.linkage;
+            }
             if pressed(Action::FitTimeline) {
                 self.timeline_state.fit_requested = true;
             }

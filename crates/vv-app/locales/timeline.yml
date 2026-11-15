@@ -340,25 +340,21 @@ common.coming_soon:
   en: "Coming soon"
   it: "Presto disponibile"
 
-timeline_bar.mode:
-  en: "Mouse mode"
-  it: "Modalità mouse"
-
 timeline_bar.mode_select:
   en: "Select"
   it: "Seleziona"
 
 timeline_bar.mode_blade:
-  en: "Split (blade)"
-  it: "Dividi (lametta)"
+  en: "Split"
+  it: "Dividi"
 
 timeline_bar.mode_select_left:
-  en: "Select to the left"
-  it: "Seleziona verso sinistra"
+  en: "Select left"
+  it: "Seleziona a sinistra"
 
 timeline_bar.mode_select_right:
-  en: "Select to the right"
-  it: "Seleziona verso destra"
+  en: "Select right"
+  it: "Seleziona a destra"
 
 timeline_bar.undo:
   en: "Undo"
@@ -369,16 +365,16 @@ timeline_bar.redo:
   it: "Ripeti"
 
 timeline_bar.split:
-  en: "Split at playhead"
-  it: "Dividi al playhead"
+  en: "Split"
+  it: "Dividi"
 
 timeline_bar.delete_left:
-  en: "Delete left of the playhead"
-  it: "Elimina a sinistra del playhead"
+  en: "Delete left"
+  it: "Elimina a sinistra"
 
 timeline_bar.delete_right:
-  en: "Delete right of the playhead"
-  it: "Elimina a destra del playhead"
+  en: "Delete right"
+  it: "Elimina a destra"
 
 timeline_bar.delete:
   en: "Delete"
@@ -388,38 +384,38 @@ timeline_bar.zoom:
   en: "Zoom"
   it: "Zoom"
 
-timeline_bar.magnet:
-  en: "Magnet"
-  it: "Magnete"
-
 timeline_bar.magnet_hint:
-  en: "Main Track Magnet: no gaps on the Main Track"
-  it: "Main Track Magnet: nessun buco sulla Main Track"
-
-timeline_bar.snapping:
-  en: "Snapping"
-  it: "Aggancio"
+  en: "Main track magnet"
+  it: "Magnete traccia principale"
 
 timeline_bar.snapping_hint:
-  en: "Auto Snapping: clips snap to the playhead and to the other clips"
-  it: "Auto Snapping: le clip si agganciano al playhead e alle altre clip"
-
-timeline_bar.linkage:
-  en: "Linkage"
-  it: "Linkage"
+  en: "Auto snapping"
+  it: "Aggancio automatico"
 
 timeline_bar.linkage_hint:
-  en: "Linkage: clips on other tracks follow the Main Track clip under them"
-  it: "Linkage: le clip delle altre track seguono la clip della Main Track sotto di loro"
-
-timeline_bar.preview_axis:
-  en: "Axis"
-  it: "Asse"
+  en: "Linkage"
+  it: "Collegamento"
 
 timeline_bar.preview_axis_hint:
-  en: "Preview Axis: the player follows the mouse without moving the playhead"
-  it: "Preview Axis: il player segue il mouse senza spostare il playhead"
+  en: "Preview axis"
+  it: "Asse di anteprima"
 
 timeline.edit_cover:
   en: "Edit cover"
   it: "Modifica copertina"
+
+timeline_bar.mode_slip:
+  en: "Slip"
+  it: "Slip"
+
+timeline_bar.zoom_in:
+  en: "Zoom in"
+  it: "Ingrandisci"
+
+timeline_bar.zoom_out:
+  en: "Zoom out"
+  it: "Riduci"
+
+timeline_bar.fit:
+  en: "Zoom to fit"
+  it: "Adatta alla finestra"
