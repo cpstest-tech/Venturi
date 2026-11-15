@@ -2549,6 +2549,30 @@ impl VenturiApp {
 
         let timeline_fps = self.session.project.timelines[timeline_id].fps;
         let mut cursor = start;
+        let main_track = self.session.project.timelines[timeline_id].main_track_index();
+        if self.timeline_state.magnet && tracks.video.is_some() && tracks.video == main_track {
+            let project = &self.session.project;
+            cursor = vv_core::workflow::main_insert_point(project, timeline_id, start, &[]);
+            let anchors = if self.timeline_state.linkage {
+                vv_core::workflow::linkage_anchors(project, timeline_id)
+            } else {
+                Vec::new()
+            };
+            let total: FrameIdx = drops
+                .iter()
+                .map(|(drag, meta)| {
+                    drag.timeline_len(vv_core::Rational::conform_rate(timeline_fps, meta.fps))
+                })
+                .sum();
+            vv_core::workflow::open_main_gap(
+                &mut self.session.project,
+                &mut self.session.history,
+                timeline_id,
+                cursor,
+                total,
+                &anchors,
+            );
+        }
         for (drag, meta) in &drops {
             self.insert_media_clip(timeline_id, *drag, meta, cursor, tracks);
             let rate = vv_core::Rational::conform_rate(timeline_fps, meta.fps);

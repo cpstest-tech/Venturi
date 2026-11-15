@@ -136,6 +136,103 @@ pub fn linkage_anchors(project: &Project, timeline_id: TimelineId) -> Vec<(ClipR
     anchors
 }
 
+/// Where an insertion on a magnetic Main Track lands: the clip start (or
+/// the end of the track) nearest to `reference`, ignoring `exclude`.
+pub fn main_insert_point(
+    project: &Project,
+    timeline_id: TimelineId,
+    reference: FrameIdx,
+    exclude: &[ClipId],
+) -> FrameIdx {
+    let tl = &project.timelines[timeline_id];
+    let Some(main) = tl.main_track_index() else {
+        return reference;
+    };
+    let others = tl.tracks[main]
+        .clips
+        .iter()
+        .filter(|c| !exclude.contains(&c.id));
+    let end = others.clone().map(|c| c.timeline_end()).max().unwrap_or(0);
+    others
+        .map(|c| c.timeline_start)
+        .chain([0, end])
+        .min_by_key(|&b| (b - reference).abs())
+        .unwrap_or(0)
+}
+
+/// The clips `open_main_gap` pushes: the Main Track ones starting at or
+/// after `at`, their linked groups and the clips anchored to them.
+pub fn main_gap_clips(
+    project: &Project,
+    timeline_id: TimelineId,
+    at: FrameIdx,
+    anchors: &[(ClipRef, ClipId)],
+) -> Vec<ClipRef> {
+    let tl = &project.timelines[timeline_id];
+    let Some(main) = tl.main_track_index() else {
+        return Vec::new();
+    };
+    if tl.tracks[main].locked {
+        return Vec::new();
+    }
+    let pushed: HashSet<ClipId> = tl.tracks[main]
+        .clips
+        .iter()
+        .filter(|c| c.timeline_start >= at)
+        .map(|c| c.id)
+        .collect();
+    let mut seen: HashSet<ClipRef> = HashSet::new();
+    let mut clips = Vec::new();
+    let mut push = |clip: ClipRef| {
+        if !tl.is_locked(clip.0) && seen.insert(clip) {
+            clips.push(clip);
+        }
+    };
+    for clip in tl.tracks[main]
+        .clips
+        .iter()
+        .filter(|c| pushed.contains(&c.id))
+    {
+        push((main, clip.id));
+        for member in tl.linked_members(main, clip.id) {
+            push(member);
+        }
+    }
+    for &(clip, anchor) in anchors {
+        if pushed.contains(&anchor) {
+            push(clip);
+        }
+    }
+    clips
+}
+
+/// Pushes `main_gap_clips` forward by `len`: the room a drop inserts into
+/// on a magnetic Main Track. One undo step.
+pub fn open_main_gap(
+    project: &mut Project,
+    history: &mut History,
+    timeline_id: TimelineId,
+    at: FrameIdx,
+    len: FrameIdx,
+    anchors: &[(ClipRef, ClipId)],
+) {
+    if len <= 0 {
+        return;
+    }
+    let tl = &project.timelines[timeline_id];
+    let moves: Vec<(ClipId, usize, usize, FrameIdx)> =
+        main_gap_clips(project, timeline_id, at, anchors)
+            .into_iter()
+            .filter_map(|(track, id)| {
+                let clip = tl.clip(track, id)?;
+                Some((id, track, track, clip.timeline_start + len))
+            })
+            .collect();
+    if !moves.is_empty() {
+        history.do_command(project, Box::new(MoveClips::new(timeline_id, moves)));
+    }
+}
+
 /// Main Track Magnet: slides the Main Track clips back so no hole is left,
 /// before the first clip included. Their linked groups follow, and with
 /// `anchors` (see `linkage_anchors`, taken before the edit) so do the

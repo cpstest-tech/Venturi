@@ -540,40 +540,34 @@ fn clips_intersecting_rect_finds_overlapping_clips_only() {
 }
 
 #[test]
-fn neighbor_bounds_no_neighbors_is_unbounded() {
+fn drag_range_without_neighbors_is_unbounded() {
     let visuals = vec![visual(0, 1, 10, 5)];
-    assert_eq!(
-        neighbor_bounds_at(&visuals, 0, &[ClipId(1)], 10, 5),
-        (0, FrameIdx::MAX)
-    );
+    let (min, max) = drag_range_at(&visuals, 0, &[ClipId(1)], 10, 5);
+    assert_eq!(min, 0);
+    assert!(max > 1_000_000);
 }
 
 #[test]
-fn neighbor_bounds_clamped_by_prev_and_next_on_same_track() {
+fn dragging_onto_a_neighbor_stops_against_it_instead_of_overlapping() {
+    // Clip of 10 dragged to 45, over clip 2 at [50, 60): the free stretch
+    // nearest to 45 is [0, 40], so it stops touching the neighbor.
+    let visuals = vec![visual(0, 1, 0, 10), visual(0, 2, 50, 10)];
+    assert_eq!(drag_range_at(&visuals, 0, &[ClipId(1)], 45, 10), (0, 40));
+    // Past the middle of the neighbor it jumps after it.
+    let (min, _) = drag_range_at(&visuals, 0, &[ClipId(1)], 57, 10);
+    assert_eq!(min, 60);
+}
+
+#[test]
+fn a_gap_too_short_for_the_clip_is_skipped() {
     let visuals = vec![
-        visual(0, 1, 0, 10),  // ends at 10
-        visual(0, 2, 20, 30), // the moving one
-        visual(0, 3, 50, 5),  // starts at 50
-        visual(1, 4, 15, 3),  // other track: ignored
+        visual(0, 1, 0, 10),
+        visual(0, 2, 15, 10),
+        visual(0, 9, 100, 30),
     ];
-    assert_eq!(
-        neighbor_bounds_at(&visuals, 0, &[ClipId(2)], 20, 30),
-        (10, 50)
-    );
-}
-
-#[test]
-fn max_start_in_slot_keeps_clip_inside_slot() {
-    // slot [10, 50), clip of length 30: it can only sit between 10 and 20.
-    assert_eq!(0.clamp(10, max_start_in_slot(10, 50, 30)), 10);
-    assert_eq!(15.clamp(10, max_start_in_slot(10, 50, 30)), 15);
-    assert_eq!(100.clamp(10, max_start_in_slot(10, 50, 30)), 20);
-}
-
-#[test]
-fn max_start_in_slot_degenerate_slot_does_not_invert_range() {
-    // slot smaller than the clip: it must not produce an inverted range.
-    assert_eq!(max_start_in_slot(10, 15, 30), 10);
+    // [10, 15) cannot hold 30 frames: the nearest free stretch is after clip 2.
+    let (min, max) = drag_range_at(&visuals, 0, &[ClipId(9)], 10, 30);
+    assert_eq!((min, max), (25, FrameIdx::MAX / 4));
 }
 
 #[test]
@@ -669,7 +663,7 @@ fn group_drag_bounds_intersects_primary_and_followers_on_their_own_targets() {
         (ClipId(2), EffectiveTrack::Existing(1)),
     ];
     let followers = vec![(ClipId(2), 1, -5)];
-    let (min_start, max_start) = group_drag_bounds(&visuals, 0, &targets, &followers);
+    let (min_start, max_start) = group_drag_bounds(&visuals, 0, &targets, &followers, None);
     assert_eq!((min_start, max_start), (5, 25));
 }
 
@@ -688,7 +682,7 @@ fn group_drag_bounds_lets_group_members_land_on_the_same_track_without_blocking_
         (ClipId(2), EffectiveTrack::Existing(1)),
     ];
     let followers = vec![(ClipId(2), 2, 5)];
-    let (min_start, max_start) = group_drag_bounds(&visuals, 0, &targets, &followers);
+    let (min_start, max_start) = group_drag_bounds(&visuals, 0, &targets, &followers, None);
     assert_eq!((min_start, max_start), (0, 35));
 }
 
@@ -705,7 +699,7 @@ fn dragging_from_the_middle_of_a_group_onto_an_empty_track_does_not_overflow() {
         (ClipId(3), EffectiveTrack::New(1)),
     ];
     let followers = vec![(ClipId(1), 0, -20), (ClipId(3), 0, 20)];
-    let (min_start, max_start) = group_drag_bounds(&visuals, 20, &targets, &followers);
+    let (min_start, max_start) = group_drag_bounds(&visuals, 20, &targets, &followers, None);
     assert_eq!(min_start, 20);
     assert!(max_start > 1_000_000);
 
@@ -1211,6 +1205,7 @@ fn combined_trim_range_intersects_both_clips_constraints() {
         (0, ClipId(1)),
         TrimEdge::End,
         &[((1, ClipId(2)), TrimEdge::End)],
+        None,
     );
     assert_eq!(
         max_value, 35,
@@ -1231,6 +1226,7 @@ fn combined_trim_range_shifts_each_selected_clip_by_its_offset() {
         (0, ClipId(1)),
         TrimEdge::End,
         &[((1, ClipId(2)), TrimEdge::End)],
+        None,
     );
     assert_eq!(followers, vec![(ClipId(2), 1, 15, TrimEdge::End)]);
     assert_eq!(min_value, 6, "21 - 15");
@@ -1247,6 +1243,7 @@ fn combined_trim_range_stops_before_another_trimmed_clip_on_the_same_track() {
         (0, ClipId(1)),
         TrimEdge::End,
         &[((0, ClipId(2)), TrimEdge::End)],
+        None,
     );
     assert_eq!(max_value, 20);
 }
@@ -1273,6 +1270,7 @@ fn combined_trim_range_rolls_between_two_adjacent_clips() {
         (0, ClipId(2)),
         TrimEdge::Start,
         &[((0, ClipId(1)), TrimEdge::End)],
+        None,
     );
     assert_eq!((min_value, max_value), (5, 24));
     assert_eq!(followers, vec![(ClipId(1), 0, 0, TrimEdge::End)]);
@@ -2002,4 +2000,42 @@ fn keyframe_diamonds_follow_the_transform_keyframes_inside_the_clip() {
         .track_mut(vv_core::TransformParam::PositionX);
     position.upsert(30, 5.0, vv_core::Interpolation::Linear);
     assert_eq!(keyframe_timeline_frames(&clip), vec![110, 130]);
+}
+
+#[test]
+fn trimming_an_end_stops_against_the_next_clip() {
+    let project = Project::default();
+    let visuals = vec![visual(0, 1, 0, 10), visual(0, 2, 20, 5)];
+    let (_, max_value, _) =
+        combined_trim_range(&visuals, &project, (0, ClipId(1)), TrimEdge::End, &[], None);
+    assert_eq!(max_value, 20);
+    let (_, max_value, _) = combined_trim_range(
+        &visuals,
+        &project,
+        (0, ClipId(1)),
+        TrimEdge::End,
+        &[],
+        Some(0),
+    );
+    assert!(max_value > 20, "the rippling Main Track pushes instead");
+}
+
+#[test]
+fn a_move_on_the_rippling_main_track_inserts_at_the_nearest_clip_start() {
+    let visuals = vec![
+        visual(0, 1, 0, 100),
+        visual(0, 2, 100, 100),
+        visual(0, 3, 200, 100),
+    ];
+    let targets = vec![(ClipId(1), EffectiveTrack::Existing(0))];
+    assert_eq!(
+        group_drag_bounds(&visuals, 130, &targets, &[], Some(0)),
+        (100, 100),
+        "before clip 2"
+    );
+    assert_eq!(
+        group_drag_bounds(&visuals, 260, &targets, &[], Some(0)),
+        (300, 300),
+        "after the last clip"
+    );
 }

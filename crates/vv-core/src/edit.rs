@@ -6,9 +6,9 @@ use std::collections::{BTreeSet, HashMap};
 
 use crate::{
     AddTrack, Clip, ClipId, ClipSource, Command, CommandLabel, CompositeCommand, EffectStack,
-    FrameIdx, History, Keyframed, LiftDelete, LinkClips, LinkGroupId, MediaId, MoveClips, Project,
-    Rational, Rgba, RippleDeleteGap, SlipClip, SplitClip, TimelineId, TitleParams, TrackKind,
-    TrimClip, TrimEdge,
+    FrameIdx, History, Keyframed, LiftDelete, LinkClips, LinkGroupId, MediaId, MediaMeta,
+    MoveClips, Project, Rational, Rgba, RippleDeleteGap, SlipClip, SplitClip, Timeline, TimelineId,
+    TitleParams, TrackKind, TrimClip, TrimEdge,
 };
 
 pub type ClipRef = (usize, ClipId);
@@ -446,6 +446,49 @@ pub fn insert_clips<K: PartialEq>(
     history.do_command(project, Box::new(CompositeCommand::new(label, commands)));
 }
 
+/// How many audio clips `insert_media` creates: without audio tracks the
+/// audio of a video is dropped, but an audio-only insertion creates them.
+pub fn inserted_audio_streams(
+    meta: &MediaMeta,
+    insert: MediaInsert,
+    has_audio_tracks: bool,
+) -> usize {
+    let takes_video = insert.video && meta.has_video;
+    if !(insert.audio && meta.has_audio) || !(has_audio_tracks || !takes_video) {
+        0
+    } else {
+        meta.audio_stream_count()
+    }
+}
+
+/// The first of `candidates` with nothing over `(start, len)` but the
+/// `ignored` clips, also counting the `busy` ranges (track, start, end) and
+/// skipping the `taken` tracks. Inserted audio never lands on top of other
+/// audio: the drop ghost asks the same question.
+pub fn first_free_track(
+    tl: &Timeline,
+    candidates: impl IntoIterator<Item = usize>,
+    (start, len): (FrameIdx, FrameIdx),
+    busy: &[(usize, FrameIdx, FrameIdx)],
+    taken: &[usize],
+    ignored: &[ClipRef],
+) -> Option<usize> {
+    candidates.into_iter().find(|&i| {
+        !taken.contains(&i)
+            && tl.tracks.get(i).is_some_and(|t| {
+                !t.locked
+                    && t.clips.iter().all(|c| {
+                        ignored.contains(&(i, c.id))
+                            || c.timeline_end() <= start
+                            || c.timeline_start >= start + len
+                    })
+            })
+            && busy
+                .iter()
+                .all(|&(t, s, e)| t != i || e <= start || s >= start + len)
+    })
+}
+
 /// Inserts the video clip and one audio clip per stream at `start`, all in
 /// one link group, creating the audio tracks that are missing. Returns the
 /// new clips, or `None` for an unknown media.
@@ -472,18 +515,8 @@ pub fn insert_media(
         audio_track_indices.insert(0, extra);
     }
 
-    // Without audio tracks the audio of a video is dropped, but an
-    // audio-only insertion creates them.
     let takes_video = insert.video && meta.has_video;
-    let num_audio_streams = if !(insert.audio && meta.has_audio) {
-        0
-    } else if has_audio_tracks || !takes_video {
-        meta.audio_stream_count()
-    } else {
-        0
-    };
-    // Audio never lands on top of existing audio: a busy track is skipped
-    // and, if none is free, a new one is created.
+    let num_audio_streams = inserted_audio_streams(&meta, insert, has_audio_tracks);
     let audio_len = Clip::from_source_range(
         ClipId(0),
         ClipSource::Media(insert.media_id),
@@ -495,10 +528,14 @@ pub fn insert_media(
     .timeline_len;
     let mut chosen: Vec<usize> = Vec::new();
     for _ in 0..num_audio_streams {
-        let free = audio_track_indices.iter().copied().find(|i| {
-            !chosen.contains(i)
-                && project.timelines[timeline_id].tracks[*i].is_free(start, audio_len)
-        });
+        let free = first_free_track(
+            &project.timelines[timeline_id],
+            audio_track_indices.iter().copied(),
+            (start, audio_len),
+            &[],
+            &chosen,
+            &[],
+        );
         chosen.push(match free {
             Some(i) => i,
             None => add_track(project, history, timeline_id, TrackKind::Audio),
@@ -659,6 +696,17 @@ pub fn move_clips(
         project,
         Box::new(CompositeCommand::new(CommandLabel::MoveClips, commands)),
     );
+}
+
+/// Moves clips without cutting what is at the destination: the caller
+/// resolves the overlaps (the Main Track compaction reorders them).
+pub fn move_clips_over(
+    project: &mut Project,
+    history: &mut History,
+    timeline_id: TimelineId,
+    moves: Vec<(ClipId, usize, usize, FrameIdx)>,
+) {
+    history.do_command(project, Box::new(MoveClips::new(timeline_id, moves)));
 }
 
 /// Where `edge` of `clip` can go: at least one frame must remain, and the

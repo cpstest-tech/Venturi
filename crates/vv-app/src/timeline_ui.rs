@@ -1963,6 +1963,128 @@ struct DragSegment {
     len: FrameIdx,
     has_video: bool,
     has_audio: bool,
+    audio_streams: usize,
+}
+
+/// A track of the drop plan: one that exists or the `n`-th one the drop
+/// creates (0-based).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlannedTrack {
+    Existing(usize),
+    New(usize),
+}
+
+/// Where a drop really lands, worked out like `add_drop_to_timeline_at` and
+/// `vv_core::edit::insert_media` do it, so the ghost shows the result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DropPlan {
+    frame: FrameIdx,
+    target: MediaDropTarget,
+    /// Per segment, the audio track of each stream.
+    audio: Vec<Vec<PlannedTrack>>,
+}
+
+/// Video never lands on top of another clip: a busy track hands the drop
+/// to the first free video track above it, or to a new one. On a magnetic
+/// Main Track (`ripple`) a media drop inserts between the clips instead.
+fn plan_media_drop(
+    project: &Project,
+    timeline_id: TimelineId,
+    drag: &TimelineDrag,
+    target: MediaDropTarget,
+    frame: FrameIdx,
+    ripple: Option<usize>,
+    linkage: bool,
+) -> DropPlan {
+    let tl = &project.timelines[timeline_id];
+    let segments = drag_set_segments(project, tl.fps, drag);
+    let total: FrameIdx = segments.iter().map(|s| s.len).sum();
+    let mut frame = frame;
+    let mut target = target;
+    let mut ignored: Vec<ClipKey> = Vec::new();
+    if segments.iter().any(|s| s.has_video) {
+        let video = match target {
+            MediaDropTarget::Track(track) => Some(track),
+            MediaDropTarget::Default => tl.first_unlocked_track_index(TrackKind::Video),
+            _ => None,
+        };
+        if let Some(video) = video {
+            if ripple == Some(video) && matches!(drag, TimelineDrag::Media(_)) {
+                frame = vv_core::workflow::main_insert_point(project, timeline_id, frame, &[]);
+                target = MediaDropTarget::Track(video);
+                let anchors = if linkage {
+                    vv_core::workflow::linkage_anchors(project, timeline_id)
+                } else {
+                    Vec::new()
+                };
+                ignored = vv_core::workflow::main_gap_clips(project, timeline_id, frame, &anchors);
+            } else if !tl.tracks[video].is_free(frame, total) {
+                let above = tl
+                    .tracks_of_kind(TrackKind::Video)
+                    .map(|(i, _)| i)
+                    .filter(|&i| i > video);
+                target = vv_core::edit::first_free_track(tl, above, (frame, total), &[], &[], &[])
+                    .map_or(MediaDropTarget::NewVideoTrack, MediaDropTarget::Track);
+            }
+        }
+    }
+
+    let existing: Vec<usize> = tl
+        .tracks_of_kind(TrackKind::Audio)
+        .filter(|(_, t)| !t.locked)
+        .map(|(i, _)| i)
+        .collect();
+    let extra_new = target == MediaDropTarget::NewAudioTrack;
+    let mut new_count = usize::from(extra_new);
+    let mut busy: Vec<(PlannedTrack, FrameIdx, FrameIdx)> = Vec::new();
+    let mut audio = Vec::new();
+    for seg in &segments {
+        let start = frame + seg.offset;
+        let has_audio_tracks = !existing.is_empty() || new_count > 0;
+        let streams = if seg.has_audio && (has_audio_tracks || !seg.has_video) {
+            seg.audio_streams
+        } else {
+            0
+        };
+        let mut chosen: Vec<PlannedTrack> = Vec::new();
+        for _ in 0..streams {
+            let candidates = extra_new
+                .then_some(PlannedTrack::New(0))
+                .into_iter()
+                .chain(existing.iter().map(|&i| PlannedTrack::Existing(i)))
+                .chain((usize::from(extra_new)..new_count).map(PlannedTrack::New));
+            let free = |track: &PlannedTrack| {
+                !chosen.contains(track)
+                    && busy
+                        .iter()
+                        .all(|&(t, s, e)| t != *track || e <= start || s >= start + seg.len)
+                    && match *track {
+                        PlannedTrack::Existing(i) => vv_core::edit::first_free_track(
+                            tl,
+                            [i],
+                            (start, seg.len),
+                            &[],
+                            &[],
+                            &ignored,
+                        )
+                        .is_some(),
+                        PlannedTrack::New(_) => true,
+                    }
+            };
+            let track = candidates.into_iter().find(free).unwrap_or_else(|| {
+                new_count += 1;
+                PlannedTrack::New(new_count - 1)
+            });
+            chosen.push(track);
+        }
+        busy.extend(chosen.iter().map(|&t| (t, start, start + seg.len)));
+        audio.push(chosen);
+    }
+    DropPlan {
+        frame,
+        target,
+        audio,
+    }
 }
 
 fn drag_set_segments(
@@ -1978,6 +2100,7 @@ fn drag_set_segments(
                 len: g.default_len(timeline_fps),
                 has_video: true,
                 has_audio: false,
+                audio_streams: 0,
             }];
         }
         TimelineDrag::Fx(fx) => {
@@ -1986,6 +2109,7 @@ fn drag_set_segments(
                 len: fx_len(fx, timeline_fps),
                 has_video: true,
                 has_audio: false,
+                audio_streams: 0,
             }];
         }
     };
@@ -1995,11 +2119,13 @@ fn drag_set_segments(
         .filter(|d| project.media_pool.contains_key(d.media_id))
         .map(|d| {
             let len = drag_timeline_len(project, timeline_fps, d);
+            let meta = &project.media_pool[d.media_id].meta;
             let seg = DragSegment {
                 offset,
                 len,
-                has_video: d.takes_video(&project.media_pool[d.media_id].meta),
-                has_audio: d.takes_audio(&project.media_pool[d.media_id].meta),
+                has_video: d.takes_video(meta),
+                has_audio: d.takes_audio(meta),
+                audio_streams: meta.audio_stream_count(),
             };
             offset += len;
             seg
@@ -2503,6 +2629,11 @@ pub fn show_timeline(
                     )
                     .max(0)
                 };
+                let ripple = ripple_track(state);
+                let linkage = state.linkage;
+                let plan_drop = |drag: &TimelineDrag, target, frame| {
+                    plan_media_drop(project, timeline_id, drag, target, frame, ripple, linkage)
+                };
                 // Layer above the clips, painted further on.
                 let ghost_painter = painter.clone().with_layer_id(egui::LayerId::new(
                     egui::Order::Foreground,
@@ -2514,29 +2645,42 @@ pub fn show_timeline(
                     && let Some(target) = drop_target(&drag, pos)
                     && !drag_set_segments(project, timeline_fps, &drag).is_empty()
                 {
-                    let frame = drop_frame(&drag, pos);
-                    // The tracks where `vv_core::edit::insert_media` puts video and audio.
-                    let first_row = |kind| {
-                        (0..track_count)
-                            .find(|&t| track_kinds[t] == kind && !track_locked(t))
-                            .map(|t| origin.y + row_y[t])
-                    };
-                    let video_y = match target {
+                    let plan = plan_drop(&drag, target, drop_frame(&drag, pos));
+                    let video_y = match plan.target {
                         MediaDropTarget::Track(track) => Some(origin.y + row_y[track]),
-                        _ => first_row(TrackKind::Video),
+                        MediaDropTarget::NewVideoTrack => {
+                            Some(origin.y + layout.video_rows_top - row_height)
+                        }
+                        _ => (0..track_count)
+                            .find(|&t| track_kinds[t] == TrackKind::Video && !track_locked(t))
+                            .map(|t| origin.y + row_y[t]),
                     };
-                    let audio_y = first_row(TrackKind::Audio);
-                    for seg in drag_set_segments(project, timeline_fps, &drag) {
-                        let x = origin.x + (frame + seg.offset) as f32 * px_per_frame;
-                        let rows = [
-                            (seg.has_video, video_y, layout.video_pane),
-                            (seg.has_audio, audio_y, layout.audio_pane),
-                        ];
-                        for (_, y, pane) in rows.into_iter().filter(|(present, _, _)| *present) {
-                            let Some(y) = y else { continue };
-                            let ghost_painter = ghost_painter.with_clip_rect(
-                                ghost_painter.clip_rect().intersect(pane_rect(pane)),
-                            );
+                    let audio_y = |track: PlannedTrack| match track {
+                        PlannedTrack::Existing(t) => origin.y + row_y[t],
+                        PlannedTrack::New(n) => {
+                            origin.y + layout.audio_rows_bottom() + n as f32 * row_height
+                        }
+                    };
+                    let segments = drag_set_segments(project, timeline_fps, &drag);
+                    for (seg, audio_tracks) in segments.iter().zip(&plan.audio) {
+                        let x = origin.x + (plan.frame + seg.offset) as f32 * px_per_frame;
+                        let video_row = (seg.has_video)
+                            .then_some(video_y)
+                            .flatten()
+                            .map(|y| (y, layout.video_pane));
+                        let audio_rows = audio_tracks
+                            .iter()
+                            .map(|&track| (audio_y(track), layout.audio_pane));
+                        for (y, pane) in video_row.into_iter().chain(audio_rows) {
+                            // A ghost on a track still to be created sits in
+                            // the new-track band, outside the pane.
+                            let clip = if y >= origin.y + pane.min && y < origin.y + pane.max {
+                                pane_rect(pane)
+                            } else {
+                                ghost_painter.clip_rect()
+                            };
+                            let ghost_painter = ghost_painter
+                                .with_clip_rect(ghost_painter.clip_rect().intersect(clip));
                             let rect = egui::Rect::from_min_size(
                                 egui::pos2(x, y),
                                 egui::vec2(seg.len as f32 * px_per_frame, row_height),
@@ -2564,8 +2708,8 @@ pub fn show_timeline(
                     && let Some(pos) = ui.input(|i| i.pointer.interact_pos())
                     && let Some(target) = drop_target(&drag, pos)
                 {
-                    let frame = drop_frame(&drag, pos);
-                    media_drop = Some((drag, frame, target));
+                    let plan = plan_drop(&drag, target, drop_frame(&drag, pos));
+                    media_drop = Some((drag, plan.frame, plan.target));
                 }
 
                 // Ghost of a filter: an icon instead of the green rectangle,
@@ -2828,6 +2972,7 @@ pub fn show_timeline(
                         raw_rounded,
                         drag_group_targets.as_deref().unwrap(),
                         &d.followers,
+                        ripple_track(state),
                     );
                     let candidate = raw_rounded.clamp(min_start, max_start);
                     let mut exclude = vec![d.clip_id];
@@ -4906,6 +5051,12 @@ fn retime_bar(
 
 /// Starts the trim of `visual` from the edge zone `zone`, with the clips
 /// following it.
+/// With the magnet on, the Main Track ripples: a grown clip pushes the next
+/// ones (the compaction after the trim) instead of stopping against them.
+fn ripple_track(state: &TimelineState) -> Option<usize> {
+    state.main_track.filter(|_| state.magnet)
+}
+
 fn begin_trim(
     state: &mut TimelineState,
     visuals: &[ClipVisual],
@@ -4940,7 +5091,7 @@ fn begin_trim(
         }
     };
     let (min_value, max_value, followers) =
-        combined_trim_range(visuals, project, key, edge, &others);
+        combined_trim_range(visuals, project, key, edge, &others, ripple_track(state));
     let original_value = match edge {
         TrimEdge::Start => visual.clip.timeline_start,
         TrimEdge::End => visual.clip.timeline_end(),
@@ -6138,7 +6289,13 @@ fn apply_pending_action(
                 duplicate_clips(project, history, state, timeline_id, &moves);
                 return;
             }
-            vv_core::edit::move_clips(project, history, timeline_id, moves);
+            let onto_ripple = ripple_track(state)
+                .is_some_and(|main| moves.iter().any(|&(_, _, to, _)| to == main));
+            if onto_ripple {
+                vv_core::edit::move_clips_over(project, history, timeline_id, moves);
+            } else {
+                vv_core::edit::move_clips(project, history, timeline_id, moves);
+            }
         }
         PendingAction::Slip { clips, delta } => {
             vv_core::edit::slip_clips(project, history, timeline_id, &clips, delta);
@@ -6147,7 +6304,13 @@ fn apply_pending_action(
             let only: BTreeSet<ClipKey> = clips.into_iter().collect();
             vv_core::edit::split_clips(project, history, timeline_id, frame, Some(&only));
         }
-        PendingAction::Trim { trims, overwritten } => {
+        PendingAction::Trim {
+            trims,
+            mut overwritten,
+        } => {
+            if let Some(ripple) = ripple_track(state) {
+                overwritten.retain(|&(track, _, _)| track != ripple);
+            }
             // The stretch gained by lengthening overwrites what was there; the trimmed
             // clips stay out, or they would cut themselves.
             let exclude: Vec<(usize, ClipId)> = trims
@@ -7126,39 +7289,6 @@ fn apply_click_selection(
     }
 }
 
-/// Bounds imposed by the neighbors on `track_index` for a clip of length `len`
-/// positioned (only to decide who comes before/after) at `reference_start` —
-/// it does not have to already be there: also used for a track change mid-drag.
-fn neighbor_bounds_at(
-    visuals: &[ClipVisual],
-    track_index: usize,
-    exclude: &[ClipId],
-    reference_start: FrameIdx,
-    len: FrameIdx,
-) -> (FrameIdx, FrameIdx) {
-    let mut lower_bound: FrameIdx = 0;
-    let mut upper_bound: FrameIdx = FrameIdx::MAX;
-    let reference_end = reference_start + len;
-
-    for v in visuals {
-        if v.track_index != track_index || exclude.contains(&v.clip.id) {
-            continue;
-        }
-        if v.clip.timeline_end() <= reference_start {
-            lower_bound = lower_bound.max(v.clip.timeline_end());
-        }
-        if v.clip.timeline_start >= reference_end {
-            upper_bound = upper_bound.min(v.clip.timeline_start);
-        }
-    }
-
-    (lower_bound, upper_bound)
-}
-
-fn max_start_in_slot(lower: FrameIdx, upper: FrameIdx, len: FrameIdx) -> FrameIdx {
-    upper.saturating_sub(len).max(lower)
-}
-
 /// Like `drag_range`, for a clip of length `len` evaluated at `reference_start`
 /// on `track_index` (even if it does not fit there yet) ignoring `exclude`.
 fn drag_range_at(
@@ -7168,8 +7298,61 @@ fn drag_range_at(
     reference_start: FrameIdx,
     len: FrameIdx,
 ) -> (FrameIdx, FrameIdx) {
-    let (lower, upper) = neighbor_bounds_at(visuals, track_index, exclude, reference_start, len);
-    (lower, max_start_in_slot(lower, upper, len))
+    let mut forbidden = Vec::new();
+    push_forbidden_starts(&mut forbidden, visuals, track_index, exclude, 0, len);
+    nearest_free_starts(reference_start, 0, forbidden)
+}
+
+/// Pushes the primary starts at which a clip of `len`, `offset` frames from
+/// the primary, would overlap a clip of `track_index` (inclusive ranges).
+fn push_forbidden_starts(
+    forbidden: &mut Vec<(FrameIdx, FrameIdx)>,
+    visuals: &[ClipVisual],
+    track_index: usize,
+    exclude: &[ClipId],
+    offset: FrameIdx,
+    len: FrameIdx,
+) {
+    for v in visuals {
+        if v.track_index != track_index || exclude.contains(&v.clip.id) {
+            continue;
+        }
+        let lo = v
+            .clip
+            .timeline_start
+            .saturating_sub(len)
+            .saturating_sub(offset)
+            + 1;
+        let hi = v.clip.timeline_end().saturating_sub(offset) - 1;
+        if lo <= hi {
+            forbidden.push((lo, hi));
+        }
+    }
+}
+
+/// The free stretch of primary starts nearest to `reference`: a drag never
+/// lands on top of another clip, it stops against it or jumps past it.
+fn nearest_free_starts(
+    reference: FrameIdx,
+    min_start: FrameIdx,
+    mut forbidden: Vec<(FrameIdx, FrameIdx)>,
+) -> (FrameIdx, FrameIdx) {
+    forbidden.sort_unstable();
+    let mut free: Vec<(FrameIdx, FrameIdx)> = Vec::new();
+    let mut cursor = min_start;
+    for (lo, hi) in forbidden {
+        if hi < cursor {
+            continue;
+        }
+        if lo > cursor {
+            free.push((cursor, lo - 1));
+        }
+        cursor = cursor.max(hi.saturating_add(1));
+    }
+    free.push((cursor, FrameIdx::MAX / 4));
+    free.into_iter()
+        .min_by_key(|&(lo, hi)| (reference.clamp(lo, hi) - reference).abs())
+        .unwrap_or((min_start, FrameIdx::MAX / 4))
 }
 
 /// Valid range (min/max) for the new `timeline_start` of a clip on its
@@ -7329,34 +7512,55 @@ fn group_drag_bounds(
     reference_start: FrameIdx,
     targets: &[(ClipId, EffectiveTrack)],
     followers: &[(ClipId, usize, FrameIdx)],
+    ripple: Option<usize>,
 ) -> (FrameIdx, FrameIdx) {
     let exclude: Vec<ClipId> = targets.iter().map(|(id, _)| *id).collect();
-    let bound_for =
-        |id: ClipId, target: EffectiveTrack, reference: FrameIdx| -> (FrameIdx, FrameIdx) {
-            let len = visuals
-                .iter()
-                .find(|v| v.clip.id == id)
-                .map(|v| v.clip.timeline_len)
-                .unwrap_or(0);
-            match target {
-                EffectiveTrack::Existing(track) => {
-                    drag_range_at(visuals, track, &exclude, reference, len)
-                }
-                EffectiveTrack::New(_) => (0, max_start_in_slot(0, FrameIdx::MAX, len)),
-            }
-        };
-
-    let (primary_id, primary_target) = targets[0];
-    let (mut min_start, mut max_start) = bound_for(primary_id, primary_target, reference_start);
-
-    for (i, &(follower_id, _, offset)) in followers.iter().enumerate() {
-        let (_, follower_target) = targets[i + 1];
-        let (o_min, o_max) = bound_for(follower_id, follower_target, reference_start + offset);
-        // Saturating: without neighbors `o_max` is ~`FrameIdx::MAX`.
-        min_start = min_start.max(o_min.saturating_sub(offset));
-        max_start = max_start.min(o_max.saturating_sub(offset));
+    if let Some(main) = ripple
+        && targets[0].1 == EffectiveTrack::Existing(main)
+    {
+        let at = main_insert_point(visuals, main, &exclude, reference_start);
+        return (at, at);
     }
-    (min_start, max_start.max(min_start))
+    let len_of = |id: ClipId| {
+        visuals
+            .iter()
+            .find(|v| v.clip.id == id)
+            .map(|v| v.clip.timeline_len)
+            .unwrap_or(0)
+    };
+    let offsets = std::iter::once(0).chain(followers.iter().map(|&(_, _, offset)| offset));
+    let mut min_start: FrameIdx = 0;
+    let mut forbidden = Vec::new();
+    for (&(id, target), offset) in targets.iter().zip(offsets) {
+        min_start = min_start.max(-offset);
+        if let EffectiveTrack::Existing(track) = target {
+            push_forbidden_starts(&mut forbidden, visuals, track, &exclude, offset, len_of(id));
+        }
+    }
+    nearest_free_starts(reference_start, min_start, forbidden)
+}
+
+/// On a rippling Main Track a move inserts between clips: the nearest clip
+/// start (or the end of the track), the compaction then makes room.
+fn main_insert_point(
+    visuals: &[ClipVisual],
+    main: usize,
+    exclude: &[ClipId],
+    reference: FrameIdx,
+) -> FrameIdx {
+    let others = visuals
+        .iter()
+        .filter(|v| v.track_index == main && !exclude.contains(&v.clip.id));
+    let end = others
+        .clone()
+        .map(|v| v.clip.timeline_end())
+        .max()
+        .unwrap_or(0);
+    others
+        .map(|v| v.clip.timeline_start)
+        .chain([0, end])
+        .min_by_key(|&b| (b - reference).abs())
+        .unwrap_or(0)
 }
 
 /// Range of the trimmed edge combined with that of the `others`, and their
@@ -7367,6 +7571,7 @@ fn combined_trim_range(
     primary: ClipKey,
     edge: TrimEdge,
     others: &[(ClipKey, TrimEdge)],
+    ripple_track: Option<usize>,
 ) -> (FrameIdx, FrameIdx, Vec<TrimFollower>) {
     let find = |(track, id): ClipKey| {
         visuals
@@ -7391,6 +7596,24 @@ fn combined_trim_range(
     for &(v, v_edge) in &trimmed {
         let offset = edge_value(&v.clip, v_edge) - primary_value;
         let (mut o_min, mut o_max) = vv_core::edit::trim_range(project, &v.clip, v_edge);
+        for n in visuals.iter().filter(|n| {
+            n.track_index == v.track_index
+                && Some(n.track_index) != ripple_track
+                && n.clip.id != v.clip.id
+                && !trimmed
+                    .iter()
+                    .any(|(t, _)| t.track_index == n.track_index && t.clip.id == n.clip.id)
+        }) {
+            match v_edge {
+                TrimEdge::End if n.clip.timeline_start >= v.clip.timeline_end() => {
+                    o_max = o_max.min(n.clip.timeline_start);
+                }
+                TrimEdge::Start if n.clip.timeline_end() <= v.clip.timeline_start => {
+                    o_min = o_min.max(n.clip.timeline_end());
+                }
+                _ => {}
+            }
+        }
         // Two clips trimmed together on the same track must not
         // lengthen over each other; in a roll, instead, the edge of the
         // neighbor moves with this one.

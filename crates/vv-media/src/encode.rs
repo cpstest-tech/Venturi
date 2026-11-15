@@ -19,7 +19,9 @@ macro_rules! send_retrying {
         let mut tries = 0u32;
         loop {
             match $send {
-                Err(ffmpeg::Error::Other { errno: ffmpeg::ffi::EAGAIN }) if tries < 5000 => {
+                Err(ffmpeg::Error::Other {
+                    errno: ffmpeg::ffi::EAGAIN,
+                }) if tries < 5000 => {
                     tries += 1;
                     drain_packets(
                         &mut *$octx,

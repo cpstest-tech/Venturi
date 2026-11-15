@@ -745,3 +745,32 @@ fn slip_clips_moves_the_content_of_the_whole_group_and_undoes() {
     history.undo(&mut project);
     assert_eq!(snapshot(&project, tl), before);
 }
+
+#[test]
+fn first_free_track_skips_busy_taken_and_ignores_the_ignored_clips() {
+    let mut project = Project::default();
+    let timeline = project.timelines.insert(Timeline {
+        name: "T".into(),
+        fps: Rational::new(25, 1),
+        resolution: (1920, 1080),
+        tracks: vec![Track::new(TrackKind::Audio), Track::new(TrackKind::Audio)],
+        markers: Vec::new(),
+        master: Default::default(),
+    });
+    let clip =
+        Clip::from_source_range(ClipId(7), ClipSource::SolidColor, 0, 10, 0, Rational::one());
+    project.timelines[timeline].tracks[0].insert_sorted(clip);
+    let tl = &project.timelines[timeline];
+    assert_eq!(
+        first_free_track(tl, [0, 1], (5, 10), &[], &[], &[]),
+        Some(1)
+    );
+    assert_eq!(
+        first_free_track(tl, [0, 1], (5, 10), &[(1, 0, 20)], &[], &[]),
+        None
+    );
+    assert_eq!(
+        first_free_track(tl, [0, 1], (5, 10), &[], &[1], &[(0, ClipId(7))]),
+        Some(0)
+    );
+}

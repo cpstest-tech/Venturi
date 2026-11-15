@@ -539,3 +539,26 @@ fn changing_the_timeline_resolution_is_one_undo_step() {
     history.redo(&mut project);
     assert_eq!(project.timelines[timeline].resolution, (1080, 1920));
 }
+
+#[test]
+fn an_insertion_on_the_main_track_lands_on_the_nearest_clip_start() {
+    let (mut project, timeline) = project_with(&[]);
+    let mut history = History::default();
+    put(&mut project, &mut history, timeline, 0, 0, 100);
+    put(&mut project, &mut history, timeline, 0, 100, 100);
+    assert_eq!(main_insert_point(&project, timeline, 130, &[]), 100);
+    assert_eq!(main_insert_point(&project, timeline, 170, &[]), 200);
+}
+
+#[test]
+fn opening_a_main_gap_pushes_the_later_clips_and_their_overlays() {
+    let (mut project, timeline) = project_with(&[TrackKind::Video]);
+    let mut history = History::default();
+    put(&mut project, &mut history, timeline, 0, 0, 100);
+    put(&mut project, &mut history, timeline, 0, 100, 100);
+    put(&mut project, &mut history, timeline, 1, 120, 10);
+    let anchors = linkage_anchors(&project, timeline);
+    open_main_gap(&mut project, &mut history, timeline, 100, 50, &anchors);
+    assert_eq!(spans(&project, timeline, 0), vec![(0, 100), (150, 250)]);
+    assert_eq!(spans(&project, timeline, 1), vec![(170, 180)]);
+}
