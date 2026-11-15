@@ -334,7 +334,7 @@ impl VenturiApp {
                 self.import_otio_from(&path);
             }
             (DialogKind::OpenProject, DialogOutcome::File(Some(path))) => {
-                self.load_project_from(path);
+                self.open_project_in_background(path);
             }
             (DialogKind::ImportProject, DialogOutcome::File(Some(path))) => {
                 self.import_and_open_project(&path);
@@ -577,7 +577,7 @@ impl VenturiApp {
         match switch {
             ProjectSwitch::New => self.create_new_project(),
             ProjectSwitch::Open => self.open_project_dialog(),
-            ProjectSwitch::OpenPath(path) => self.load_project_from(path),
+            ProjectSwitch::OpenPath(path) => self.open_project_in_background(path),
             ProjectSwitch::Home => self.close_project_to_home(),
             ProjectSwitch::Quit => {
                 self.quit_confirmed = true;
@@ -778,6 +778,57 @@ impl VenturiApp {
     }
 
     /// Replaces the project and resets the UI state tied to the old one.
+    /// Like `load_project_from`, reading the file and its media on a thread:
+    /// a heavy project shows a progress overlay instead of freezing the app.
+    pub(crate) fn open_project_in_background(&mut self, path: PathBuf) {
+        if self.project_loading.is_some() {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        let file = path.clone();
+        std::thread::spawn(move || {
+            let loaded = vv_core::load_project(&file)
+                .map(|mut project| {
+                    vv_session::complete_legacy_media(&mut project);
+                    project
+                })
+                .map_err(|e| e.to_string());
+            let _ = tx.send(loaded);
+        });
+        self.project_loading = Some(ProjectLoading { path, rx });
+    }
+
+    /// Installs the project `open_project_in_background` read, once ready;
+    /// until then covers the window with a spinner.
+    pub(crate) fn poll_project_loading(&mut self, ctx: &egui::Context) {
+        let Some(loading) = &self.project_loading else {
+            return;
+        };
+        let loaded = match loading.rx.try_recv() {
+            Ok(loaded) => loaded,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                paint_loading_overlay(ctx, &projects::project_name(&loading.path));
+                ctx.request_repaint_after(std::time::Duration::from_millis(50));
+                return;
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                Err(t!("project.load_interrupted").into_owned())
+            }
+        };
+        let Some(ProjectLoading { path, .. }) = self.project_loading.take() else {
+            return;
+        };
+        match loaded {
+            Ok(project) => {
+                self.session.install_project(project, Some(path.clone()));
+                self.remember_recent_project(path.clone());
+                self.reset_for_replaced_project();
+                self.enter_editor(path);
+            }
+            Err(e) => self.project_error = Some(t!("project.open_failed", error = e).into_owned()),
+        }
+    }
+
     pub(crate) fn load_project_from(&mut self, path: PathBuf) {
         match self.session.open(&path) {
             Ok(()) => {
@@ -1448,3 +1499,36 @@ fn format_elapsed(d: std::time::Duration) -> String {
 #[cfg(test)]
 #[path = "tests/project_io.rs"]
 mod tests;
+
+pub(crate) struct ProjectLoading {
+    path: PathBuf,
+    rx: std::sync::mpsc::Receiver<Result<vv_core::Project, String>>,
+}
+
+fn paint_loading_overlay(ctx: &egui::Context, name: &str) {
+    let screen = ctx.content_rect();
+    egui::Area::new(egui::Id::new("project_loading_overlay"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(screen.min)
+        .show(ctx, |ui| {
+            // Swallows the clicks: nothing underneath may start meanwhile.
+            ui.interact(screen, ui.id().with("block"), egui::Sense::click_and_drag());
+            ui.painter()
+                .rect_filled(screen, 0.0, egui::Color32::from_black_alpha(170));
+            let center = screen.center();
+            ui.put(
+                egui::Rect::from_center_size(
+                    center - egui::vec2(0.0, 24.0),
+                    egui::vec2(40.0, 40.0),
+                ),
+                egui::Spinner::new().size(40.0),
+            );
+            ui.painter().text(
+                center + egui::vec2(0.0, 22.0),
+                egui::Align2::CENTER_TOP,
+                t!("project.loading", name = name),
+                egui::FontId::proportional(16.0),
+                egui::Color32::WHITE,
+            );
+        });
+}

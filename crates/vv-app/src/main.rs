@@ -565,6 +565,7 @@ struct VenturiApp {
     /// the bars drop abruptly.
     audiometer_level: (f32, f32),
     viewer_fullscreen: bool,
+    project_loading: Option<project_io::ProjectLoading>,
     settings: settings::Settings,
     /// `None` in the tests: the settings are never written to disk.
     settings_path: Option<PathBuf>,
@@ -711,6 +712,7 @@ impl Default for VenturiApp {
             audiometer_enabled: true,
             audiometer_level: (0.0, 0.0),
             viewer_fullscreen: false,
+            project_loading: None,
             settings: settings::Settings::default(),
             settings_path: None,
             settings_dialog: None,
@@ -4238,6 +4240,7 @@ impl VenturiApp {
     fn frame_ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.handle_close_request(&ui.ctx().clone());
         self.poll_pending_dialog(&ui.ctx().clone());
+        self.poll_project_loading(&ui.ctx().clone());
         if self.screen == Screen::Home {
             self.home_ui(ui);
             return;

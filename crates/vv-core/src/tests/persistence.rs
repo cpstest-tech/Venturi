@@ -488,3 +488,16 @@ fn a_format_3_project_finds_its_effect_elements_on_effects_tracks() {
         .collect();
     assert_eq!(flags, [false, true]);
 }
+
+#[test]
+fn the_format_version_is_read_from_the_head_of_the_file() {
+    assert_eq!(
+        head_format_version("(\n    format_version: 4,\n    media_pool: ("),
+        Some(4)
+    );
+    assert_eq!(head_format_version("(format_version:12)"), Some(12));
+    assert_eq!(
+        head_format_version("(\n    media_pool: (format_version: 3"),
+        None
+    );
+}

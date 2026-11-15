@@ -85,15 +85,41 @@ pub fn load_project(path: &Path) -> Result<Project, PersistenceError> {
     project_from_str(&contents)
 }
 
+/// `format_version` is written first: read from the head, since probing the
+/// whole file with `VersionProbe` costs seconds on a big project (ron skips
+/// the unknown fields slowly).
+fn head_format_version(contents: &str) -> Option<u32> {
+    let head = contents.trim_start().strip_prefix('(')?.trim_start();
+    let rest = head.strip_prefix("format_version")?.trim_start();
+    let digits = rest.strip_prefix(':')?.trim_start();
+    let end = digits
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(digits.len());
+    digits[..end].parse().ok()
+}
+
 pub fn project_from_str(contents: &str) -> Result<Project, PersistenceError> {
-    let found = ron::from_str::<VersionProbe>(contents).map_or(0, |p| p.format_version);
-    if found > CURRENT_FORMAT_VERSION {
-        return Err(PersistenceError::NewerFormat {
-            found,
-            supported: CURRENT_FORMAT_VERSION,
-        });
+    let newer = |found: u32| PersistenceError::NewerFormat {
+        found,
+        supported: CURRENT_FORMAT_VERSION,
+    };
+    let head = head_format_version(contents);
+    if let Some(found) = head.filter(|&v| v > CURRENT_FORMAT_VERSION) {
+        return Err(newer(found));
     }
-    let mut project: Project = ron::from_str(contents)?;
+    let mut project: Project = match ron::from_str(contents) {
+        Ok(project) => project,
+        Err(e) => {
+            let found = ron::from_str::<VersionProbe>(contents).map_or(0, |p| p.format_version);
+            return Err(if found > CURRENT_FORMAT_VERSION {
+                newer(found)
+            } else {
+                e.into()
+            });
+        }
+    };
+    let found = head
+        .unwrap_or_else(|| ron::from_str::<VersionProbe>(contents).map_or(0, |p| p.format_version));
     migrate(&mut project, found);
     // `Clip::rate` is derived from the fps: recomputing it here fixes
     // projects saved before the field existed (clips at an fps different

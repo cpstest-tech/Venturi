@@ -92,11 +92,21 @@ impl HomeState {
         let (tx, rx) = mpsc::channel();
         let dir = root.clone();
         std::thread::spawn(move || {
-            for file in projects::list_projects(&dir) {
-                if tx.send(projects::summarize(&file)).is_err() {
-                    return;
+            let files = std::sync::Mutex::new(projects::list_projects(&dir));
+            let workers = std::thread::available_parallelism().map_or(2, |n| n.get().min(4));
+            std::thread::scope(|scope| {
+                for _ in 0..workers {
+                    let tx = tx.clone();
+                    let files = &files;
+                    scope.spawn(move || {
+                        while let Some(file) = files.lock().ok().and_then(|mut f| f.pop()) {
+                            if tx.send(projects::summarize(&file)).is_err() {
+                                return;
+                            }
+                        }
+                    });
                 }
-            }
+            });
         });
         self.cards.clear();
         self.scan = Some(rx);

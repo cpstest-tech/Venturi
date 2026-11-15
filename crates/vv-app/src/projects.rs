@@ -12,6 +12,7 @@ pub const PROJECT_EXTENSION: &str = "tandem";
 pub const LEGACY_PROJECT_EXTENSION: &str = "vvproj";
 const COVER_FILE: &str = ".cover.png";
 const CUSTOM_COVER_FILE: &str = ".cover-custom.png";
+const COVER_KEY_FILE: &str = ".cover.key";
 const COVER_WIDTH: u32 = 320;
 
 #[derive(Debug, thiserror::Error)]
@@ -393,17 +394,21 @@ fn cover(project: &Project, dir: &Path, project_modified: Option<SystemTime>) ->
         return Some(chosen);
     }
     let cached = dir.join(COVER_FILE);
-    let cache_modified = std::fs::metadata(&cached).and_then(|m| m.modified()).ok();
-    if cache_modified.is_some()
-        && cache_modified >= project_modified
-        && let Some(cover) = read_png(&cached)
-    {
-        return Some(cover);
-    }
+    let key_file = dir.join(COVER_KEY_FILE);
     let Some(item) = first_video_media(project) else {
         let _ = std::fs::remove_file(&cached);
+        let _ = std::fs::remove_file(&key_file);
         return None;
     };
+    // Keyed on the media it shows: every save touches the project, and
+    // decoding a frame per project on each visit made the Home slow.
+    let key = format!("{:016x}", item.content_hash);
+    let cache_modified = std::fs::metadata(&cached).and_then(|m| m.modified()).ok();
+    let fresh = std::fs::read_to_string(&key_file).is_ok_and(|k| k.trim() == key)
+        || (cache_modified.is_some() && cache_modified >= project_modified);
+    if fresh && let Some(cover) = read_png(&cached) {
+        return Some(cover);
+    }
     let secs = item.meta.duration_frames as f64 / item.meta.fps.as_f64().max(1.0);
     let thumb = vv_media::generate_thumbnail(&item.path, secs, COVER_WIDTH).ok()?;
     let cover = Cover {
@@ -413,6 +418,7 @@ fn cover(project: &Project, dir: &Path, project_modified: Option<SystemTime>) ->
     };
     if let Some(png) = encode_png(&cover) {
         let _ = vv_core::write_atomic(&cached, &png);
+        let _ = std::fs::write(&key_file, key);
     }
     Some(cover)
 }

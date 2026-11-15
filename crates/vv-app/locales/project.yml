@@ -255,3 +255,11 @@ project.recovered_title:
 project.recovered:
   en: "Tandem did not close properly: «%{name}» has been reopened from its last save."
   it: "Tandem non si è chiuso correttamente: «%{name}» è stato riaperto dall'ultimo salvataggio."
+
+project.loading:
+  en: "Opening %{name}…"
+  it: "Apertura di %{name}…"
+
+project.load_interrupted:
+  en: "loading stopped unexpectedly"
+  it: "il caricamento si è interrotto"
