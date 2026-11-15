@@ -957,6 +957,10 @@ impl VenturiApp {
         settings: export::ExportSettings,
         range: std::ops::Range<FrameIdx>,
     ) {
+        if self.cutout_pending(timeline_id).is_some() {
+            self.project_error = Some(t!("export.cutout_not_ready").into_owned());
+            return;
+        }
         self.pause_proxies_for_export();
         match self.session.export(timeline_id, settings, range) {
             Some((job, progress)) => self.export = Some(ExportUiState { job, progress }),

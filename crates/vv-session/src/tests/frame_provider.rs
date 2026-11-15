@@ -1155,3 +1155,114 @@ fn clip_animation_reaches_the_shared_preview_export_layer() {
     assert_eq!(middle.transform.position[0], 0.0);
     assert_eq!(middle.transform.zoom, [2.0; 2]);
 }
+
+/// Grey frames of 8x4.
+struct GreyProvider;
+
+impl FrameProvider for GreyProvider {
+    fn frame_for(
+        &mut self,
+        _: &Project,
+        _: &Clip,
+        _: FrameIdx,
+    ) -> Result<Option<Arc<FrameYuv420>>, crate::export::ExportError> {
+        Ok(Some(Arc::new(FrameYuv420 {
+            width: 8,
+            height: 4,
+            y: vec![200; 32],
+            chroma: vv_media::Chroma::Planar {
+                u: vec![128; 8],
+                v: vec![128; 8],
+            },
+            chroma_width: 4,
+            chroma_height: 2,
+            matrix: vv_media::ColorMatrix::Bt709,
+            full_range: true,
+            alpha: None,
+        })))
+    }
+}
+
+#[test]
+fn a_clip_that_removes_its_background_shows_what_is_below_where_its_matte_is_empty() {
+    let hash = 0x7E57_3A77_E000_0003;
+    let _ = std::fs::remove_dir_all(vv_media::matte::matte_dir(hash));
+    // Left half background, right half subject: smaller than the frame.
+    vv_media::matte::write_matte(
+        hash,
+        0,
+        &vv_media::matte::Matte {
+            width: 4,
+            height: 2,
+            data: vec![0, 0, 255, 255, 0, 0, 255, 255],
+        },
+    )
+    .unwrap();
+    let mut project = Project::default();
+    let media = project.media_pool.insert(vv_core::MediaItem {
+        path: "person.mp4".into(),
+        meta: vv_core::MediaMeta {
+            duration_frames: 25,
+            fps: Rational::new(25, 1),
+            width: 8,
+            height: 4,
+            has_video: true,
+            has_audio: false,
+            sample_rate: 0,
+            channels: 0,
+            audio_streams: 0,
+            file: Default::default(),
+        },
+        content_hash: hash,
+        compound: None,
+        folder: None,
+    });
+    let mut clip = Clip::from_source_range(
+        ClipId(1),
+        ClipSource::Media(media),
+        0,
+        25,
+        0,
+        Rational::one(),
+    );
+    clip.effects.remove_background = true;
+    let layer = clip_layer(&project, &clip, 0, (8, 4), 25.0, &mut GreyProvider)
+        .unwrap()
+        .unwrap();
+    let OwnedContent::Video { matte, .. } = &layer.content else {
+        panic!("not a video layer");
+    };
+    assert!(matte.is_some());
+
+    let compositor = vv_render::Compositor::new_headless();
+    let blue = vv_render::Layer::new(
+        vv_render::LayerContent::Solid(vv_core::Rgba {
+            r: 0.0,
+            g: 0.0,
+            b: 1.0,
+            a: 1.0,
+        }),
+        Transform::default(),
+    );
+    let out = compositor.render_layers(
+        &[blue, layer.as_render()],
+        vv_render::OutputFrame::exact(8, 4),
+    );
+    let pixel = |x: usize, y: usize| out.as_chunks::<4>().0[y * 8 + x];
+    assert_eq!(pixel(0, 1)[..3], [0, 0, 255], "background removed");
+    let subject = pixel(7, 1);
+    assert!(
+        subject[..3].iter().all(|&c| (195..=206).contains(&c)),
+        "the grey subject stays: {subject:?}"
+    );
+
+    clip.effects.remove_background = false;
+    let layer = clip_layer(&project, &clip, 0, (8, 4), 25.0, &mut GreyProvider)
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        layer.content,
+        OwnedContent::Video { matte: None, .. }
+    ));
+    let _ = std::fs::remove_dir_all(vv_media::matte::matte_dir(hash));
+}

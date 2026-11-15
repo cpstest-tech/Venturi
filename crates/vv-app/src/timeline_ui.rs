@@ -7884,7 +7884,7 @@ fn paint_retime_cursor(painter: &egui::Painter, pos: egui::Pos2) {
 /// Snapping threshold, in screen pixels (not in frames:
 /// it stays the same visual distance at any zoom level, converted
 /// into frames by `snap_frame` based on `px_per_frame`).
-const SNAP_THRESHOLD_PX: f32 = 12.0;
+const SNAP_THRESHOLD_PX: f32 = 16.0;
 
 /// Edges of the non-excluded clips plus `extra_targets` (the playhead).
 fn snap_targets<'a>(

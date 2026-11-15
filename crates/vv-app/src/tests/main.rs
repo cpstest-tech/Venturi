@@ -5856,3 +5856,134 @@ fn a_style_edit_keeps_the_gradient_offset_keyframes_of_other_titles() {
     };
     assert_eq!((g.angle, g.offset), (45.0, offset));
 }
+
+fn subtitle_clips(app: &VenturiApp) -> Vec<vv_core::Clip> {
+    let tl = &app.session.project.timelines[app.timeline_id.unwrap()];
+    let index = vv_core::captions::subtitle_track(tl).expect("a subtitle track");
+    tl.tracks[index].clips.clone()
+}
+
+fn app_with_two_subtitles() -> VenturiApp {
+    let mut app = VenturiApp::default();
+    make_timeline_with_clip(&mut app, 0, 0, 250);
+    app.edit_caption_words(|w| vv_core::captions::insert_line(w, 0, 1500, "primo."));
+    app.edit_caption_words(|w| vv_core::captions::insert_line(w, 4000, 5500, "secondo."));
+    assert_eq!(subtitle_clips(&app).len(), 2);
+    app
+}
+
+/// Moving one subtitle in the player moves all of them while they are linked.
+#[test]
+fn moving_a_linked_subtitle_in_the_player_moves_every_subtitle() {
+    let mut app = app_with_two_subtitles();
+    let timeline = app.timeline_id.unwrap();
+    let index =
+        vv_core::captions::subtitle_track(&app.session.project.timelines[timeline]).unwrap();
+    let first = subtitle_clips(&app)[0].clone();
+    let target = panel_target(timeline, index, &first, 0);
+    let targets = app.with_linked_subtitles(&[target]);
+    assert_eq!(targets.len(), 2, "the player overlay edits both");
+
+    let before = first.effects.transform.value_at(0);
+    let mut moved = before;
+    moved.position[1] += 300.0;
+    let mut pending = Vec::new();
+    properties_panel::push_param_changes(
+        &mut pending,
+        Some(&app.session.project.timelines[timeline]),
+        &targets,
+        &vv_core::TransformParam::ALL,
+        &moved,
+        &before,
+    );
+    for command in pending {
+        app.session
+            .history
+            .do_command(&mut app.session.project, command);
+    }
+    for clip in subtitle_clips(&app) {
+        assert_eq!(clip.effects.transform.value_at(0).position[1], 300.0);
+    }
+}
+
+/// The editor rebuilds the clips from the words: what the user did to them stays.
+#[test]
+fn editing_a_subtitle_keeps_the_place_and_look_of_the_subtitles() {
+    let mut app = app_with_two_subtitles();
+    let timeline = app.timeline_id.unwrap();
+    let index =
+        vv_core::captions::subtitle_track(&app.session.project.timelines[timeline]).unwrap();
+    for clip in subtitle_clips(&app) {
+        app.session.history.do_command(
+            &mut app.session.project,
+            Box::new(vv_core::set_clip_transform_param(
+                timeline,
+                index,
+                clip.id,
+                vv_core::TransformParam::PositionY,
+                250.0,
+            )),
+        );
+    }
+    let line = vv_core::captions::caption_lines(&app.session.project.captions[&timeline].words)[1]
+        .words
+        .clone();
+    app.edit_caption_words(|w| vv_core::captions::set_line_text(w, line, "cambiato."));
+
+    let clips = subtitle_clips(&app);
+    assert_eq!(clips.len(), 2);
+    let text = clips[1].effects.title.as_ref().unwrap().content.value_at(0);
+    assert_eq!(text, "cambiato.");
+    for clip in clips {
+        assert_eq!(clip.effects.transform.value_at(0).position[1], 250.0);
+    }
+}
+
+/// Exporting before the background removal is done would show the background.
+#[test]
+fn the_export_waits_for_the_background_removal() {
+    let mut app = VenturiApp::default();
+    let clip = make_timeline_with_clip(&mut app, 0, 0, 25);
+    let timeline = app.timeline_id.unwrap();
+    let media = app.session.project.media_pool.insert(vv_core::MediaItem {
+        path: "cutout.mp4".into(),
+        meta: vv_core::MediaMeta {
+            duration_frames: 25,
+            fps: vv_core::Rational::new(25, 1),
+            width: 64,
+            height: 64,
+            has_video: true,
+            has_audio: false,
+            sample_rate: 0,
+            channels: 0,
+            audio_streams: 0,
+            file: Default::default(),
+        },
+        content_hash: 0x7E57_C0FF_EE00_0001,
+        compound: None,
+        folder: None,
+    });
+    let clip_mut = app.session.project.timelines[timeline].tracks[0]
+        .clips
+        .iter_mut()
+        .find(|c| c.id == clip)
+        .unwrap();
+    clip_mut.source = vv_core::ClipSource::Media(media);
+    assert_eq!(app.cutout_pending(timeline), None, "nothing to cut out");
+
+    clip_mut_set_cutout(&mut app, timeline, clip);
+    let _ = std::fs::remove_dir_all(vv_media::matte::matte_dir(0x7E57_C0FF_EE00_0001));
+    assert_eq!(app.cutout_pending(timeline), Some(0.0));
+
+    std::fs::create_dir_all(vv_media::matte::matte_dir(0x7E57_C0FF_EE00_0001)).unwrap();
+    vv_media::matte::mark_mattes_complete(0x7E57_C0FF_EE00_0001).unwrap();
+    assert_eq!(app.cutout_pending(timeline), None);
+    let _ = std::fs::remove_dir_all(vv_media::matte::matte_dir(0x7E57_C0FF_EE00_0001));
+}
+
+fn clip_mut_set_cutout(app: &mut VenturiApp, timeline: TimelineId, clip: vv_core::ClipId) {
+    app.session.history.do_command(
+        &mut app.session.project,
+        Box::new(vv_core::set_clip_remove_background(timeline, 0, clip, true)),
+    );
+}

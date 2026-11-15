@@ -58,6 +58,8 @@ struct Env<'a> {
     cover_frame: FrameIdx,
     range: std::ops::Range<FrameIdx>,
     waits_for_scan: bool,
+    /// Background removal still analysing a clip: how far, 0..1.
+    cutout_pending: Option<f32>,
     running: Option<&'a Arc<Mutex<ExportProgress>>>,
 }
 
@@ -232,6 +234,7 @@ impl ExportModal {
             && !self.name.trim().is_empty()
             && !self.dir.trim().is_empty()
             && !scanning
+            && env.cutout_pending.is_none()
             && env.range.end > env.range.start
     }
 
@@ -612,6 +615,15 @@ impl ExportModal {
     /// `Some(true)` for cancel, `Some(false)` for export.
     fn footer(&mut self, ui: &mut egui::Ui, env: &Env, derived: &Derived) -> Option<bool> {
         let mut result = None;
+        if let Some(fraction) = env.cutout_pending {
+            ui.label(
+                egui::RichText::new(t!(
+                    "export.waits_for_cutout",
+                    percent = (fraction * 100.0).round() as u32
+                ))
+                .color(theme::TEXT_SECONDARY),
+            );
+        }
         ui.horizontal(|ui| {
             paint_film_icon(ui);
             ui.label(
@@ -911,6 +923,7 @@ impl VenturiApp {
                 cover_frame: self.cover_frame(timeline),
                 range,
                 waits_for_scan: self.session.export_waits_for_scan(timeline, true),
+                cutout_pending: self.cutout_pending(timeline),
                 running: self.export.as_ref().map(|state| &state.progress),
             };
             modal.show(ctx, &env)

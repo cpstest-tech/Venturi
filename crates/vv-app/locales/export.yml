@@ -303,3 +303,11 @@ cover.title:
 cover.confirm:
   en: "Set cover"
   it: "Imposta copertina"
+
+export.waits_for_cutout:
+  en: "Removing the background of the clips (%{percent}%): the export starts once it is done."
+  it: "Rimozione dello sfondo in corso (%{percent}%): l'export parte quando ha finito."
+
+export.cutout_not_ready:
+  en: "The background removal is still analysing the clips: export once it is done."
+  it: "La rimozione dello sfondo sta ancora analizzando le clip: esporta quando ha finito."

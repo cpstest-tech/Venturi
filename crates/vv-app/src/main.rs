@@ -5313,6 +5313,35 @@ fn title_content_box(title: &vv_core::TitleParams, timeline_size: (u32, u32)) ->
 }
 
 impl VenturiApp {
+    /// While a clip of `timeline` that removes its background still waits for
+    /// its mattes, how far they are: an export now would show the background.
+    /// A failed or stopped analysis does not hold the export back.
+    pub(crate) fn cutout_pending(&self, timeline: TimelineId) -> Option<f32> {
+        let project = &self.session.project;
+        project.timelines[timeline]
+            .tracks
+            .iter()
+            .flat_map(|t| t.clips.iter())
+            .filter(|c| c.effects.remove_background)
+            .filter_map(|clip| match clip.source {
+                vv_core::ClipSource::Media(id) => project.media_pool.get(id),
+                _ => None,
+            })
+            .filter(|item| {
+                item.compound.is_none() && !vv_media::matte::mattes_complete(item.content_hash)
+            })
+            .filter_map(|item| match self.matte_worker.state(item.content_hash) {
+                Some(matte_worker::MatteState::Failed(_)) => None,
+                Some(matte_worker::MatteState::Running(progress))
+                    if progress.stage() == vv_matting::Stage::Matting =>
+                {
+                    Some(progress.fraction())
+                }
+                _ => Some(0.0),
+            })
+            .reduce(f32::min)
+    }
+
     /// Queues the mattes the clips that remove their background still lack,
     /// and redraws while they arrive.
     fn poll_background_removal(&mut self, ctx: &egui::Context) {

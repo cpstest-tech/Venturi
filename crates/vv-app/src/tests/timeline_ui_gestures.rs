@@ -20,6 +20,7 @@ struct Harness {
     modifiers: egui::Modifiers,
     /// The last compound clip `show_timeline` asked to open.
     entered: Option<(TimelineId, ClipId, FrameIdx)>,
+    snapping: bool,
 }
 
 impl Harness {
@@ -47,6 +48,7 @@ impl Harness {
             release_rects: std::collections::HashMap::new(),
             modifiers: egui::Modifiers::NONE,
             entered: None,
+            snapping: false,
         };
         // Two frames: the first one only lays the panes out.
         harness.frame(Vec::new());
@@ -76,7 +78,7 @@ impl Harness {
                     &|_id| "media".to_string(),
                     &std::collections::HashMap::new(),
                     &mut self.state,
-                    false,
+                    self.snapping,
                     false,
                     &[],
                     &[],
@@ -850,4 +852,99 @@ fn zoom_fraction_round_trips() {
             "{fraction}"
         );
     }
+}
+
+#[test]
+fn dragging_a_clip_onto_another_stops_against_it_and_leaves_it_whole() {
+    let mut h = Harness::new(vec![track(
+        TrackKind::Video,
+        vec![solid(1, 0, 50), solid(2, 100, 50)],
+    )]);
+    let from = h.rect(ClipId(1)).center();
+    // Would land at 80, over the first 30 frames of clip 2.
+    h.drag(from, egui::vec2(80.0 * PX_PER_FRAME, 0.0));
+    assert_eq!(h.clip(0, ClipId(1)).timeline_start, 50, "touching clip 2");
+    let other = h.clip(0, ClipId(2));
+    assert_eq!((other.timeline_start, other.timeline_len), (100, 50));
+}
+
+#[test]
+fn dragging_a_clip_well_past_another_jumps_after_it() {
+    let mut h = Harness::new(vec![track(
+        TrackKind::Video,
+        vec![solid(1, 0, 50), solid(2, 100, 50)],
+    )]);
+    let from = h.rect(ClipId(1)).center();
+    h.drag(from, egui::vec2(140.0 * PX_PER_FRAME, 0.0));
+    assert_eq!(h.clip(0, ClipId(1)).timeline_start, 150);
+    assert_eq!(h.clip(0, ClipId(2)).timeline_len, 50);
+}
+
+#[test]
+fn lengthening_a_clip_stops_at_the_next_one() {
+    let mut h = Harness::new(vec![
+        track(TrackKind::Video, Vec::new()),
+        track(TrackKind::Audio, vec![solid(1, 0, 50), solid(2, 80, 50)]),
+    ]);
+    let rect = h.rect(ClipId(1));
+    let from = egui::pos2(rect.right() - 2.0, rect.center().y);
+    h.drag(from, egui::vec2(60.0 * PX_PER_FRAME, 0.0));
+    assert_eq!(h.clip(1, ClipId(1)).timeline_end(), 80);
+    assert_eq!(h.clip(1, ClipId(2)).timeline_len, 50, "not eaten");
+}
+
+#[test]
+fn on_the_magnetic_main_track_a_move_reorders_without_cutting() {
+    let mut main = Track::new_main();
+    main.clips = vec![solid(1, 0, 50), solid(2, 50, 50), solid(3, 100, 50)];
+    let mut h = Harness::new(vec![main]);
+    h.state.magnet = true;
+    h.frame(Vec::new());
+    let from = h.rect(ClipId(1)).center();
+    // Its start goes near the end of clip 2: inserted after it.
+    h.drag(from, egui::vec2(95.0 * PX_PER_FRAME, 0.0));
+    let order: Vec<_> = h.project.timelines[h.timeline_id].tracks[0]
+        .clips
+        .iter()
+        .map(|c| (c.id.0, c.timeline_start, c.timeline_len))
+        .collect();
+    assert_eq!(order, vec![(2, 0, 50), (1, 50, 50), (3, 100, 50)]);
+}
+
+#[test]
+fn the_volume_line_moves_a_fifth_of_a_db_per_pixel_and_finer_with_shift() {
+    let mut h = Harness::new(vec![
+        track(TrackKind::Video, Vec::new()),
+        track(TrackKind::Audio, vec![solid(1, 0, 100)]),
+    ]);
+    let from = h.rect(ClipId(1)).center();
+    h.drag(from, egui::vec2(0.0, -10.0));
+    assert_eq!(h.clip(1, ClipId(1)).effects.gain_db.default, 2.0);
+
+    h.modifiers = egui::Modifiers::SHIFT;
+    let from = egui::pos2(
+        h.rect(ClipId(1)).center().x,
+        h.rect(ClipId(1)).center().y - (2.0 / 30.0) * h.rect(ClipId(1)).height() / 2.0,
+    );
+    h.drag(from, egui::vec2(0.0, -10.0));
+    let db = h.clip(1, ClipId(1)).effects.gain_db.default;
+    assert!((db - 2.4).abs() < 0.05, "{db}");
+}
+
+#[test]
+fn a_trimmed_edge_snaps_within_the_threshold_in_pixels() {
+    let mut h = Harness::new(vec![
+        track(TrackKind::Video, vec![solid(1, 0, 20)]),
+        track(TrackKind::Video, vec![solid(2, 0, 10)]),
+    ]);
+    // 8 px a frame: the old threshold, rounded to whole frames, was 1 frame.
+    h.state.pixels_per_sec = 200.0;
+    h.snapping = true;
+    h.frame(Vec::new());
+    h.frame(Vec::new());
+    let rect = h.rect(ClipId(2));
+    let from = egui::pos2(rect.right() - 2.0, rect.center().y);
+    // Released 10 px (1.25 frames) short of clip 1's end at frame 20.
+    h.drag(from, egui::vec2(10.0 * 8.0 - 10.0, 0.0));
+    assert_eq!(h.clip(1, ClipId(2)).timeline_end(), 20);
 }
