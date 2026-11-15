@@ -12,6 +12,30 @@ use std::path::Path;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// Async encoders (NVENC, Vulkan) answer EAGAIN to a send while their output
+/// queue is full: drain the ready packets and retry instead of failing.
+macro_rules! send_retrying {
+    ($octx:expr, $state:expr, $send:expr) => {{
+        let mut tries = 0u32;
+        loop {
+            match $send {
+                Err(ffmpeg::Error::Other { errno: ffmpeg::ffi::EAGAIN }) if tries < 5000 => {
+                    tries += 1;
+                    drain_packets(
+                        &mut *$octx,
+                        &mut $state.encoder,
+                        $state.stream_index,
+                        $state.time_base,
+                        $state.ost_time_base,
+                    )?;
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+                other => break other,
+            }
+        }
+    }};
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VideoCodec {
     X264,
@@ -382,7 +406,7 @@ impl Encoder {
         };
         frame.set_pts(Some(video.next_pts));
         frame.set_kind(ffmpeg::picture::Type::None);
-        video.encoder.send_frame(&frame)?;
+        send_retrying!(&mut self.octx, video, video.encoder.send_frame(&frame))?;
         video.next_pts += 1;
         drain_packets(
             &mut self.octx,
@@ -416,8 +440,8 @@ impl Encoder {
     /// Flushes the encoders and `write_trailer`. The last audio block must be
     /// padded with silence: native AAC only accepts frames of `frame_size`.
     pub fn finish(mut self) -> Result<(), crate::MediaError> {
-        self.video.encoder.send_eof()?;
         let video = &mut self.video;
+        send_retrying!(&mut self.octx, video, video.encoder.send_eof())?;
         drain_packets(
             &mut self.octx,
             &mut video.encoder,
@@ -433,7 +457,7 @@ impl Encoder {
                 let chunk = std::mem::take(&mut audio.pending);
                 write_audio_chunk(&mut self.octx, &mut audio, &chunk)?;
             }
-            audio.encoder.send_eof()?;
+            send_retrying!(&mut self.octx, audio, audio.encoder.send_eof())?;
             drain_packets(
                 &mut self.octx,
                 &mut audio.encoder,
@@ -543,7 +567,7 @@ impl AudioFileEncoder {
             let chunk = std::mem::take(&mut audio.pending);
             write_audio_chunk(&mut self.octx, audio, &chunk)?;
         }
-        audio.encoder.send_eof()?;
+        send_retrying!(&mut self.octx, audio, audio.encoder.send_eof())?;
         drain_packets(
             &mut self.octx,
             &mut audio.encoder,
@@ -581,7 +605,7 @@ fn write_audio_chunk(
     resampled.set_pts(Some(audio.next_pts));
     audio.next_pts += frame_len as i64;
 
-    audio.encoder.send_frame(&resampled)?;
+    send_retrying!(octx, audio, audio.encoder.send_frame(&resampled))?;
     drain_packets(
         octx,
         &mut audio.encoder,
