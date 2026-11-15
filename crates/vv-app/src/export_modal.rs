@@ -875,7 +875,12 @@ impl VenturiApp {
         if self.export_modal.is_some() || self.export.is_some() {
             return;
         }
-        let dir = export_plan::default_export_dir();
+        let dir = self
+            .settings
+            .last_export_dir
+            .clone()
+            .filter(|dir| dir.is_dir())
+            .unwrap_or_else(export_plan::default_export_dir);
         self.export_modal = Some(ExportModal::new(
             &self.session.project,
             timeline,
@@ -941,6 +946,10 @@ impl VenturiApp {
         } = request;
         if let Some(dir) = settings.output_path.parent() {
             let _ = std::fs::create_dir_all(dir);
+            if self.settings.last_export_dir.as_deref() != Some(dir) {
+                self.settings.last_export_dir = Some(dir.to_path_buf());
+                self.persist_settings();
+            }
         }
         if let Some((path, text)) = captions {
             let _ = std::fs::write(path, text);

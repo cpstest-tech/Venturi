@@ -2421,6 +2421,17 @@ pub fn show_timeline(
         .collect();
     let track_at_y = |local_y: f32| -> usize { row_order[layout.row_at_y(local_y)] };
 
+    SNAP_GUIDE.set(None);
+    // Besides the clip edges: the playhead, the markers and the start.
+    let snap_extra: Vec<FrameIdx> = std::iter::once(state.playhead)
+        .chain(std::iter::once(0))
+        .chain(
+            project.timelines[timeline_id]
+                .markers
+                .iter()
+                .flat_map(|m| [m.start, m.start + m.duration]),
+        )
+        .collect();
     let mut pending: Option<PendingAction> = None;
     // Taken from the volume gesture before the reset further below clears it, to
     // close the undo group after `apply_pending_action` has applied
@@ -2615,7 +2626,7 @@ pub fn show_timeline(
                     )
                 };
                 // Where a drop falls: the frame under the pointer, with the snapping.
-                let playhead = state.playhead;
+                let snap_extra = &snap_extra;
                 let drop_frame = |drag: &TimelineDrag, pos: egui::Pos2| {
                     let raw = (((pos.x - origin.x) / px_per_frame).round() as FrameIdx).max(0);
                     snap_frame(
@@ -2623,7 +2634,7 @@ pub fn show_timeline(
                         drag_set_timeline_len(project, timeline_fps, drag),
                         &visuals,
                         &[],
-                        &[playhead],
+                        snap_extra,
                         px_per_frame,
                         snapping_enabled,
                     )
@@ -2982,7 +2993,7 @@ pub fn show_timeline(
                         len,
                         &visuals,
                         &exclude,
-                        &[state.playhead],
+                        &snap_extra,
                         px_per_frame,
                         snapping_enabled,
                     )
@@ -3000,7 +3011,7 @@ pub fn show_timeline(
                         0,
                         &visuals,
                         &exclude,
-                        &[state.playhead],
+                        &snap_extra,
                         px_per_frame,
                         snapping_enabled,
                     );
@@ -3016,7 +3027,7 @@ pub fn show_timeline(
                         0,
                         &visuals,
                         &exclude,
-                        &[state.playhead],
+                        &snap_extra,
                         px_per_frame,
                         snapping_enabled,
                     );
@@ -3527,12 +3538,20 @@ pub fn show_timeline(
                             &state.gesture,
                             Some(Gesture::Volume(d)) if d.clip_id == visual.clip.id
                         );
-                        paint_gain_line(
-                            &painter,
-                            clip_rect,
-                            gain_line_y(visual.clip.effects.gain_db.default, clip_rect),
-                            dragging,
-                        );
+                        let line_y = gain_line_y(visual.clip.effects.gain_db.default, clip_rect);
+                        paint_gain_line(&painter, clip_rect, line_y, dragging);
+                        let pointer = ui.input(|i| i.pointer.latest_pos());
+                        if let Some(pos) = pointer.filter(|&p| {
+                            dragging
+                                || (state.gesture.is_none()
+                                    && volume_line_hit(p, clip_rect, line_y))
+                        }) {
+                            paint_pointer_overlay(
+                                ui.ctx(),
+                                pos,
+                                format_gain(visual.clip.effects.gain_db.default),
+                            );
+                        }
                     }
 
                     // Fade-in/fade-out handles: always present if the
@@ -3782,7 +3801,7 @@ pub fn show_timeline(
                                         0,
                                         &visuals,
                                         &[],
-                                        &[state.playhead],
+                                        &snap_extra,
                                         px_per_frame,
                                         snapping_enabled,
                                     );
@@ -3910,13 +3929,14 @@ pub fn show_timeline(
                                 d.accum_px += delta.x
                             }
                             Some(Gesture::Volume(d)) if d.clip_id == visual.clip.id => {
-                                d.accum_px += delta.y;
+                                let fine = ui.input(|i| i.modifiers.shift);
+                                d.accum_px += delta.y * if fine { FADER_FINE } else { 1.0 };
                                 // Unlike fade/trim/move, it is applied right here,
                                 // on every drag frame (see `VolumeDragState`).
                                 pending = Some(PendingAction::SetGain {
                                     track_index: d.track_index,
                                     clip_id: d.clip_id,
-                                    new_value: volume_drag_value(d, clip_rect.height() / 2.0),
+                                    new_value: volume_drag_value(d),
                                 });
                             }
                             Some(Gesture::Trim(t)) if t.clip_id == visual.clip.id => {
@@ -3977,7 +3997,7 @@ pub fn show_timeline(
                                 pending = Some(PendingAction::SetGain {
                                     track_index: d.track_index,
                                     clip_id: d.clip_id,
-                                    new_value: volume_drag_value(d, clip_rect.height() / 2.0),
+                                    new_value: volume_drag_value(d),
                                 });
                                 volume_drag_group = Some(d.group);
                             }
@@ -4456,6 +4476,14 @@ pub fn show_timeline(
                     state.playhead as f32 * px_per_frame,
                     visual_height,
                 );
+                if let Some(edge) = SNAP_GUIDE.get() {
+                    let x = origin.x + edge as f32 * px_per_frame;
+                    painter.vline(
+                        x,
+                        egui::Rangef::new(origin.y + RULER_HEIGHT, origin.y + visual_height),
+                        egui::Stroke::new(1.0, egui::Color32::from_rgb(255, 214, 10)),
+                    );
+                }
                 state.hover_frame = None;
                 if state.preview_axis
                     && state.gesture.is_none()
@@ -5801,30 +5829,57 @@ pub fn ease_label(ease: vv_core::Ease) -> std::borrow::Cow<'static, str> {
     }
 }
 
-/// Normalized vertical offset (-1 at the bottom, +1 at the top) of the volume
-/// line for a gain in dB: centered at 0 dB, the two branches use different scales
-/// because `GAIN_DB_MIN`/`GAIN_DB_MAX` are not symmetric.
-fn gain_offset(db: f32) -> f32 {
-    if db >= 0.0 {
-        (db / vv_core::GAIN_DB_MAX).clamp(0.0, 1.0)
+/// Fader scale of the volume line: `FADER_PX_PER_DB` pixels of drag per dB
+/// down to `FADER_KNEE_DB`, faster below it, so the usual range is precise
+/// and silence is still reachable.
+const FADER_PX_PER_DB: f32 = 5.0;
+const FADER_KNEE_DB: f32 = -24.0;
+const FADER_LOW_PX_PER_DB: f32 = 1.25;
+/// Holding Shift drags this much slower.
+const FADER_FINE: f32 = 0.2;
+
+fn fader_pos(db: f32) -> f32 {
+    let db = db.clamp(vv_core::GAIN_DB_MIN, vv_core::GAIN_DB_MAX);
+    if db >= FADER_KNEE_DB {
+        db * FADER_PX_PER_DB
     } else {
-        -(db / vv_core::GAIN_DB_MIN).clamp(0.0, 1.0)
+        FADER_KNEE_DB * FADER_PX_PER_DB + (db - FADER_KNEE_DB) * FADER_LOW_PX_PER_DB
     }
 }
 
-/// Inverse of `gain_offset`.
-fn gain_from_offset(offset: f32) -> f32 {
-    let offset = offset.clamp(-1.0, 1.0);
-    if offset >= 0.0 {
-        offset * vv_core::GAIN_DB_MAX
+fn fader_db(pos: f32) -> f32 {
+    let knee = FADER_KNEE_DB * FADER_PX_PER_DB;
+    let db = if pos >= knee {
+        pos / FADER_PX_PER_DB
     } else {
-        -offset * vv_core::GAIN_DB_MIN
+        FADER_KNEE_DB + (pos - knee) / FADER_LOW_PX_PER_DB
+    };
+    db.clamp(vv_core::GAIN_DB_MIN, vv_core::GAIN_DB_MAX)
+}
+
+/// Normalized vertical offset (-1 at the bottom, +1 at the top) of the volume
+/// line: 0 dB in the middle, the knee at 80% of the way down.
+fn gain_offset(db: f32) -> f32 {
+    if db >= 0.0 {
+        (db / vv_core::GAIN_DB_MAX).clamp(0.0, 1.0)
+    } else if db >= FADER_KNEE_DB {
+        0.8 * db / -FADER_KNEE_DB
+    } else {
+        -0.8 - 0.2 * ((db - FADER_KNEE_DB) / (vv_core::GAIN_DB_MIN - FADER_KNEE_DB)).min(1.0)
     }
 }
 
 /// Y coordinate of the volume line for a gain in dB.
 fn gain_line_y(db: f32, clip_rect: egui::Rect) -> f32 {
     clip_rect.center().y - gain_offset(db) * clip_rect.height() / 2.0
+}
+
+fn format_gain(db: f32) -> String {
+    if db <= vv_core::GAIN_DB_MIN {
+        "-∞ dB".into()
+    } else {
+        format!("{db:+.1} dB")
+    }
 }
 
 fn paint_gain_line(painter: &egui::Painter, clip_rect: egui::Rect, line_y: f32, dragging: bool) {
@@ -5861,15 +5916,12 @@ fn begin_volume_drag(state: &mut TimelineState, history: &mut History, visual: &
     }));
 }
 
-/// Gain (dB) of the preview of a volume line drag in progress: the drag is
-/// vertical and linear in the drawn "offset" space, not in dB, so the
-/// line follows the pointer exactly along the whole run.
-fn volume_drag_value(d: &VolumeDragState, half_height: f32) -> f32 {
-    if half_height <= 0.0 {
-        return d.original_db;
-    }
-    let offset = gain_offset(d.original_db) - d.accum_px / half_height;
-    gain_from_offset(offset)
+/// Gain (dB) of a volume line drag in progress, on the fader scale, rounded
+/// to 0.1 dB; 0 dB holds the line for a few pixels.
+fn volume_drag_value(d: &VolumeDragState) -> f32 {
+    let db = fader_db(fader_pos(d.original_db) - d.accum_px);
+    let db = (db * 10.0).round() / 10.0;
+    if db.abs() < 0.3 { 0.0 } else { db }
 }
 
 /// Trim to apply on release: the same (already clamped) value shown
@@ -7830,7 +7882,7 @@ fn paint_retime_cursor(painter: &egui::Painter, pos: egui::Pos2) {
 /// Snapping threshold, in screen pixels (not in frames:
 /// it stays the same visual distance at any zoom level, converted
 /// into frames by `snap_frame` based on `px_per_frame`).
-const SNAP_THRESHOLD_PX: f32 = 10.0;
+const SNAP_THRESHOLD_PX: f32 = 12.0;
 
 /// Edges of the non-excluded clips plus `extra_targets` (the playhead).
 fn snap_targets<'a>(
@@ -7845,8 +7897,16 @@ fn snap_targets<'a>(
         .chain(extra_targets.iter().copied())
 }
 
+thread_local! {
+    /// The edge the last `snap_frame` of this frame snapped to: drawn as a
+    /// guide line, so a snap is seen and not only felt.
+    static SNAP_GUIDE: std::cell::Cell<Option<FrameIdx>> = const { std::cell::Cell::new(None) };
+}
+
 /// With snapping on, it snaps the start or the end of the clip of length
-/// `len` to the nearest edge within `SNAP_THRESHOLD_PX`. `exclude` does not count.
+/// `len` to the nearest edge within `SNAP_THRESHOLD_PX` on screen (not in
+/// frames: zoomed in, a threshold rounded to frames would vanish).
+/// `exclude` does not count.
 fn snap_frame(
     candidate_start: FrameIdx,
     len: FrameIdx,
@@ -7856,30 +7916,28 @@ fn snap_frame(
     px_per_frame: f32,
     enabled: bool,
 ) -> FrameIdx {
-    if !enabled {
-        return candidate_start;
-    }
-    let threshold = (SNAP_THRESHOLD_PX / px_per_frame).round() as FrameIdx;
-    if threshold <= 0 {
+    if !enabled || px_per_frame <= 0.0 {
         return candidate_start;
     }
     let candidate_end = candidate_start + len;
 
-    let mut best: Option<(FrameIdx, FrameIdx)> = None; // (|gap|, new candidate_start)
+    // (|gap| in pixels, new candidate_start, edge)
+    let mut best: Option<(f32, FrameIdx, FrameIdx)> = None;
     for edge in snap_targets(visuals, exclude, extra_targets) {
         // (point of the dragged clip to compare with the edge, new
         // candidate_start if this is the chosen snap)
         for (point, new_start) in [(candidate_start, edge), (candidate_end, edge - len)] {
-            let delta = (point - edge).abs();
-            if delta > threshold {
+            let delta = (point - edge).abs() as f32 * px_per_frame;
+            if delta > SNAP_THRESHOLD_PX {
                 continue;
             }
-            if best.is_none_or(|(best_delta, _)| delta < best_delta) {
-                best = Some((delta, new_start));
+            if best.is_none_or(|(best_delta, _, _)| delta < best_delta) {
+                best = Some((delta, new_start, edge));
             }
         }
     }
-    best.map_or(candidate_start, |(_, new_start)| new_start)
+    SNAP_GUIDE.set(best.map(|(_, _, edge)| edge));
+    best.map_or(candidate_start, |(_, new_start, _)| new_start)
 }
 
 /// Highlights a "new track" zone under a drag in progress.

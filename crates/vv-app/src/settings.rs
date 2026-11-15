@@ -793,6 +793,8 @@ pub struct Settings {
     pub recording_format: Option<AudioFileFormat>,
     /// Where the takes go; `None` is `Recordings` next to the project file.
     pub recording_dir: Option<PathBuf>,
+    /// Folder of the last export, where the next one starts.
+    pub last_export_dir: Option<PathBuf>,
     /// Serve MCP on a local socket for `vv-app mcp --attach`.
     pub mcp_enabled: bool,
     /// Where the Home lists the projects; `None` is `default_projects_dir`.
@@ -878,6 +880,7 @@ impl Default for Settings {
             input_device: None,
             recording_format: None,
             recording_dir: None,
+            last_export_dir: None,
             mcp_enabled: false,
             projects_dir: None,
             workspace: None,
@@ -972,6 +975,8 @@ struct SettingsFile {
     recording_format: Option<String>,
     #[serde(default)]
     recording_dir: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_export_dir: Option<PathBuf>,
     #[serde(default)]
     mcp_enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1156,6 +1161,7 @@ impl Settings {
             .as_deref()
             .and_then(AudioFileFormat::from_id);
         settings.recording_dir = file.recording_dir;
+        settings.last_export_dir = file.last_export_dir;
         settings.compressor_presets = readable_entries(file.compressor_presets);
         settings.eq_presets = readable_entries(file.eq_presets);
         let scanned = file.vst3_scanned.unwrap_or(!file.vst3_plugins.is_empty());
@@ -1268,6 +1274,7 @@ impl Settings {
             input_device: self.input_device.clone(),
             recording_format: self.recording_format.map(|f| f.id().to_owned()),
             recording_dir: self.recording_dir.clone(),
+            last_export_dir: self.last_export_dir.clone(),
             mcp_enabled: Some(self.mcp_enabled),
             projects_dir: self.projects_dir.clone(),
             workspace: self.workspace.clone(),

@@ -222,25 +222,25 @@ fn gain_offset_is_zero_at_zero_db_and_reaches_the_edges_at_the_range_extremes() 
 }
 
 #[test]
-fn gain_from_offset_is_the_inverse_of_gain_offset() {
-    for db in [
-        vv_core::GAIN_DB_MIN,
-        -50.0,
-        -6.0,
-        0.0,
-        6.0,
-        vv_core::GAIN_DB_MAX,
-    ] {
-        assert!(
-            (gain_from_offset(gain_offset(db)) - db).abs() < 1e-4,
-            "db={db}"
-        );
+fn fader_db_is_the_inverse_of_fader_pos() {
+    for db in [-100.0, -60.0, -24.0, -6.0, 0.0, 3.5, 30.0] {
+        assert!((fader_db(fader_pos(db)) - db).abs() < 1e-3, "{db}");
     }
 }
 
 #[test]
-fn volume_drag_value_follows_the_pointer_and_clamps_at_the_range_extremes() {
-    let half_height = 18.0; // (ROW_HEIGHT - 4.0) / 2.0
+fn gain_offset_is_monotonic_with_0_db_in_the_middle() {
+    assert_eq!(gain_offset(0.0), 0.0);
+    let dbs = [-100.0, -50.0, -24.0, -12.0, -1.0, 0.0, 6.0, 30.0];
+    assert!(
+        dbs.windows(2)
+            .all(|w| gain_offset(w[0]) < gain_offset(w[1]))
+    );
+    assert_eq!(gain_offset(vv_core::GAIN_DB_MIN), -1.0);
+}
+
+#[test]
+fn volume_drag_moves_a_fifth_of_a_db_per_pixel_and_clamps() {
     let group = History::default().begin_group();
     let drag = |accum_px| VolumeDragState {
         clip_id: ClipId(1),
@@ -249,19 +249,11 @@ fn volume_drag_value_follows_the_pointer_and_clamps_at_the_range_extremes() {
         accum_px,
         group,
     };
-    // At 0 dB the line is at the center: dragging upwards (negative
-    // accum_px) raises the gain, downwards lowers it.
-    assert!(volume_drag_value(&drag(-half_height), half_height) > 0.0);
-    assert!(volume_drag_value(&drag(half_height), half_height) < 0.0);
-    // Past the available run it clamps to the extremes of the range.
-    assert_eq!(
-        volume_drag_value(&drag(-half_height * 10.0), half_height),
-        vv_core::GAIN_DB_MAX
-    );
-    assert_eq!(
-        volume_drag_value(&drag(half_height * 10.0), half_height),
-        vv_core::GAIN_DB_MIN
-    );
+    assert_eq!(volume_drag_value(&drag(-10.0)), 2.0);
+    assert_eq!(volume_drag_value(&drag(15.0)), -3.0);
+    assert_eq!(volume_drag_value(&drag(1.0)), 0.0, "0 dB holds");
+    assert_eq!(volume_drag_value(&drag(-10_000.0)), vv_core::GAIN_DB_MAX);
+    assert_eq!(volume_drag_value(&drag(10_000.0)), vv_core::GAIN_DB_MIN);
 }
 
 /// "Identity" `row_y` (no grouping/margin) for the tests.

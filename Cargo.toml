@@ -13,6 +13,11 @@ members = [
     "crates/vv-mcp",
     "crates/vv-app",
 ]
+exclude = ["vendor/smithay-clipboard"]
+
+# Forwards its data device's drag-and-drop events: see vendor/smithay-clipboard/src/dnd.rs.
+[patch.crates-io]
+smithay-clipboard = { path = "vendor/smithay-clipboard" }
 
 [workspace.package]
 edition = "2024"

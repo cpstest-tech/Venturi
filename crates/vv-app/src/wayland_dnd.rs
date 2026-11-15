@@ -1,7 +1,9 @@
 //! Dropping files from the file manager on Wayland, where winit 0.30 does not
 //! handle it (X11 only), and reading images from the clipboard, which
-//! egui-winit reads only as text. A thread with its own queue on winit's
-//! connection, like smithay-clipboard does; the files reach egui in
+//! egui-winit reads only as text. The events come from egui-winit's own
+//! clipboard data device (see `vendor/smithay-clipboard/src/dnd.rs`): some
+//! compositors talk only to the first data device of a client, and that one
+//! is created before the app starts. The files reach egui in
 //! `raw_input_hook`.
 
 use std::ffi::OsString;
@@ -11,20 +13,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
-use sctk::data_device_manager::data_device::{DataDevice, DataDeviceHandler};
-use sctk::data_device_manager::data_offer::{DataOfferHandler, DragOffer, SelectionOffer};
-use sctk::data_device_manager::data_source::DataSourceHandler;
-use sctk::data_device_manager::{DataDeviceManagerState, ReadPipe, WritePipe};
-use sctk::reexports::client::globals::registry_queue_init;
-use sctk::reexports::client::protocol::wl_data_device::WlDataDevice;
+use sctk::data_device_manager::ReadPipe;
+use sctk::data_device_manager::data_offer::{DragOffer, SelectionOffer};
 use sctk::reexports::client::protocol::wl_data_device_manager::DndAction;
-use sctk::reexports::client::protocol::wl_data_source::WlDataSource;
-use sctk::reexports::client::protocol::wl_seat::WlSeat;
-use sctk::reexports::client::protocol::wl_surface::WlSurface;
-use sctk::reexports::client::{Connection, QueueHandle, backend::Backend};
-use sctk::registry::{ProvidesRegistryState, RegistryState};
-use sctk::seat::{Capability, SeatHandler, SeatState};
-use sctk::{delegate_data_device, delegate_registry, delegate_seat, registry_handlers};
+use sctk::reexports::client::{Connection, backend::Backend};
 
 use crate::paste_image::IMAGE_MIME_TYPES;
 
@@ -46,7 +38,7 @@ pub struct WaylandDnd {
 }
 
 impl WaylandDnd {
-    /// `None` outside Wayland or if the compositor does not offer DnD.
+    /// `None` outside Wayland.
     pub fn start(cc: &eframe::CreationContext<'_>) -> Option<Self> {
         let RawDisplayHandle::Wayland(handle) = cc.display_handle().ok()?.as_raw() else {
             return None;
@@ -54,32 +46,14 @@ impl WaylandDnd {
         // The display stays valid for the whole process lifetime: it is winit's.
         let backend = unsafe { Backend::from_foreign_display(handle.display.as_ptr().cast()) };
         let conn = Connection::from_backend(backend);
-        let (globals, mut queue) = registry_queue_init::<State>(&conn).ok()?;
-        let qh = queue.handle();
         let shared = Arc::new(Mutex::new(Shared::default()));
-        let mut state = State {
-            registry: RegistryState::new(&globals),
-            seats: SeatState::new(&globals, &qh),
-            manager: DataDeviceManagerState::bind(&globals, &qh).ok()?,
-            devices: Vec::new(),
-            conn: conn.clone(),
+        let hooks = Hooks {
             shared: shared.clone(),
             ctx: cc.egui_ctx.clone(),
         };
-        for seat in state.seats.seats() {
-            state.add_device(&qh, &seat);
+        if !smithay_clipboard::dnd::set_hooks(Box::new(hooks)) {
+            return None;
         }
-        std::thread::Builder::new()
-            .name("wayland-dnd".into())
-            .spawn(move || {
-                loop {
-                    if let Err(e) = queue.blocking_dispatch(&mut state) {
-                        eprintln!("wayland-dnd: {e}");
-                        return;
-                    }
-                }
-            })
-            .ok()?;
         Some(Self { shared, conn })
     }
 
@@ -128,86 +102,54 @@ impl egui::DroppedFile for DroppedPath {
     }
 }
 
-struct State {
-    registry: RegistryState,
-    seats: SeatState,
-    manager: DataDeviceManagerState,
-    devices: Vec<DataDevice>,
-    conn: Connection,
+struct Hooks {
     shared: Arc<Mutex<Shared>>,
     ctx: egui::Context,
 }
 
-impl State {
-    fn add_device(&mut self, qh: &QueueHandle<Self>, seat: &WlSeat) {
-        self.devices.push(self.manager.get_data_device(qh, seat));
-    }
-
-    fn drag_offer(&self, device: &WlDataDevice) -> Option<DragOffer> {
-        self.devices
-            .iter()
-            .find(|d| d.inner() == device)?
-            .data()
-            .drag_offer()
-    }
-
+impl Hooks {
     fn set_hovering(&self, hovering: bool) {
         self.shared.lock().unwrap().hovering = hovering;
         self.ctx.request_repaint();
     }
 }
 
-impl DataDeviceHandler for State {
-    fn enter(
-        &mut self,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-        device: &WlDataDevice,
-        x: f64,
-        y: f64,
-        _: &WlSurface,
-    ) {
+impl smithay_clipboard::dnd::DndHooks for Hooks {
+    fn enter(&self, conn: &Connection, offer: Option<DragOffer>, x: f64, y: f64) {
         self.shared.lock().unwrap().position = Some((x, y));
-        let Some(offer) = self.drag_offer(device) else {
+        let Some(offer) = offer else {
             return;
         };
         let has_files = offer.with_mime_types(|mimes| mimes.iter().any(|m| m == URI_LIST));
         offer.accept_mime_type(offer.serial, has_files.then(|| URI_LIST.to_string()));
         if has_files {
             offer.set_actions(DndAction::Copy, DndAction::Copy);
-            self.set_hovering(true);
         }
+        let _ = conn.flush();
+        self.set_hovering(has_files);
     }
 
-    fn leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataDevice) {
-        self.set_hovering(false);
-    }
-
-    fn motion(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataDevice, x: f64, y: f64) {
+    fn motion(&self, x: f64, y: f64) {
         self.shared.lock().unwrap().position = Some((x, y));
         self.ctx.request_repaint();
     }
 
-    fn selection(&mut self, _: &Connection, _: &QueueHandle<Self>, device: &WlDataDevice) {
-        self.shared.lock().unwrap().selection = self
-            .devices
-            .iter()
-            .find(|d| d.inner() == device)
-            .and_then(|d| d.data().selection_offer());
+    fn leave(&self) {
+        self.set_hovering(false);
     }
 
-    fn drop_performed(&mut self, _: &Connection, _: &QueueHandle<Self>, device: &WlDataDevice) {
+    fn drop_performed(&self, conn: &Connection, offer: Option<DragOffer>) {
         self.set_hovering(false);
-        let Some(offer) = self.drag_offer(device) else {
+        let Some(offer) = offer else {
             return;
         };
         let Ok(mut pipe) = offer.receive(URI_LIST.to_string()) else {
             offer.destroy();
             return;
         };
-        let _ = self.conn.flush();
+        let _ = conn.flush();
         // The read waits for the source client: it must not block the queue.
-        let conn = self.conn.clone();
+        let conn = conn.clone();
         let shared = self.shared.clone();
         let ctx = self.ctx.clone();
         std::thread::spawn(move || {
@@ -224,84 +166,15 @@ impl DataDeviceHandler for State {
             ctx.request_repaint();
         });
     }
-}
 
-impl DataOfferHandler for State {
-    fn source_actions(
-        &mut self,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-        offer: &mut DragOffer,
-        _: DndAction,
-    ) {
+    fn source_actions(&self, offer: &mut DragOffer) {
         offer.set_actions(DndAction::Copy, DndAction::Copy);
     }
 
-    fn selected_action(
-        &mut self,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-        _: &mut DragOffer,
-        _: DndAction,
-    ) {
+    fn selection(&self, offer: Option<SelectionOffer>) {
+        self.shared.lock().unwrap().selection = offer;
     }
 }
-
-impl DataSourceHandler for State {
-    fn accept_mime(
-        &mut self,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-        _: &WlDataSource,
-        _: Option<String>,
-    ) {
-    }
-    fn send_request(
-        &mut self,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-        _: &WlDataSource,
-        _: String,
-        _: WritePipe,
-    ) {
-    }
-    fn cancelled(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataSource) {}
-    fn dnd_dropped(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataSource) {}
-    fn dnd_finished(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataSource) {}
-    fn action(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataSource, _: DndAction) {}
-}
-
-impl SeatHandler for State {
-    fn seat_state(&mut self) -> &mut SeatState {
-        &mut self.seats
-    }
-    fn new_seat(&mut self, _: &Connection, qh: &QueueHandle<Self>, seat: WlSeat) {
-        self.add_device(qh, &seat);
-    }
-    fn new_capability(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlSeat, _: Capability) {}
-    fn remove_capability(
-        &mut self,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-        _: WlSeat,
-        _: Capability,
-    ) {
-    }
-    fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, seat: WlSeat) {
-        self.devices.retain(|d| d.data().seat() != &seat);
-    }
-}
-
-impl ProvidesRegistryState for State {
-    fn registry(&mut self) -> &mut RegistryState {
-        &mut self.registry
-    }
-    registry_handlers![SeatState];
-}
-
-delegate_data_device!(State);
-delegate_seat!(State);
-delegate_registry!(State);
 
 /// Local paths from a `text/uri-list` (RFC 2483): comments and non-`file:`
 /// URIs are discarded.
