@@ -592,6 +592,11 @@ impl Decoder {
         }
 
         loop {
+            // A packet can yield several frames; send_packet answers EAGAIN
+            // until the ones already decoded are received.
+            if self.decoder.receive_frame(&mut decoded).is_ok() {
+                return Ok(Some(self.raw_frame(decoded)));
+            }
             // `Packet::read` does not unref the previous packet: reusing one
             // would leak every packet read.
             let mut packet = ffmpeg::Packet::empty();
