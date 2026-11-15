@@ -7,5 +7,10 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
-whisper-rs = { version = "0.16", features = ["vulkan"] }
 ureq = "3"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+whisper-rs = { version = "0.16", features = ["vulkan"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+whisper-rs = { version = "0.16", features = ["metal"] }
