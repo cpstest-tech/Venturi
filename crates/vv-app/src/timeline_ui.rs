@@ -107,14 +107,24 @@ pub enum TimelineCommand {
 /// A running AI generation: reserves its spot on the timeline until the clip lands.
 #[derive(Clone, Debug)]
 pub(crate) struct AiPlaceholder {
+    pub job: String,
+    pub failed: bool,
     pub start: FrameIdx,
     pub len: FrameIdx,
     pub label: String,
     pub detail: String,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum AiPlaceholderAction {
+    Cancel(String),
+    Retry(String),
+    Dismiss(String),
+}
+
 pub struct TimelineState {
     pub(crate) ai_placeholders: Vec<AiPlaceholder>,
+    pub(crate) ai_placeholder_action: Option<AiPlaceholderAction>,
     pub tool: TimelineTool,
     /// Selected clips. Empty if no clip is selected (it must not
     /// be confused with "no timeline": here it is only the state of the
@@ -479,6 +489,7 @@ impl Default for TimelineState {
     fn default() -> Self {
         Self {
             ai_placeholders: Vec::new(),
+            ai_placeholder_action: None,
             tool: TimelineTool::default(),
             selected: BTreeSet::new(),
             can_record: false,
@@ -4489,21 +4500,46 @@ pub fn show_timeline(
                 {
                     let time = ui.input(|i| i.time) as f32;
                     for pending in &state.ai_placeholders {
-                        paint_ai_placeholder(
-                            &track_painter(top),
-                            pending,
-                            egui::Rect::from_min_size(
-                                egui::pos2(
-                                    origin.x + pending.start as f32 * px_per_frame,
-                                    origin.y + row_y[top],
-                                ),
-                                egui::vec2(pending.len as f32 * px_per_frame, row_height),
+                        let rect = egui::Rect::from_min_size(
+                            egui::pos2(
+                                origin.x + pending.start as f32 * px_per_frame,
+                                origin.y + row_y[top],
                             ),
-                            time,
+                            egui::vec2(pending.len as f32 * px_per_frame, row_height),
                         );
+                        paint_ai_placeholder(&track_painter(top), pending, rect, time);
+                        let visible = rect.intersect(track_pane_rect(top));
+                        if visible.is_positive() {
+                            ui.interact(
+                                visible,
+                                egui::Id::new(("ai_placeholder", &pending.job)),
+                                egui::Sense::click(),
+                            )
+                            .context_menu(|ui| {
+                                use AiPlaceholderAction as Action;
+                                if pending.failed {
+                                    if ui.button(t!("ai_sequence.retry")).clicked() {
+                                        state.ai_placeholder_action =
+                                            Some(Action::Retry(pending.job.clone()));
+                                        ui.close();
+                                    }
+                                    if ui.button(t!("ai_sequence.dismiss")).clicked() {
+                                        state.ai_placeholder_action =
+                                            Some(Action::Dismiss(pending.job.clone()));
+                                        ui.close();
+                                    }
+                                } else if ui.button(t!("ai_sequence.cancel")).clicked() {
+                                    state.ai_placeholder_action =
+                                        Some(Action::Cancel(pending.job.clone()));
+                                    ui.close();
+                                }
+                            });
+                        }
                     }
-                    ui.ctx()
-                        .request_repaint_after(std::time::Duration::from_millis(50));
+                    if state.ai_placeholders.iter().any(|pending| !pending.failed) {
+                        ui.ctx()
+                            .request_repaint_after(std::time::Duration::from_millis(50));
+                    }
                 }
                 paint_playhead(
                     &painter,
@@ -6311,10 +6347,18 @@ fn paint_ai_placeholder(
     rect: egui::Rect,
     time: f32,
 ) {
-    let accent = crate::theme::ACCENT;
+    let accent = if pending.failed {
+        crate::theme::ERROR
+    } else {
+        crate::theme::ACCENT
+    };
     painter.rect_filled(rect, 4.0, accent.gamma_multiply(0.18));
     let stripe = 18.0;
-    let shift = (time * 24.0) % (stripe * 2.0);
+    let shift = if pending.failed {
+        0.0
+    } else {
+        (time * 24.0) % (stripe * 2.0)
+    };
     let clipped = painter.with_clip_rect(painter.clip_rect().intersect(rect));
     let mut x = rect.left() - rect.height() - stripe * 2.0 + shift;
     while x < rect.right() {

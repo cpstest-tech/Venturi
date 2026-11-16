@@ -139,6 +139,8 @@ fn ai_interface_strings_are_available_in_every_locale() {
         "ai_sequence.length_clip",
         "ai_sequence.length_custom",
         "ai_sequence.placeholder",
+        "ai_sequence.placeholder_failed",
+        "ai_sequence.dismiss",
         "ai_sequence.current_revision",
         "ai_sequence.revising",
         "ai_sequence.stage_queued",
@@ -241,4 +243,52 @@ fn selected_clip_is_the_context_and_no_selection_is_a_free_animation() {
     let request = app.ai_sequence_request().unwrap();
     assert_eq!(request.composition.frames, 300);
     assert_eq!(request.anchor_clip, Some(1));
+}
+
+#[test]
+fn running_generations_reserve_their_place_and_failures_are_dismissable() {
+    let mut app = app();
+    app.ai_sequences.prompt = "Placeholder test".into();
+    app.ai_sequences.length = Length::Custom;
+    app.ai_sequences.custom_seconds = 2.0;
+    app.timeline_state.playhead = 45;
+    let root = vv_media::test_support::TempDir::new("vv-ai-placeholder");
+    let project = root.join("project.tandem");
+    app.session.set_path(Some(project.clone()));
+    let store = crate::ai_sequence::Store::new(&root.join("sources")).unwrap();
+    let mut job = store.create(app.ai_sequence_request().unwrap()).unwrap();
+    job.stage = Stage::Generating;
+    let mut queue = Queue::open(&project).unwrap();
+    queue.jobs.push(job.clone());
+    app.ai_sequences.queues.insert(project.clone(), queue);
+
+    let placeholders = app.ai_placeholders();
+    assert_eq!(placeholders.len(), 1);
+    assert_eq!((placeholders[0].start, placeholders[0].len), (45, 60));
+    assert!(!placeholders[0].failed);
+
+    let queue = app.ai_sequences.queues.get_mut(&project).unwrap();
+    queue.jobs[0].stage = Stage::Failed;
+    assert!(app.ai_placeholders()[0].failed);
+
+    app.timeline_state.ai_placeholder_action =
+        Some(timeline_ui::AiPlaceholderAction::Dismiss(job.id.clone()));
+    app.apply_ai_placeholder_action();
+    assert!(app.ai_placeholders().is_empty());
+}
+
+#[test]
+fn failures_from_earlier_sessions_get_no_placeholder() {
+    let mut app = app();
+    app.ai_sequences.prompt = "Old failure".into();
+    let root = vv_media::test_support::TempDir::new("vv-ai-old-failure");
+    let project = root.join("project.tandem");
+    app.session.set_path(Some(project.clone()));
+    let store = crate::ai_sequence::Store::new(&root.join("sources")).unwrap();
+    let mut job = store.create(app.ai_sequence_request().unwrap()).unwrap();
+    job.stage = Stage::Failed;
+    let mut queue = Queue::open(&project).unwrap();
+    queue.jobs.push(job);
+    app.ai_sequences.queues.insert(project, queue);
+    assert!(app.ai_placeholders().is_empty());
 }

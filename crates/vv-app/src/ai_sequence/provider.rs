@@ -263,27 +263,24 @@ pub fn valid_session(id: &str) -> bool {
 
 pub fn json_schema(schema: &serde_json::Value) -> serde_json::Value {
     let mut value = schema.clone();
-    match &mut value {
-        serde_json::Value::Object(map) => {
-            if let Some(serde_json::Value::String(kind)) = map.get_mut("type") {
-                *kind = kind.to_ascii_lowercase();
-            }
-            if map.get("type").is_some_and(|kind| kind == "object") {
-                map.insert("additionalProperties".into(), false.into());
-            }
-            for (key, field) in map.iter_mut() {
-                if key == "properties" {
-                    if let Some(properties) = field.as_object_mut() {
-                        for property in properties.values_mut() {
-                            *property = json_schema(property);
-                        }
+    if let serde_json::Value::Object(map) = &mut value {
+        if let Some(serde_json::Value::String(kind)) = map.get_mut("type") {
+            *kind = kind.to_ascii_lowercase();
+        }
+        if map.get("type").is_some_and(|kind| kind == "object") {
+            map.insert("additionalProperties".into(), false.into());
+        }
+        for (key, field) in map.iter_mut() {
+            if key == "properties" {
+                if let Some(properties) = field.as_object_mut() {
+                    for property in properties.values_mut() {
+                        *property = json_schema(property);
                     }
-                } else if key == "items" {
-                    *field = json_schema(field);
                 }
+            } else if key == "items" {
+                *field = json_schema(field);
             }
         }
-        _ => {}
     }
     value
 }
@@ -321,10 +318,9 @@ pub fn parse_events(events: &str) -> Result<Reply, String> {
                 && event
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
-        }) {
-            if reply.events.len() < 64 {
-                reply.events.push(event.to_owned());
-            }
+        }) && reply.events.len() < 64
+        {
+            reply.events.push(event.to_owned());
         }
         for field in [
             value.get("thread_id"),
@@ -347,15 +343,16 @@ pub fn parse_events(events: &str) -> Result<Reply, String> {
         } else if let Some(result) = value["result"].as_str().filter(|text| !text.is_empty()) {
             reply.text = result.to_owned();
         }
-        if value["type"] == "item.completed" && value["item"]["type"] == "agent_message" {
-            if let Some(message) = value["item"]["text"].as_str() {
-                reply.text = message.to_owned();
-            }
+        if value["type"] == "item.completed"
+            && value["item"]["type"] == "agent_message"
+            && let Some(message) = value["item"]["text"].as_str()
+        {
+            reply.text = message.to_owned();
         }
-        if value["type"] == "text" {
-            if let Some(message) = value["part"]["text"].as_str() {
-                reply.text.push_str(message);
-            }
+        if value["type"] == "text"
+            && let Some(message) = value["part"]["text"].as_str()
+        {
+            reply.text.push_str(message);
         }
     }
     if reply.text.trim().is_empty() {

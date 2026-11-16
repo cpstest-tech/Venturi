@@ -4811,6 +4811,7 @@ impl VenturiApp {
                 is_playing,
             );
             media_drop = drop;
+            self.apply_ai_placeholder_action();
             if let Some((nested_id, clip, at)) = enter_compound {
                 self.enter_compound_timeline(nested_id, at, Some(clip));
             }

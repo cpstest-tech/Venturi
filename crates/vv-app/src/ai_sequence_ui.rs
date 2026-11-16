@@ -30,6 +30,8 @@ pub(crate) struct State {
     pending_imports: HashMap<String, (PathBuf, Job)>,
     import_jobs: HashMap<(u64, vv_session::JobId), String>,
     import_owner: Option<(u64, Option<PathBuf>)>,
+    dismissed_placeholders: std::collections::HashSet<String>,
+    live_jobs: std::collections::HashSet<String>,
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -704,38 +706,39 @@ impl VenturiApp {
                     )
                 })
             });
-            if job.request.insert && job.request.parent.is_none() && !job.imported && !already_used
+            if job.request.insert
+                && job.request.parent.is_none()
+                && !job.imported
+                && !already_used
+                && let Some(timeline_id) = job.request.timeline.map(TimelineId::from_raw)
+                && let Some(timeline) = self.session.project.timelines.get(timeline_id)
             {
-                if let Some(timeline_id) = job.request.timeline.map(TimelineId::from_raw)
-                    && let Some(timeline) = self.session.project.timelines.get(timeline_id)
-                {
-                    let position = crate::ai_sequence::insertion::position(timeline, &job.request);
-                    if let Ok(start) = position {
-                        let meta = self.session.project.media_pool[media].meta.clone();
-                        let group = self.session.history.begin_group();
-                        let track = vv_core::edit::add_track(
-                            &mut self.session.project,
-                            &mut self.session.history,
-                            timeline_id,
-                            TrackKind::Video,
-                        );
-                        self.insert_media_clip(
-                            timeline_id,
-                            timeline_ui::MediaDrag::whole(media, &meta),
-                            &meta,
-                            start.max(0),
-                            TargetTracks {
-                                video: Some(track),
-                                extra_audio: None,
-                            },
-                        );
-                        self.session.history.end_group(group);
-                    } else {
-                        self.project_error = Some(format!(
-                            "AI sequence imported. {}. Place the result from the Media Library.",
-                            position.unwrap_err()
-                        ));
-                    }
+                let position = crate::ai_sequence::insertion::position(timeline, &job.request);
+                if let Ok(start) = position {
+                    let meta = self.session.project.media_pool[media].meta.clone();
+                    let group = self.session.history.begin_group();
+                    let track = vv_core::edit::add_track(
+                        &mut self.session.project,
+                        &mut self.session.history,
+                        timeline_id,
+                        TrackKind::Video,
+                    );
+                    self.insert_media_clip(
+                        timeline_id,
+                        timeline_ui::MediaDrag::whole(media, &meta),
+                        &meta,
+                        start.max(0),
+                        TargetTracks {
+                            video: Some(track),
+                            extra_audio: None,
+                        },
+                    );
+                    self.session.history.end_group(group);
+                } else {
+                    self.project_error = Some(format!(
+                        "AI sequence imported. {}. Place the result from the Media Library.",
+                        position.unwrap_err()
+                    ));
                 }
             }
             self.session.history.end_group(import_group);
@@ -1218,7 +1221,7 @@ impl VenturiApp {
         }
     }
 
-    pub(crate) fn ai_placeholders(&self) -> Vec<timeline_ui::AiPlaceholder> {
+    pub(crate) fn ai_placeholders(&mut self) -> Vec<timeline_ui::AiPlaceholder> {
         let (Some(timeline_id), Some(path)) = (self.timeline_id, self.session.path()) else {
             return Vec::new();
         };
@@ -1228,6 +1231,14 @@ impl VenturiApp {
         ) else {
             return Vec::new();
         };
+        // Only failures seen live get a block, not those of earlier sessions.
+        self.ai_sequences.live_jobs.extend(
+            queue
+                .jobs
+                .iter()
+                .filter(|job| !job.stage.terminal())
+                .map(|job| job.id.clone()),
+        );
         queue
             .jobs
             .iter()
@@ -1238,7 +1249,10 @@ impl VenturiApp {
                     && request.timeline == Some(timeline_id.raw())
                     && (!job.stage.terminal()
                         || (job.stage == Stage::Completed
-                            && self.ai_sequences.pending_imports.contains_key(&job.id)))
+                            && self.ai_sequences.pending_imports.contains_key(&job.id))
+                        || (job.stage == Stage::Failed
+                            && self.ai_sequences.live_jobs.contains(&job.id)
+                            && !self.ai_sequences.dismissed_placeholders.contains(&job.id)))
             })
             .filter_map(|job| {
                 let composition = &job.request.composition;
@@ -1250,13 +1264,49 @@ impl VenturiApp {
                 )
                 .max(1);
                 Some(timeline_ui::AiPlaceholder {
+                    job: job.id.clone(),
+                    failed: job.stage == Stage::Failed,
                     start,
                     len,
-                    label: t!("ai_sequence.placeholder").into_owned(),
+                    label: if job.stage == Stage::Failed {
+                        t!("ai_sequence.placeholder_failed").into_owned()
+                    } else {
+                        t!("ai_sequence.placeholder").into_owned()
+                    },
                     detail: job.stage.label().to_string(),
                 })
             })
             .collect()
+    }
+
+    pub(crate) fn apply_ai_placeholder_action(&mut self) {
+        use timeline_ui::AiPlaceholderAction as Action;
+        let Some(action) = self.timeline_state.ai_placeholder_action.take() else {
+            return;
+        };
+        let queue = self
+            .session
+            .path()
+            .and_then(|path| self.ai_sequences.queues.get(path));
+        match action {
+            Action::Cancel(id) => {
+                if let Some(queue) = queue {
+                    queue.cancel(&id);
+                }
+            }
+            Action::Dismiss(id) => {
+                self.ai_sequences.dismissed_placeholders.insert(id);
+            }
+            Action::Retry(id) => {
+                let request = queue
+                    .and_then(|queue| queue.jobs.iter().find(|job| job.id == id))
+                    .map(|job| job.request.clone());
+                self.ai_sequences.dismissed_placeholders.insert(id);
+                if let Some(request) = request {
+                    self.submit_ai_sequence(request);
+                }
+            }
+        }
     }
 
     pub(crate) fn ai_activity(&self) -> usize {

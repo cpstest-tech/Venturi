@@ -170,7 +170,7 @@ fn remotion_render_smoke() {
         .as_ref()
         .expect("Transparent Remotion output must keep its alpha plane in the editor decoder");
     assert!(
-        alpha.iter().any(|sample| *sample == 0),
+        alpha.contains(&0),
         "Background must remain transparent after import decoding"
     );
     std::fs::remove_dir_all(root).unwrap();
@@ -574,7 +574,9 @@ fn source_audio_context_seeks_and_crops_without_sending_the_whole_media() {
     assert_eq!(&excerpt[..4], b"RIFF");
     assert_eq!(excerpt.len(), 44 + 4_000 * 2);
     let values: Vec<_> = excerpt[44..]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|bytes| i16::from_le_bytes([bytes[0], bytes[1]]))
         .collect();
     assert!(

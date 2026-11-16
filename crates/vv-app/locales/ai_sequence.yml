@@ -385,3 +385,11 @@ ai_sequence.change_provider:
 ai_sequence.placeholder:
   en: "AI generating…"
   it: "Generazione AI…"
+
+ai_sequence.placeholder_failed:
+  en: "AI generation failed"
+  it: "Generazione AI fallita"
+
+ai_sequence.dismiss:
+  en: "Dismiss"
+  it: "Scarta"
