@@ -1,3 +1,5 @@
+pub mod auto_cut;
+pub mod auto_cut_edit;
 pub mod captions;
 pub mod clip_anim;
 pub mod clipboard;

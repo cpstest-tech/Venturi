@@ -86,6 +86,7 @@ pub enum TimelineTool {
 /// owns the selection follow-up, the clipboard and the playback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimelineCommand {
+    AutoCut,
     Undo,
     Redo,
     SplitAtPlayhead,

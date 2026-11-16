@@ -92,8 +92,13 @@ pub(crate) fn longest_word_ms(text: &str) -> u32 {
 /// words placed wholly inside a long pause, and ends every word at the next
 /// one or at the pause after it.
 pub fn fit_to_speech(words: &mut Vec<Word>, speech: &Speech) {
+    fit_to_speech_with_indices(words, speech);
+}
+
+pub(crate) fn fit_to_speech_with_indices(words: &mut Vec<Word>, speech: &Speech) -> Vec<usize> {
     let (spans, total_ms) = (&speech.spans, speech.total_ms);
     let mut fitted: Vec<Word> = Vec::with_capacity(words.len());
+    let mut retained = Vec::new();
     for i in 0..words.len() {
         let next_start = words.get(i + 1).map(|w| w.start_ms);
         let start = words[i]
@@ -117,6 +122,7 @@ pub fn fit_to_speech(words: &mut Vec<Word>, speech: &Speech) {
         let mut word = words[i].clone();
         word.start_ms = start;
         fitted.push(word);
+        retained.push(i);
     }
     for i in 0..fitted.len() {
         let start = fitted[i].start_ms;
@@ -131,6 +137,7 @@ pub fn fit_to_speech(words: &mut Vec<Word>, speech: &Speech) {
         fitted[i].end_ms = end.max(start + 1);
     }
     *words = fitted;
+    retained
 }
 
 #[cfg(test)]

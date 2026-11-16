@@ -34,6 +34,7 @@ impl VenturiApp {
 
     pub(crate) fn run_timeline_command(&mut self, ctx: &egui::Context, command: TimelineCommand) {
         match command {
+            TimelineCommand::AutoCut => self.open_auto_cut(ctx),
             TimelineCommand::Undo => self.undo(),
             TimelineCommand::Redo => self.redo(),
             TimelineCommand::SplitAtPlayhead => self.split_at_playhead(),

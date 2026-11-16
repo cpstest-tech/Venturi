@@ -8,6 +8,8 @@ rust_i18n::i18n!("locales", fallback = "en");
 
 mod ai_clips;
 mod app_menu;
+mod auto_cut;
+mod auto_cut_ui;
 mod autosave;
 mod color_window;
 mod compressor_panel;
@@ -594,6 +596,7 @@ struct VenturiApp {
     top_bar_center_width: f32,
     export_modal: Option<export_modal::ExportModal>,
     subtitles: subtitles::SubtitleState,
+    auto_cut: auto_cut::State,
     ai_clips: ai_clips::State,
     cover_picker: Option<cover::CoverPicker>,
     /// Name of the project reopened after a crash, until acknowledged.
@@ -735,6 +738,7 @@ impl Default for VenturiApp {
             top_bar_center_width: 0.0,
             export_modal: None,
             subtitles: subtitles::SubtitleState::default(),
+            auto_cut: auto_cut::State::default(),
             ai_clips: ai_clips::State::default(),
             cover_picker: None,
             recovered_project: None,
@@ -4245,6 +4249,7 @@ impl VenturiApp {
         self.poll_pending_dialog(&ui.ctx().clone());
         self.poll_project_loading(&ui.ctx().clone());
         if self.screen == Screen::Home {
+            self.auto_cut.modal = None;
             self.home_ui(ui);
             return;
         }
@@ -4305,6 +4310,11 @@ impl VenturiApp {
         }
         self.sync_window_title(ui.ctx());
 
+        if self.auto_cut.modal.is_some() {
+            self.tick_autosave(&ui.ctx().clone());
+            self.show_auto_cut(ui.ctx());
+            return;
+        }
         self.handle_shortcuts(ui);
         self.tick_autosave(&ui.ctx().clone());
 
@@ -4692,6 +4702,15 @@ impl VenturiApp {
         }
         let can_undo = self.session.history.position() > 0;
         let can_redo = self.session.history.labels().count() > self.session.history.position();
+        let can_auto_cut = self.take.is_none()
+            && self.timeline_id.is_some_and(|id| {
+                let timeline = &self.session.project.timelines[id];
+                self.timeline_state.selected.iter().any(|&(t, c)| {
+                    timeline
+                        .clip(t, c)
+                        .is_some_and(|clip| matches!(clip.source, vv_core::ClipSource::Media(_)))
+                })
+            });
         egui::Panel::top("timeline_bar")
             .resizable(false)
             .show(ui, |ui| {
@@ -4702,6 +4721,7 @@ impl VenturiApp {
                     &self.settings.keymap,
                     can_undo,
                     can_redo,
+                    can_auto_cut,
                 );
             });
         self.timeline_state.thumbnails.clear();

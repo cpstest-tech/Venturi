@@ -1,0 +1,110 @@
+_version: 2
+
+auto_cut.title:
+  en: "Automatic cut"
+  it: "Taglio automatico"
+auto_cut.hint:
+  en: "Review the suggestions. Checked regions will be removed in one undo step. Processing stays on this device."
+  it: "Controlla i suggerimenti: le regioni spuntate saranno eliminate con un solo passaggio annullabile. Elaborazione sul dispositivo."
+auto_cut.close:
+  en: "Close · Esc"
+  it: "Chiudi · Esc"
+auto_cut.speech:
+  en: "Speech"
+  it: "Parlato"
+auto_cut.silence:
+  en: "Silence"
+  it: "Silenzio"
+auto_cut.false_start:
+  en: "False start"
+  it: "Falsa partenza"
+auto_cut.filler:
+  en: "Filler"
+  it: "Intercalare"
+auto_cut.delete:
+  en: "Delete"
+  it: "Elimina"
+auto_cut.threshold:
+  en: "Silence threshold"
+  it: "Soglia silenzio"
+auto_cut.padding:
+  en: "Speech padding"
+  it: "Margine parlato"
+auto_cut.ripple:
+  en: "Ripple all tracks"
+  it: "Ripple su tutte le tracce"
+auto_cut.ripple_hint:
+  en: "Close the cuts on all unlocked tracks, including text, stickers and music. Locked tracks stay fixed."
+  it: "Richiude i tagli su tutte le tracce sbloccate, inclusi testi, sticker e musica. Le tracce bloccate restano ferme."
+auto_cut.preview:
+  en: "Preview: skip checked regions"
+  it: "Anteprima: salta le regioni spuntate"
+auto_cut.summary:
+  en: "Duration: %{before} → %{after} (−%{removed})"
+  it: "Durata: %{before} → %{after} (−%{removed})"
+auto_cut.all_silences:
+  en: "All silences"
+  it: "Tutti i silenzi"
+auto_cut.all_restarts:
+  en: "All false starts"
+  it: "Tutte le false partenze"
+auto_cut.invert:
+  en: "Invert selection"
+  it: "Inverti selezione"
+auto_cut.play:
+  en: "Play · Space"
+  it: "Riproduci · Spazio"
+auto_cut.pause:
+  en: "Pause · Space"
+  it: "Pausa · Spazio"
+auto_cut.hashing:
+  en: "Checking source and cached transcript…"
+  it: "Controllo sorgente e trascrizione salvata…"
+auto_cut.extracting:
+  en: "Extracting mono audio at 16 kHz…"
+  it: "Estrazione audio mono a 16 kHz…"
+auto_cut.transcribing:
+  en: "Transcribing locally in blocks…"
+  it: "Trascrizione locale a blocchi…"
+auto_cut.current_block:
+  en: "Current audio block"
+  it: "Blocco audio corrente"
+auto_cut.analyzing:
+  en: "Updating suggestions…"
+  it: "Aggiornamento suggerimenti…"
+auto_cut.waiting:
+  en: "The waveform and suggestions will appear here. You can cancel at any time."
+  it: "Qui appariranno waveform e suggerimenti. Puoi annullare in qualsiasi momento."
+auto_cut.audio_preview:
+  en: "Audio preview"
+  it: "Anteprima audio"
+auto_cut.error_locked:
+  en: "Unlock the selected clip and its linked audio/video tracks to continue."
+  it: "Sblocca le tracce del clip selezionato e del suo audio/video collegato per continuare."
+auto_cut.error_unsupported:
+  en: "Select an enabled audio or video source clip. Freeze frames and compound clips cannot be analyzed."
+  it: "Seleziona un clip sorgente audio o video abilitato. Fermi immagine e clip composti non possono essere analizzati."
+auto_cut.error_offline:
+  en: "The source file is offline. Relink it and reopen Automatic cut."
+  it: "Il file sorgente non è disponibile. Ricollegalo e riapri Taglio automatico."
+auto_cut.error_no_audio:
+  en: "The selected source has no readable audio stream."
+  it: "La sorgente selezionata non contiene una traccia audio leggibile."
+auto_cut.error_source_changed:
+  en: "The source file changed during analysis. Close and reopen Automatic cut."
+  it: "Il file sorgente è cambiato durante l’analisi. Chiudi e riapri Taglio automatico."
+auto_cut.error_timeline_changed:
+  en: "The timeline changed during analysis. Close and reopen Automatic cut to refresh the suggestions."
+  it: "La timeline è cambiata durante l’analisi. Chiudi e riapri Taglio automatico per aggiornare i suggerimenti."
+auto_cut.error_model_missing:
+  en: "Install the existing speech model from Subtitles first, then reopen Automatic cut. No model is downloaded from this dialog."
+  it: "Installa prima il modello vocale esistente dalla sezione Sottotitoli, poi riapri Taglio automatico. Questo modal non scarica modelli."
+auto_cut.cancelled:
+  en: "Analysis cancelled."
+  it: "Analisi annullata."
+auto_cut.error:
+  en: "Analysis failed: %{detail}"
+  it: "Analisi non riuscita: %{detail}"
+auto_cut.select_source:
+  en: "Select an audio or video source clip."
+  it: "Seleziona un clip sorgente audio o video."

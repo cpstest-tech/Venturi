@@ -2826,3 +2826,27 @@ fn bench_resampled_audio() {
         }
     }
 }
+
+#[test]
+fn automatic_cut_crossfade_uses_samples_and_complementary_ramps() {
+    let (project, media, _) = project();
+    let _ = project;
+    let mut left = clip_at(media, 0, 0, 25);
+    let mut right = clip_at(media, 25, 50, 25);
+    left.audio_splice_out_seconds = 0.015;
+    right.audio_splice_in_seconds = 0.015;
+    let left_span = ClipSpan::new(&left, 25.0, 48_000);
+    let right_span = ClipSpan::new(&right, 25.0, 48_000);
+    assert_eq!(left_span.len, 48_720);
+    assert_eq!(right_span.start, 48_000);
+    assert_eq!(left_span.fade_out, 720);
+    assert_eq!(right_span.fade_in, 720);
+    let mut outgoing = fade_test_clip(0, left_span.fade_out);
+    outgoing.len = left_span.len;
+    let mut incoming = fade_test_clip(right_span.fade_in, 0);
+    incoming.len = right_span.len;
+    for sample in 0..720 {
+        let gain = fade_multiplier(&outgoing, 48_000 + sample) + fade_multiplier(&incoming, sample);
+        assert!((gain - 1.0).abs() < 1e-6);
+    }
+}

@@ -83,6 +83,7 @@ pub enum CommandLabel {
     ClipSpeed,
     FreezeFrame,
     RemoveSilences,
+    AutoCut,
     AddMarker,
     EditMarker,
     MoveMarker,
@@ -1676,6 +1677,7 @@ pub struct SplitClip {
     pub split_at: FrameIdx,
     original_len: Option<FrameIdx>,
     original_fades: (FrameIdx, FrameIdx),
+    original_splices: (f64, f64),
     original_effects: Option<EffectStack>,
     new_clip_id: Option<ClipId>,
     /// Id of the right half decided by the caller, to relink the halves of
@@ -1701,6 +1703,7 @@ impl SplitClip {
             split_at,
             original_len: None,
             original_fades: (0, 0),
+            original_splices: (0.0, 0.0),
             original_effects: None,
             new_clip_id: None,
             preallocated_new_clip_id: None,
@@ -1751,6 +1754,9 @@ impl Command for SplitClip {
 
         // Fades and edge transitions belong to the outer edges only.
         self.original_fades = (clip.fade_in, clip.fade_out);
+        self.original_splices = (clip.audio_splice_in_seconds, clip.audio_splice_out_seconds);
+        clip.audio_splice_out_seconds = 0.0;
+        second_half.audio_splice_in_seconds = 0.0;
         clip.fade_in = clip.fade_in.min(clip.timeline_len);
         clip.fade_out = 0;
         second_half.fade_in = 0;
@@ -1784,6 +1790,7 @@ impl Command for SplitClip {
         if let Some(clip) = track.clip_mut(self.clip_id) {
             clip.timeline_len = original_len;
             (clip.fade_in, clip.fade_out) = self.original_fades;
+            (clip.audio_splice_in_seconds, clip.audio_splice_out_seconds) = self.original_splices;
             if let Some(effects) = &self.original_effects {
                 clip.effects = effects.clone();
             }

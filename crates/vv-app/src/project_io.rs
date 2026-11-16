@@ -866,6 +866,7 @@ impl VenturiApp {
     /// After the session switched project: the UI state tied to the old
     /// one goes, the first timeline opens.
     pub(crate) fn reset_for_replaced_project(&mut self) {
+        self.auto_cut.modal = None;
         self.seen_epoch = self.session.epoch();
         self.reset_autosave();
         self.project_name_edit = None;

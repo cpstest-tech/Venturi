@@ -30,6 +30,7 @@ impl VenturiApp {
                 .is_some_and(|d| d.is_capturing())
             || self.library_ui.confirm_delete.is_some()
             || self.export_modal.is_some()
+            || self.auto_cut.modal.is_some()
             || self.cover_picker.is_some()
             || self.pending_project_switch.is_some();
         let library_tab = self.library_ui.tab == library_ui::PoolTab::Library;
@@ -1091,6 +1092,7 @@ fn command_label(label: vv_core::CommandLabel) -> std::borrow::Cow<'static, str>
         L::ClipSpeed => t!("history.clip_speed"),
         L::FreezeFrame => t!("history.freeze_frame"),
         L::RemoveSilences => t!("history.remove_silences"),
+        L::AutoCut => t!("auto_cut.title"),
         L::AddMarker => t!("history.add_marker"),
         L::EditMarker => t!("history.edit_marker"),
         L::MoveMarker => t!("history.move_marker"),

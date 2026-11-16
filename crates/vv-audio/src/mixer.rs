@@ -1693,14 +1693,21 @@ impl ClipSpan {
         };
         Self {
             start: timeline_frame_to_sample(clip.timeline_start, timeline_fps, sample_rate),
-            len: frames(clip.timeline_len),
+            len: frames(clip.timeline_len)
+                + seconds_to_frames(clip.audio_splice_out_seconds.clamp(0.0, 0.02), sample_rate),
             source_offset: seconds_to_frames(
                 clip.media_secs_at(clip.timeline_start, timeline_fps),
                 sample_rate,
             ),
             step: clip.speed().as_f64(),
-            fade_in: frames(clip.fade_in),
-            fade_out: frames(clip.fade_out),
+            fade_in: frames(clip.fade_in).max(seconds_to_frames(
+                clip.audio_splice_in_seconds.clamp(0.0, 0.02),
+                sample_rate,
+            )),
+            fade_out: frames(clip.fade_out).max(seconds_to_frames(
+                clip.audio_splice_out_seconds.clamp(0.0, 0.02),
+                sample_rate,
+            )),
         }
     }
 

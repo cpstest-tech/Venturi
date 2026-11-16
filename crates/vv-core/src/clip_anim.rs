@@ -24,6 +24,8 @@ pub struct ClipAnimations {
     pub in_seconds: f64,
     pub out_seconds: f64,
     pub pulse_seconds: f64,
+    pub combo_offset_seconds: f64,
+    pub combo_length_seconds: Option<f64>,
 }
 
 impl Default for ClipAnimations {
@@ -38,6 +40,8 @@ impl Default for ClipAnimations {
             in_seconds: 0.5,
             out_seconds: 0.5,
             pulse_seconds: 1.0,
+            combo_offset_seconds: 0.0,
+            combo_length_seconds: None,
         }
     }
 }
@@ -67,7 +71,18 @@ impl ClipAnimations {
         let mut out = Vec::new();
         let time = seconds.clamp(0.0, length);
         if let Some(id) = self.combo_asset.as_deref() {
-            out.push((id, (time / length) as f32, time as f32));
+            let offset = if self.combo_offset_seconds.is_finite() {
+                self.combo_offset_seconds.max(0.0)
+            } else {
+                0.0
+            };
+            let local = time + offset;
+            let length = self
+                .combo_length_seconds
+                .filter(|v| v.is_finite() && *v > 0.0)
+                .unwrap_or(length)
+                .max(0.01);
+            out.push((id, (local / length).clamp(0.0, 1.0) as f32, local as f32));
         }
         if let Some(id) = self.in_asset.as_deref() {
             let d = incoming * fit;

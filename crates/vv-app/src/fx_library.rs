@@ -589,6 +589,8 @@ impl VenturiApp {
                 }
                 _ => {
                     animations.combo_asset = id;
+                    animations.combo_offset_seconds = 0.0;
+                    animations.combo_length_seconds = None;
                     animations.pulse = false;
                 }
             }

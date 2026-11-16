@@ -376,6 +376,30 @@ pub fn transcribe(
     progress: &Arc<Progress>,
     cancel: &Arc<AtomicBool>,
 ) -> Result<Transcript, Error> {
+    transcribe_inner(model, path, samples, language, progress, cancel, false).map(|(text, _)| text)
+}
+
+/// Deterministic decoding with the minimum token probability of each fitted word.
+pub fn transcribe_scored(
+    model: Model,
+    path: &Path,
+    samples: &[f32],
+    language: Option<&str>,
+    progress: &Arc<Progress>,
+    cancel: &Arc<AtomicBool>,
+) -> Result<(Transcript, Vec<f32>), Error> {
+    transcribe_inner(model, path, samples, language, progress, cancel, true)
+}
+
+fn transcribe_inner(
+    model: Model,
+    path: &Path,
+    samples: &[f32],
+    language: Option<&str>,
+    progress: &Arc<Progress>,
+    cancel: &Arc<AtomicBool>,
+    deterministic: bool,
+) -> Result<(Transcript, Vec<f32>), Error> {
     progress.enter(Stage::Transcribe);
     let path = path
         .to_str()
@@ -400,6 +424,10 @@ pub fn transcribe(
         .unwrap_or("auto");
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    if deterministic {
+        params.set_temperature(0.0);
+        params.set_temperature_inc(0.0);
+    }
     params.set_language(Some(language));
     if let Some(prompt) = style_prompt(language) {
         params.set_initial_prompt(prompt);
@@ -434,6 +462,7 @@ pub fn transcribe(
     ran.map_err(|e| Error::Transcribe(e.to_string()))?;
 
     let mut tokens: Vec<RawToken> = Vec::new();
+    let mut confidence: Vec<f32> = Vec::new();
     for segment in state.as_iter() {
         for index in 0..segment.n_tokens() {
             let Some(token) = segment.get_token(index) else {
@@ -444,6 +473,13 @@ pub fn transcribe(
                 .to_str_lossy()
                 .map(|t| t.into_owned())
                 .unwrap_or_default();
+            if !text.trim().is_empty() && !text.starts_with("[_") && !text.starts_with("<|") {
+                if text.starts_with(' ') || confidence.is_empty() {
+                    confidence.push(data.p);
+                } else if let Some(last) = confidence.last_mut() {
+                    *last = last.min(data.p);
+                }
+            }
             tokens.push(RawToken {
                 text,
                 t0: data.t0,
@@ -458,13 +494,20 @@ pub fn transcribe(
     };
     let mut words = words_from_tokens(&tokens);
     if let Some(speech) = &speech {
-        fit_to_speech(&mut words, speech);
+        let retained = speech::fit_to_speech_with_indices(&mut words, speech);
+        confidence = retained
+            .into_iter()
+            .map(|i| confidence.get(i).copied().unwrap_or(0.0))
+            .collect();
     }
     progress.set(1.0);
-    Ok(Transcript {
-        language: detected.to_owned(),
-        words,
-    })
+    Ok((
+        Transcript {
+            language: detected.to_owned(),
+            words,
+        },
+        confidence,
+    ))
 }
 
 #[cfg(test)]

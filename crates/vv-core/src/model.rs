@@ -2097,6 +2097,11 @@ pub struct Clip {
     /// of the clip. 0 = none.
     #[serde(default)]
     pub fade_out: FrameIdx,
+    /// Sample-accurate ramps; the outgoing tail overlaps the next kept clip.
+    #[serde(default)]
+    pub audio_splice_in_seconds: f64,
+    #[serde(default)]
+    pub audio_splice_out_seconds: f64,
     /// Hand-picked timeline color; `None` = the one derived from the source kind.
     #[serde(default, deserialize_with = "lenient_clip_color")]
     pub display_color: Option<ClipColor>,
@@ -2134,6 +2139,8 @@ impl Clip {
             disabled: false,
             fade_in: 0,
             fade_out: 0,
+            audio_splice_in_seconds: 0.0,
+            audio_splice_out_seconds: 0.0,
             display_color: None,
         }
     }

@@ -865,3 +865,17 @@ toolchain flags.
 
   Dialogs (settings, presets, paste attributes, relink, new timeline…) are not
   editors and stay windows.
+
+## Automatic cut
+
+Implemented in `vv-core/src/auto_cut{,_edit}.rs` and
+`vv-app/src/auto_cut{,_ui}.rs`, using the existing Whisper/FFmpeg pipeline.
+Includes local source caching, cancellable background analysis, full-screen
+review, virtualized segments, preview skipping and a single undo command with
+linked ripple, animation edge handling and 15 ms sample crossfades. Project
+format is now 5; new fields default for older files. No new dependency or
+network service. Speech models must already be installed through Subtitles.
+
+**Not compiled, built, run or tested**, as requested. Unit tests were written
+in the existing separate test files. Architecture, decisions, limits and manual
+verification steps: `docs/AUTO_CUT.md`.

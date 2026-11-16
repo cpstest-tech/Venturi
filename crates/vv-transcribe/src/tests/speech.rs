@@ -105,3 +105,16 @@ fn a_word_in_a_short_pause_is_kept() {
     fit_to_speech(&mut words, &speech(&[0..850, 1400..2000], 2000));
     assert_eq!(words.len(), 2);
 }
+
+#[test]
+fn retained_indices_keep_word_confidence_aligned_after_dropping_hallucinations() {
+    let mut words = vec![word("ghost", 0, 100), word("hello", 2000, 2200)];
+    let speech = Speech {
+        spans: vec![2000..2500],
+        total_ms: 3000,
+    };
+    let indices = fit_to_speech_with_indices(&mut words, &speech);
+    assert_eq!(indices, vec![1]);
+    assert_eq!(words.len(), 1);
+    assert_eq!(words[0].text, "hello");
+}

@@ -39,6 +39,7 @@ pub(crate) fn show_bar(
     keymap: &Keymap,
     can_undo: bool,
     can_redo: bool,
+    can_auto_cut: bool,
 ) {
     let has_selection = !state.selected.is_empty();
     ui.horizontal(|ui| {
@@ -130,6 +131,16 @@ pub(crate) fn show_bar(
             None,
             TimelineCommand::Mirror,
         );
+
+        if has_selection {
+            if ui
+                .add_enabled(can_auto_cut, egui::Button::new(t!("auto_cut.title")))
+                .on_disabled_hover_text(t!("auto_cut.select_source"))
+                .clicked()
+            {
+                state.commands.push(TimelineCommand::AutoCut);
+            }
+        }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
