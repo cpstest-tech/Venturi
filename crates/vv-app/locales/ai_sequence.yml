@@ -111,8 +111,8 @@ ai_sequence.fresh_session:
   it: "Avvia una nuova sessione del provider"
 
 ai_sequence.revision_provider:
-  en: "Revisions use the provider and model selected in Generate AI Sequence."
-  it: "Le revisioni usano il provider e il modello scelti in Genera sequenza AI."
+  en: "Revisions use the provider and model set in AI settings."
+  it: "Le revisioni usano il provider e il modello impostati nelle impostazioni AI."
 
 ai_sequence.preview:
   en: "Preview"

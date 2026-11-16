@@ -887,10 +887,15 @@ impl VenturiApp {
         let mut apply = None;
         ui.collapsing("AI", |ui| {
             ui.label(t!("ai_sequence.current_revision", id = &current.id));
-            ui.label(format!(
-                "{:?} · {}",
-                current.request.provider, current.request.model
-            ));
+            ui.label(if current.request.model.is_empty() {
+                current.request.provider.label().to_owned()
+            } else {
+                format!(
+                    "{} · {}",
+                    current.request.provider.label(),
+                    current.request.model
+                )
+            });
             ui.add(
                 egui::TextEdit::multiline(&mut self.ai_sequences.revision_prompt)
                     .desired_rows(3)
