@@ -268,7 +268,7 @@ impl VenturiApp {
         }
 
         ui.add_space(theme::SPACE_2);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             generate = ui
                 .add_enabled(
                     project_path.is_some() && !self.ai_sequences.prompt.trim().is_empty(),
@@ -317,13 +317,13 @@ impl VenturiApp {
                 ui.push_id(&job.id, |ui| {
                     ui.group(|ui| {
                         ui.set_width(ui.available_width());
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             if !job.stage.terminal() {
                                 ui.spinner();
                             }
                             ui.label(job.request.prompt.chars().take(60).collect::<String>());
                         });
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.weak(job.stage.label());
                             if queue.is_cancelling(&job.id) {
                                 ui.weak(t!("ai_sequence.cancelling"));

@@ -292,3 +292,27 @@ fn failures_from_earlier_sessions_get_no_placeholder() {
     app.ai_sequences.queues.insert(project, queue);
     assert!(app.ai_placeholders().is_empty());
 }
+
+#[test]
+fn the_tab_renders_within_a_narrow_library_panel() {
+    let mut app = app();
+    app.timeline_state.selected.insert((0, vv_core::ClipId(1)));
+    app.ai_sequences.prompt = "Animated bar chart".into();
+    let ctx = egui::Context::default();
+    for width in [240.0_f32, 360.0, 800.0] {
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(width, 900.0),
+            )),
+            ..Default::default()
+        };
+        let mut output = ctx.run_ui(raw, |ui| app.show_ai_sequence_tab(ui));
+        output.textures_delta.clear();
+        assert!(
+            ctx.globally_used_rect().width() <= width + 1.0,
+            "tab overflows at {width}: {}",
+            ctx.globally_used_rect().width()
+        );
+    }
+}
