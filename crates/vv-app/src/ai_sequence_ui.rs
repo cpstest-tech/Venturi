@@ -1,5 +1,5 @@
 use super::*;
-use crate::ai_sequence::{Composition, Job, Provider, Queue, Request, Stage};
+use crate::ai_sequence::{Composition, Job, Placement, Provider, Queue, Request, Stage};
 use vv_core::Id;
 
 #[derive(Default)]
@@ -8,6 +8,7 @@ pub(crate) struct State {
     length: Length,
     custom_seconds: f64,
     style: String,
+    placement: Placement,
     no_frames: bool,
     no_audio: bool,
     transparent: bool,
@@ -64,6 +65,14 @@ const STYLES: [(&str, &str); 4] = [
         "Corporate, polished, restrained palette",
     ),
 ];
+
+fn placement_key(placement: Placement) -> &'static str {
+    match placement {
+        Placement::Fullscreen => "ai_sequence.placement_fullscreen",
+        Placement::Pill => "ai_sequence.placement_pill",
+        Placement::AboveHead => "ai_sequence.placement_above_head",
+    }
+}
 
 struct Range {
     start: i64,
@@ -263,10 +272,24 @@ impl VenturiApp {
                     );
                 }
             });
-            ui.checkbox(
-                &mut self.ai_sequences.transparent,
-                t!("ai_sequence.transparent"),
-            );
+            ui.label(t!("ai_sequence.placement"));
+            ui.horizontal_wrapped(|ui| {
+                for placement in Placement::ALL {
+                    ui.selectable_value(
+                        &mut self.ai_sequences.placement,
+                        placement,
+                        t!(placement_key(placement)),
+                    );
+                }
+            });
+            if self.ai_sequences.placement.is_overlay() {
+                ui.weak(t!("ai_sequence.placement_overlay_hint"));
+            } else {
+                ui.checkbox(
+                    &mut self.ai_sequences.transparent,
+                    t!("ai_sequence.transparent"),
+                );
+            }
         }
 
         ui.add_space(theme::SPACE_2);
@@ -665,6 +688,7 @@ impl VenturiApp {
             prompt: self.ai_sequences.prompt.clone(),
             context: serde_json::to_string(&words).map_err(|e| e.to_string())?,
             style: self.ai_sequences.style.clone(),
+            placement: self.ai_sequences.placement,
             media,
             provider: self.settings.ai_provider,
             api_access: self.settings.sequence_api_access(),
@@ -675,7 +699,8 @@ impl VenturiApp {
                 height: timeline.resolution.1,
                 fps,
                 frames: (seconds * fps).round() as u32,
-                transparent: self.ai_sequences.transparent,
+                transparent: self.ai_sequences.transparent
+                    || self.ai_sequences.placement.is_overlay(),
             },
             parent: self.ai_sequences.parent.clone(),
             reuse_session: !self.ai_sequences.fresh_session,

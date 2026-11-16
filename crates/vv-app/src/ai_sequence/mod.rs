@@ -54,6 +54,37 @@ impl Provider {
     }
 }
 
+/// Where the graphic sits in the frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Placement {
+    #[default]
+    Fullscreen,
+    Pill,
+    AboveHead,
+}
+
+impl Placement {
+    pub const ALL: [Self; 3] = [Self::Fullscreen, Self::Pill, Self::AboveHead];
+
+    /// Overlays must stay transparent so the speaker remains visible.
+    pub fn is_overlay(self) -> bool {
+        self != Self::Fullscreen
+    }
+
+    pub fn instructions(self) -> &'static str {
+        match self {
+            Self::Fullscreen => "Full-screen graphic: use the whole canvas.",
+            Self::Pill => {
+                "Pill overlay: one compact rounded capsule (fully rounded ends, about 70-85% of the canvas width, at most about 14% of its height) centered horizontally in the lower third, above the bottom 12% safe area. Keep text short and large. Everything outside the pill must be fully transparent so the video shows through."
+            }
+            Self::AboveHead => {
+                "Above-the-head overlay for a talking-head video: place the graphic in the empty space above the speaker's head, inside the top 30% of the canvas, centered on the speaker (use the attached frames to locate the head). Never cover the face. Everything else must be fully transparent so the speaker stays visible."
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Composition {
     pub width: u32,
@@ -86,6 +117,8 @@ pub struct Request {
     pub context: String,
     #[serde(default)]
     pub style: String,
+    #[serde(default)]
+    pub placement: Placement,
     #[serde(default)]
     pub media: Vec<context::Source>,
     pub provider: Provider,

@@ -5,6 +5,7 @@ fn request() -> Request {
         prompt: "Animated bars".into(),
         context: String::new(),
         style: String::new(),
+        placement: Placement::Fullscreen,
         media: Vec::new(),
         provider: Provider::Gemini,
         api_access: Default::default(),
@@ -895,4 +896,22 @@ fn ai_chosen_length_is_clamped_between_one_second_and_the_maximum() {
     request.auto_duration = false;
     queue::apply_auto_duration(&mut request, Some(2.0));
     assert_eq!(request.composition.frames, 150);
+}
+
+#[test]
+fn jobs_saved_before_placement_existed_load_as_fullscreen() {
+    let mut value = serde_json::to_value(request()).unwrap();
+    value.as_object_mut().unwrap().remove("placement");
+    let loaded: Request = serde_json::from_value(value).unwrap();
+    assert_eq!(loaded.placement, Placement::Fullscreen);
+    assert!(!Placement::Fullscreen.is_overlay());
+    assert!(Placement::Pill.is_overlay() && Placement::AboveHead.is_overlay());
+}
+
+#[test]
+fn speech_context_asks_for_sync_only_when_words_exist() {
+    assert!(queue::speech_context("[]").contains("none available"));
+    let words = r#"[{"start_ms":0,"end_ms":400,"text":"ciao"}]"#;
+    let context = queue::speech_context(words);
+    assert!(context.contains("MUST be synchronized") && context.ends_with(words));
 }

@@ -50,8 +50,12 @@ Authorization is kept in memory and is never serialized into project files.
 
 Choose timeline context to use selected clips or the existing In/Out marks.
 Project captions are cropped to that range. If they are absent, background
-extraction can reuse the existing Viral Clips transcript cache without invoking
-speech recognition. Prompt-only mode sends no project captions or media.
+extraction reuses the Viral Clips transcript cache, and otherwise transcribes
+just the selected excerpt locally with Whisper, so CLI providers (which get no
+audio) still receive timestamped speech. The prompt asks for an animation
+synchronized with those words. The Layout option picks Full screen, Pill (a
+lower-third capsule) or Above the head (talking-head overlay); the last two are
+always rendered transparent. Prompt-only mode sends no project captions or media.
 Optional context includes up to three representative raw source frames and up
 to three raw source audio excerpts (10 seconds each, at most 30 seconds total).
 Frames use the same decoder/downscale helper as Viral Clips. Audio uses the

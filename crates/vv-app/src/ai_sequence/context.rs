@@ -1,6 +1,7 @@
 use super::Job;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use vv_core::{ClipSource, FrameIdx, Project, TimelineId, TrackKind};
 
@@ -192,7 +193,7 @@ pub fn prepare(
     job: &mut Job,
     directory: &Path,
     parent: Option<(&Job, &Path)>,
-    cancel: &AtomicBool,
+    cancel: &Arc<AtomicBool>,
 ) -> Result<(), String> {
     if let Some((parent, previous)) = parent {
         for attachment in &parent.attachments {
@@ -274,11 +275,27 @@ pub fn audio_wav(
     stream: usize,
     cancel: &AtomicBool,
 ) -> Result<Vec<u8>, String> {
+    if duration > 30.0 {
+        return Err("Invalid source audio range".into());
+    }
+    Ok(pcm_wav(
+        &mono_16k(path, seconds, duration, stream, cancel)?,
+        16_000,
+    ))
+}
+
+fn mono_16k(
+    path: &Path,
+    seconds: f64,
+    duration: f64,
+    stream: usize,
+    cancel: &AtomicBool,
+) -> Result<Vec<f32>, String> {
     if !seconds.is_finite()
         || seconds < 0.0
         || !duration.is_finite()
         || duration <= 0.0
-        || duration > 30.0
+        || duration > 600.0
     {
         return Err("Invalid source audio range".into());
     }
@@ -311,7 +328,7 @@ pub fn audio_wav(
     if !received {
         return Err("No audio samples in the selected source range".into());
     }
-    Ok(pcm_wav(&samples, rate))
+    Ok(samples)
 }
 
 pub fn pcm_wav(samples: &[f32], rate: u32) -> Vec<u8> {
@@ -432,12 +449,13 @@ pub fn subrange(sources: &[Source], start: u64, end: u64) -> Vec<Source> {
         .collect()
 }
 
-fn reuse_transcripts(job: &mut Job, cancel: &AtomicBool) -> Result<(), String> {
+fn reuse_transcripts(job: &mut Job, cancel: &Arc<AtomicBool>) -> Result<(), String> {
     if !job.request.context.trim().is_empty() && job.request.context != "[]" {
         return Ok(());
     }
     let mut cached = std::collections::HashMap::new();
     let mut words = Vec::new();
+    let mut transcribed = false;
     for source in job.request.media.iter().take(64) {
         let Source::Transcript {
             path,
@@ -455,12 +473,33 @@ fn reuse_transcripts(job: &mut Job, cancel: &AtomicBool) -> Result<(), String> {
         if cancel.load(Ordering::Relaxed) {
             return Err("Cancelled".into());
         }
-        let transcript = cached.entry(path.clone()).or_insert_with(|| {
+        let cached_words = cached.entry(path.clone()).or_insert_with(|| {
             crate::ai_clips::cached_words(path, cancel)
                 .ok()
                 .flatten()
                 .unwrap_or_default()
         });
+        let local;
+        let transcript = if cached_words.is_empty() {
+            // Without saved captions the CLI providers would only see a few frames.
+            match transcribe_excerpt(path, *source_seconds, *source_duration, cancel) {
+                Ok(words) => {
+                    transcribed = true;
+                    local = words;
+                    &local
+                }
+                Err(error) if cancel.load(Ordering::Relaxed) => return Err(error),
+                Err(error) => {
+                    job.events.push(format!(
+                        "Speech transcription unavailable: {}",
+                        error.chars().take(300).collect::<String>()
+                    ));
+                    continue;
+                }
+            }
+        } else {
+            &*cached_words
+        };
         let first = source_seconds * 1000.0;
         let last = (source_seconds + source_duration) * 1000.0;
         for word in transcript
@@ -496,8 +535,47 @@ fn reuse_transcripts(job: &mut Job, cancel: &AtomicBool) -> Result<(), String> {
             return Err("Cached captions exceed 512 KB; choose a smaller range".into());
         }
         job.request.context = context;
-        job.events
-            .push("Reused existing Viral Clips word timestamps".into());
+        job.events.push(if transcribed {
+            "Transcribed the selected speech locally".into()
+        } else {
+            "Reused existing Viral Clips word timestamps".into()
+        });
     }
     Ok(())
+}
+
+/// Words with source-file timestamps, like the Viral Clips cache.
+fn transcribe_excerpt(
+    path: &Path,
+    seconds: f64,
+    duration: f64,
+    cancel: &Arc<AtomicBool>,
+) -> Result<Vec<vv_core::CaptionWord>, String> {
+    let samples = mono_16k(path, seconds, duration.min(600.0), 0, cancel)?;
+    let model_dir = crate::subtitles::models_dir().ok_or("Cannot locate speech models")?;
+    let preferred = vv_transcribe::Model::preferred();
+    let model = [
+        preferred,
+        vv_transcribe::Model::Turbo,
+        vv_transcribe::Model::Small,
+    ]
+    .into_iter()
+    .find(|model| vv_transcribe::model_present(&model_dir, *model))
+    .unwrap_or(preferred);
+    let progress = Arc::new(vv_transcribe::Progress::default());
+    let model_path = vv_transcribe::ensure_model(&model_dir, model, &progress, cancel)
+        .map_err(|e| format!("{e:?}"))?;
+    let transcript =
+        vv_transcribe::transcribe(model, &model_path, &samples, None, &progress, cancel)
+            .map_err(|e| format!("{e:?}"))?;
+    let offset = (seconds * 1000.0).round() as u32;
+    Ok(transcript
+        .words
+        .into_iter()
+        .map(|word| vv_core::CaptionWord {
+            text: word.text,
+            start_ms: word.start_ms + offset,
+            end_ms: word.end_ms + offset,
+        })
+        .collect())
 }

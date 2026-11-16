@@ -401,3 +401,23 @@ ai_sequence.dismiss:
 ai_sequence.context_no_timeline:
   en: "Add a clip to the timeline to start."
   it: "Aggiungi una clip alla timeline per iniziare."
+
+ai_sequence.placement:
+  en: "Layout"
+  it: "Disposizione"
+
+ai_sequence.placement_fullscreen:
+  en: "Full screen"
+  it: "Tutto schermo"
+
+ai_sequence.placement_pill:
+  en: "Pill"
+  it: "Pillola"
+
+ai_sequence.placement_above_head:
+  en: "Above the head"
+  it: "Sopra la testa"
+
+ai_sequence.placement_overlay_hint:
+  en: "Transparent overlay above the video, for talking heads."
+  it: "Overlay trasparente sopra il video, per i talking head."
