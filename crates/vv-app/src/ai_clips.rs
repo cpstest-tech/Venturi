@@ -607,30 +607,21 @@ fn refine(
         if let Some(w) = end {
             clip.end_ms = w.end_ms;
         }
-        if let Some((index, _)) = words
-            .iter()
-            .enumerate()
-            .filter(|(_, w)| {
-                w.end_ms <= clip.start_ms
-                    && clip.start_ms - w.end_ms <= 1_500
-                    && w.text.ends_with(['.', '?', '!'])
-            })
-            .last()
-            && let Some(next) = words.get(index + 1)
+        if let Some((index, _)) = words.iter().enumerate().rfind(|(_, w)| {
+            w.end_ms <= clip.start_ms
+                && clip.start_ms - w.end_ms <= 1_500
+                && w.text.ends_with(['.', '?', '!'])
+        }) && let Some(next) = words.get(index + 1)
             && next.start_ms < clip.end_ms
             && (clip.end_ms - next.start_ms) >= bounds.0
         {
             clip.start_ms = next.start_ms;
         }
-        if let Some(w) = words
-            .iter()
-            .filter(|w| {
-                w.end_ms >= clip.end_ms
-                    && w.end_ms - clip.end_ms <= 1_500
-                    && w.text.ends_with(['.', '?', '!'])
-            })
-            .next()
-            && w.end_ms - clip.start_ms <= bounds.1
+        if let Some(w) = words.iter().find(|w| {
+            w.end_ms >= clip.end_ms
+                && w.end_ms - clip.end_ms <= 1_500
+                && w.text.ends_with(['.', '?', '!'])
+        }) && w.end_ms - clip.start_ms <= bounds.1
         {
             clip.end_ms = w.end_ms;
         }

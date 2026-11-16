@@ -22,7 +22,8 @@ jobs:
             clang clang-devel \
             wayland-devel libxkbcommon-devel libxkbcommon-x11 libX11-devel \
             vulkan-loader-devel mesa-vulkan-drivers \
-            alsa-lib-devel
+            alsa-lib-devel \
+            cmake gcc-c++ glslc spirv-headers-devel
           # No sound card on the runner: a null device keeps cpal happy.
           printf 'pcm.!default {\n  type null\n}\nctl.!default {\n  type null\n}\n' \
             > /etc/asound.conf

@@ -214,6 +214,7 @@ fn asset_passes(clip: &Clip, frame: FrameIdx, fps: f64, amount: f32) -> Vec<Asse
     passes
 }
 
+#[allow(clippy::large_enum_variant)] // Layers are short-lived and few per frame; boxing buys nothing.
 pub enum OwnedContent {
     Video {
         frame: Arc<FrameYuv420>,

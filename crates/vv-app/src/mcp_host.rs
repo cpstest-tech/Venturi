@@ -635,17 +635,18 @@ impl VenturiApp {
             self.open_timeline(id);
             self.spawn_render_ahead_if_needed(id);
         }
-        if let Some(frame) = set_playhead {
-            if let Some(id) = self.timeline_id {
-                let end = self.session.project.timelines[id].total_frames();
-                self.timeline_state.playhead = frame.clamp(0, (end - 1).max(0));
-                self.timeline_state.reveal_playhead = true;
-            }
+        if let Some(frame) = set_playhead
+            && let Some(id) = self.timeline_id
+        {
+            let end = self.session.project.timelines[id].total_frames();
+            self.timeline_state.playhead = frame.clamp(0, (end - 1).max(0));
+            self.timeline_state.reveal_playhead = true;
         }
-        if let Some(playing) = set_playback {
-            if self.timeline_id.is_some() && self.is_timeline_playing() != playing {
-                self.toggle_playback();
-            }
+        if let Some(playing) = set_playback
+            && self.timeline_id.is_some()
+            && self.is_timeline_playing() != playing
+        {
+            self.toggle_playback();
         }
         if let Some((media, prompt, duration)) = start_ai_clips {
             self.mcp_start_ai_clips(media, prompt, duration);

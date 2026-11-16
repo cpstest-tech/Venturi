@@ -170,14 +170,14 @@ pub(crate) fn set_mixer(session: &mut Session, args: SetMixerArgs) -> ToolResult
         (vv_core::MixerParam::GainDb, args.gain_db),
         (vv_core::MixerParam::Pan, args.pan),
     ] {
-        if let Some(value) = value {
-            if !value.is_finite() || !param.range().contains(&value) {
-                return fail(format!(
-                    "{param:?} must be from {} to {}",
-                    param.range().start(),
-                    param.range().end()
-                ));
-            }
+        if let Some(value) = value
+            && (!value.is_finite() || !param.range().contains(&value))
+        {
+            return fail(format!(
+                "{param:?} must be from {} to {}",
+                param.range().start(),
+                param.range().end()
+            ));
         }
     }
     one_step(session, timeline, None, |s| {

@@ -132,14 +132,13 @@ pub(crate) fn show_bar(
             TimelineCommand::Mirror,
         );
 
-        if has_selection {
-            if ui
+        if has_selection
+            && ui
                 .add_enabled(can_auto_cut, egui::Button::new(t!("auto_cut.title")))
                 .on_disabled_hover_text(t!("auto_cut.select_source"))
                 .clicked()
-            {
-                state.commands.push(TimelineCommand::AutoCut);
-            }
+        {
+            state.commands.push(TimelineCommand::AutoCut);
         }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
