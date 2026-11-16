@@ -879,3 +879,20 @@ fn provider_duration_is_parsed_only_when_positive() {
     assert_eq!(parse_duration(r#"{"duration_seconds":"x"}"#), None);
     assert_eq!(parse_duration("{}"), None);
 }
+
+#[test]
+fn ai_chosen_length_is_clamped_between_one_second_and_the_maximum() {
+    let mut request = request();
+    request.auto_duration = true;
+    for (seconds, frames) in [(4.0, 120), (0.2, 30), (99.0, 150)] {
+        request.composition.frames = 150;
+        queue::apply_auto_duration(&mut request, Some(seconds));
+        assert_eq!(request.composition.frames, frames, "{seconds} s");
+    }
+    request.composition.frames = 150;
+    queue::apply_auto_duration(&mut request, None);
+    assert_eq!(request.composition.frames, 150);
+    request.auto_duration = false;
+    queue::apply_auto_duration(&mut request, Some(2.0));
+    assert_eq!(request.composition.frames, 150);
+}

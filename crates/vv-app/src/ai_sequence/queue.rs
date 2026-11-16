@@ -228,14 +228,7 @@ fn execute(
         if let Some(transparent) = output.transparent {
             job.request.composition.transparent = transparent;
         }
-        if job.request.auto_duration
-            && let Some(seconds) = output.duration_seconds
-        {
-            let composition = &mut job.request.composition;
-            let min = composition.fps.round() as u32;
-            composition.frames = ((seconds * composition.fps).round() as u32)
-                .clamp(min, composition.frames.max(min));
-        }
+        apply_auto_duration(&mut job.request, output.duration_seconds);
         source = output.source;
         job.source = Some(source.clone());
         if let Some(usage) = &output.usage {
@@ -266,4 +259,15 @@ fn execute(
         "Composition failed after {} attempts: {diagnostic}",
         job.request.limits.max_attempts
     ))
+}
+
+/// Fits the composition to the length the model chose: 1 s up to the original maximum.
+pub fn apply_auto_duration(request: &mut super::Request, seconds: Option<f64>) {
+    let Some(seconds) = seconds.filter(|_| request.auto_duration) else {
+        return;
+    };
+    let composition = &mut request.composition;
+    let min = composition.fps.round() as u32;
+    composition.frames =
+        ((seconds * composition.fps).round() as u32).clamp(min, composition.frames.max(min));
 }
