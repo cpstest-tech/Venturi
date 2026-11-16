@@ -1305,6 +1305,9 @@ fn an_image_shows_its_one_matte_on_every_frame() {
         Rational::one(),
     );
     clip.effects.remove_background = true;
-    assert_eq!(background_matte(&project, &clip, 200).as_deref(), Some(&matte));
+    assert_eq!(
+        background_matte(&project, &clip, 200).as_deref(),
+        Some(&matte)
+    );
     let _ = std::fs::remove_dir_all(vv_media::matte::matte_dir(hash));
 }
