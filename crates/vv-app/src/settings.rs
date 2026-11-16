@@ -748,6 +748,14 @@ pub const AUDIO_BUDGET_MB: std::ops::RangeInclusive<u32> = 100..=32000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
+    pub ai_provider: crate::ai_sequence::Provider,
+    pub ai_model: String,
+    pub ai_provider_models: BTreeMap<String, String>,
+    pub ai_runtime: crate::ai_sequence::Runtime,
+    pub ai_allow_api: bool,
+    pub ai_free_only: bool,
+    pub ai_free_key_identity: Option<String>,
+    pub ai_limits: crate::ai_sequence::Limits,
     pub keymap: Keymap,
     pub language: Language,
     /// Kinetic scrolling (inertia after a touchpad swipe) on the timeline.
@@ -855,6 +863,14 @@ pub struct Preset<P> {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            ai_provider: Default::default(),
+            ai_model: "gemini-4-hydrogen".into(),
+            ai_provider_models: BTreeMap::new(),
+            ai_runtime: Default::default(),
+            ai_allow_api: false,
+            ai_free_only: true,
+            ai_free_key_identity: None,
+            ai_limits: Default::default(),
             keymap: Keymap::default(),
             language: Language::default(),
             kinetic_scroll: true,
@@ -915,6 +931,14 @@ impl Settings {
 
 #[derive(Serialize, Deserialize, Default)]
 struct SettingsFile {
+    ai_provider: Option<crate::ai_sequence::Provider>,
+    ai_model: Option<String>,
+    ai_provider_models: Option<BTreeMap<String, String>>,
+    ai_runtime: Option<crate::ai_sequence::Runtime>,
+    ai_allow_api: Option<bool>,
+    ai_free_only: Option<bool>,
+    ai_free_key_identity: Option<String>,
+    ai_limits: Option<crate::ai_sequence::Limits>,
     /// `shortcuts` written against these defaults; the older ones are dropped.
     #[serde(default)]
     keymap_version: Option<u32>,
@@ -1112,6 +1136,17 @@ impl Settings {
             }
         };
         let mut settings = Self::default();
+        settings.ai_provider = file.ai_provider.unwrap_or_default();
+        settings.ai_provider_models = file.ai_provider_models.unwrap_or_default();
+        settings.ai_model = file.ai_model.unwrap_or_else(|| "gemini-4-hydrogen".into());
+        settings.ai_runtime = file.ai_runtime.unwrap_or_default();
+        settings.ai_allow_api = file.ai_allow_api.unwrap_or(false);
+        settings.ai_free_only = file.ai_free_only.unwrap_or(true);
+        settings.ai_free_key_identity = file.ai_free_key_identity;
+        settings.ai_limits = file
+            .ai_limits
+            .filter(|limits| limits.validate().is_ok())
+            .unwrap_or_default();
         settings.language = file
             .language
             .as_deref()
@@ -1227,6 +1262,14 @@ impl Settings {
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let file = SettingsFile {
+            ai_provider: Some(self.ai_provider),
+            ai_model: Some(self.ai_model.clone()),
+            ai_provider_models: Some(self.ai_provider_models.clone()),
+            ai_runtime: Some(self.ai_runtime.clone()),
+            ai_allow_api: Some(self.ai_allow_api),
+            ai_free_only: Some(self.ai_free_only),
+            ai_free_key_identity: self.ai_free_key_identity.clone(),
+            ai_limits: Some(self.ai_limits.clone()),
             keymap_version: Some(KEYMAP_VERSION),
             shortcuts: self
                 .keymap
@@ -1329,3 +1372,45 @@ fn entry_values<T: Serialize>(entries: &[T]) -> Vec<serde_json::Value> {
 #[cfg(test)]
 #[path = "tests/settings.rs"]
 mod tests;
+
+impl Settings {
+    pub fn remember_ai_model_on_provider_change(&mut self, previous: crate::ai_sequence::Provider) {
+        if previous == self.ai_provider {
+            return;
+        }
+        self.ai_provider_models
+            .insert(previous.id().into(), self.ai_model.clone());
+        self.ai_model = self
+            .ai_provider_models
+            .get(self.ai_provider.id())
+            .cloned()
+            .unwrap_or_else(|| {
+                if self.ai_provider == crate::ai_sequence::Provider::Gemini {
+                    "gemini-4-hydrogen".into()
+                } else {
+                    String::new()
+                }
+            });
+    }
+}
+
+impl Settings {
+    pub fn sequence_api_access(&self) -> crate::ai_sequence::ApiAccess {
+        use crate::ai_sequence::ApiAccess;
+        let Ok(key) = crate::gemini::configured_key() else {
+            return ApiAccess::Disabled;
+        };
+        let key_identity = crate::gemini::key_identity(&key);
+        if self.ai_free_only {
+            if self.ai_free_key_identity.as_deref() == Some(key_identity.as_str()) {
+                ApiAccess::FreeProject { key_identity }
+            } else {
+                ApiAccess::Disabled
+            }
+        } else if self.ai_allow_api {
+            ApiAccess::ConfiguredBilling { key_identity }
+        } else {
+            ApiAccess::Disabled
+        }
+    }
+}

@@ -7,6 +7,9 @@ extern crate rust_i18n;
 rust_i18n::i18n!("locales", fallback = "en");
 
 mod ai_clips;
+mod ai_context;
+mod ai_sequence;
+mod ai_sequence_ui;
 mod app_menu;
 mod auto_cut;
 mod auto_cut_ui;
@@ -22,6 +25,7 @@ mod first_media;
 mod fonts;
 mod forced_relink_dialog;
 mod fx_library;
+mod gemini;
 mod grade_panel;
 mod home;
 mod hw_decode;
@@ -598,6 +602,7 @@ struct VenturiApp {
     subtitles: subtitles::SubtitleState,
     auto_cut: auto_cut::State,
     ai_clips: ai_clips::State,
+    ai_sequences: ai_sequence_ui::State,
     cover_picker: Option<cover::CoverPicker>,
     /// Name of the project reopened after a crash, until acknowledged.
     recovered_project: Option<String>,
@@ -740,6 +745,7 @@ impl Default for VenturiApp {
             subtitles: subtitles::SubtitleState::default(),
             auto_cut: auto_cut::State::default(),
             ai_clips: ai_clips::State::default(),
+            ai_sequences: ai_sequence_ui::State::default(),
             cover_picker: None,
             recovered_project: None,
         }
@@ -4248,6 +4254,7 @@ impl VenturiApp {
         self.handle_close_request(&ui.ctx().clone());
         self.poll_pending_dialog(&ui.ctx().clone());
         self.poll_project_loading(&ui.ctx().clone());
+        self.poll_ai_sequences(ui.ctx());
         if self.screen == Screen::Home {
             self.auto_cut.modal = None;
             self.home_ui(ui);
@@ -4322,6 +4329,10 @@ impl VenturiApp {
 
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.horizontal(|ui| {
+                if self.ai_activity() > 0 {
+                    ui.spinner();
+                    ui.label(t!("ai_sequence.active_tasks", count = self.ai_activity()));
+                }
                 if let Some(err) = &self.project_error {
                     ui.separator();
                     ui.colored_label(theme::ERROR, err);
@@ -4782,6 +4793,7 @@ impl VenturiApp {
                 .as_ref()
                 .map(|audio| audio.clip_failures(&self.session.project, timeline_id))
                 .unwrap_or_default();
+            self.timeline_state.ai_placeholders = self.ai_placeholders();
             let (drop, enter_compound) = timeline_ui::show_timeline(
                 ui,
                 &mut self.session.project,

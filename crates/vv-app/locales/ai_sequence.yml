@@ -1,0 +1,387 @@
+_version: 2
+
+ai_models.free_tier:
+  en: "Free Tier listed by Google (checked %{date}). Billing and active quotas depend on your API project."
+  it: "Free Tier indicato da Google (verificato il %{date}). Fatturazione e quote attive dipendono dal progetto API."
+ai_models.paid_only:
+  en: "No Free Tier listed by Google (checked %{date}); this model requires paid API access."
+  it: "Nessun Free Tier indicato da Google (verificato il %{date}); questo modello richiede accesso API a pagamento."
+ai_models.unknown:
+  en: "Free Tier status is not verified for this model. Check current Google pricing and your API project before sending a request."
+  it: "Free Tier non verificato per questo modello. Controlla i prezzi Google attuali e il progetto API prima di inviare richieste."
+
+ai_sequence.title:
+  en: "AI Infographics"
+  it: "Infografica AI"
+
+ai_sequence.intro:
+  en: "Describe what to show. The AI designs an animation from the selected clip and places it on the timeline."
+  it: "Descrivi cosa vuoi mostrare. L'AI crea un'animazione a partire dalla clip selezionata e la mette in timeline."
+
+ai_sequence.prompt_hint:
+  en: "What should the animation show? e.g. “Animated bar chart: sales grow from 20% to 80%”"
+  it: "Cosa deve mostrare l'animazione? Es. «Grafico a barre animato: le vendite salgono dal 20% all'80%»"
+
+ai_sequence.marks:
+  en: "Use the In/Out range instead"
+  it: "Usa l'intervallo In/Out"
+
+ai_sequence.transparent:
+  en: "Transparent"
+  it: "Sfondo trasparente"
+
+ai_sequence.style:
+  en: "Style"
+  it: "Stile"
+
+ai_sequence.runtime_directory:
+  en: "Runtime directory"
+  it: "Cartella del runtime"
+
+ai_sequence.node:
+  en: "Node executable"
+  it: "Eseguibile Node"
+
+ai_sequence.browser:
+  en: "Chromium inside runtime"
+  it: "Chromium nel runtime"
+
+ai_sequence.new_composition:
+  en: "Start a new composition instead"
+  it: "Crea invece una nuova composizione"
+
+ai_sequence.generate:
+  en: "Generate"
+  it: "Genera"
+
+ai_sequence.save_first:
+  en: "Save the project first: AI results are stored next to it."
+  it: "Salva prima il progetto: i risultati AI vengono archiviati accanto ad esso."
+
+ai_sequence.jobs:
+  en: "AI Jobs and revision history"
+  it: "Attività AI e cronologia delle versioni"
+
+ai_sequence.cancelling:
+  en: "Cancellation requested; waiting for the current operation to stop"
+  it: "Annullamento richiesto; attendo la conclusione dell'operazione corrente"
+
+ai_sequence.cancel:
+  en: "Cancel"
+  it: "Annulla"
+
+ai_sequence.error_details:
+  en: "Error details"
+  it: "Dettagli dell'errore"
+
+ai_sequence.provider_events:
+  en: "Provider events"
+  it: "Eventi del provider"
+
+ai_sequence.usage_requests:
+  en: "Reported token usage per code request"
+  it: "Token riportati per ogni richiesta di codice"
+
+ai_sequence.usage:
+  en: "Reported token usage"
+  it: "Consumo di token riportato"
+
+ai_sequence.import:
+  en: "Import result"
+  it: "Importa risultato"
+
+ai_sequence.revise:
+  en: "Revise source"
+  it: "Modifica il sorgente"
+
+ai_sequence.retry:
+  en: "Retry as new job"
+  it: "Riprova come nuova attività"
+
+ai_sequence.revision_hint:
+  en: "Describe changes to this composition"
+  it: "Descrivi le modifiche alla composizione"
+
+ai_sequence.generate_revision:
+  en: "Generate revision"
+  it: "Genera revisione"
+
+ai_sequence.fresh_session:
+  en: "Start a fresh provider session"
+  it: "Avvia una nuova sessione del provider"
+
+ai_sequence.revision_provider:
+  en: "Revisions use the provider and model selected in Generate AI Sequence."
+  it: "Le revisioni usano il provider e il modello scelti in Genera sequenza AI."
+
+ai_sequence.preview:
+  en: "Preview"
+  it: "Anteprima"
+
+ai_sequence.apply_version:
+  en: "Apply this version"
+  it: "Applica questa versione"
+
+ai_sequence.suggestions:
+  en: "AI Visual Suggestions"
+  it: "Suggerimenti visivi AI"
+
+ai_sequence.suggestions_hint:
+  en: "Analyze saved captions only when requested. Review suggestions before generating."
+  it: "Analizza il contesto solo su richiesta. Esamina i suggerimenti prima di generare."
+
+ai_sequence.analysis_model:
+  en: "Analysis model (required for Gemini)"
+  it: "Modello di analisi (obbligatorio per Gemini)"
+
+ai_sequence.analyzing:
+  en: "Analyzing selected captions"
+  it: "Analisi del contesto selezionato"
+
+ai_sequence.cancel_analysis:
+  en: "Cancel analysis"
+  it: "Annulla analisi"
+
+ai_sequence.refresh_analysis:
+  en: "Ignore saved analysis and make a new request"
+  it: "Ignora l'analisi salvata e invia una nuova richiesta"
+
+ai_sequence.analyze:
+  en: "Analyze selected range"
+  it: "Analizza l'intervallo selezionato"
+
+ai_sequence.analysis_usage:
+  en: "Analysis token usage"
+  it: "Token dell'analisi"
+
+ai_sequence.generate_selected:
+  en: "Generate selected suggestions"
+  it: "Genera i suggerimenti selezionati"
+
+ai_sequence.discard:
+  en: "Discard unselected"
+  it: "Scarta i non selezionati"
+
+ai_sequence.other_projects:
+  en: "Jobs in other projects"
+  it: "Attività in altri progetti"
+
+ai_sequence.open_project:
+  en: "Open project"
+  it: "Apri progetto"
+
+ai_sequence.detect:
+  en: "Detect providers again"
+  it: "Rileva nuovamente i provider"
+
+ai_sequence.default_provider:
+  en: "Default generation provider"
+  it: "Provider predefinito per la generazione"
+
+ai_sequence.settings_model:
+  en: "Model (empty uses the CLI default)"
+  it: "Modello (vuoto = predefinito della CLI)"
+
+ai_sequence.list_models:
+  en: "List Gemini models accessible to this key"
+  it: "Elenca i modelli Gemini accessibili con questa chiave"
+
+ai_sequence.listing_hint:
+  en: "Listing confirms API support, not free billing eligibility."
+  it: "L'elenco conferma il supporto API, non la disponibilità gratuita per il progetto."
+
+ai_sequence.hydrogen_hint:
+  en: "Gemini 4 Hydrogen: gemini-4-hydrogen. Availability and free quotas depend on your API project."
+  it: "Gemini 4 Hydrogen: gemini-4-hydrogen. Disponibilità e quote gratuite dipendono dal progetto API."
+
+ai_sequence.pricing_tiers:
+  en: "Gemini pricing and Free Tier"
+  it: "Prezzi Gemini e Free Tier"
+
+ai_sequence.quotas:
+  en: "Check active project quotas"
+  it: "Controlla le quote attive del progetto"
+
+ai_sequence.attempts:
+  en: "Code generation attempts (including repairs)"
+  it: "Tentativi di generazione del codice (incluse le correzioni)"
+
+ai_sequence.provider_timeout:
+  en: "Timeout per provider request (seconds)"
+  it: "Timeout per richiesta al provider (secondi)"
+
+ai_sequence.render_timeout:
+  en: "Local render timeout (seconds)"
+  it: "Timeout del rendering locale (secondi)"
+
+ai_sequence.runtime:
+  en: "Local Remotion runtime (Linux + bubblewrap)"
+  it: "Runtime Remotion locale (Linux e bubblewrap)"
+
+ai_sequence.free_only:
+  en: "Free-only Gemini models"
+  it: "Solo modelli Gemini con Free Tier"
+
+ai_sequence.confirm_unbilled:
+  en: "I verified that billing is disabled for the project of this API key"
+  it: "Ho verificato che la fatturazione è disattivata per il progetto di questa chiave API"
+
+ai_sequence.billing_limit:
+  en: "An API key cannot report billing status. Free-only mode requires a project with billing disabled; changing the key invalidates this confirmation. No automatic model fallback."
+  it: "La chiave API non indica lo stato della fatturazione. La modalità gratuita richiede un progetto con fatturazione disattivata; cambiando chiave occorre confermarlo nuovamente. Nessun cambio automatico di modello."
+
+ai_sequence.allow_billing:
+  en: "Allow Gemini requests using this API project's billing configuration (may incur charges)"
+  it: "Consenti richieste Gemini con la fatturazione di questo progetto API (potrebbero avere un costo)"
+
+ai_sequence.access_disabled:
+  en: "Enable Gemini access in AI Providers: confirm an API project with billing disabled for free-only use, or explicitly allow its billing configuration"
+  it: "Abilita Gemini nei Provider AI: conferma un progetto senza fatturazione per la modalità gratuita, oppure autorizza esplicitamente la sua configurazione di fatturazione"
+
+ai_sequence.free_refused:
+  en: "Free-only mode refuses this model because its Free Tier availability is not verified. Choose Gemini 4 Hydrogen or explicitly change the billing policy."
+  it: "La modalità gratuita rifiuta questo modello perché il Free Tier non è verificato. Scegli Gemini 4 Hydrogen o modifica esplicitamente la modalità di fatturazione."
+
+ai_sequence.key_changed:
+  en: "The Gemini key changed after this job was queued. Review the AI provider billing settings and retry."
+  it: "La chiave Gemini è cambiata dopo l'inserimento in coda. Controlla la fatturazione nelle impostazioni dei provider AI e riprova."
+
+ai_sequence.active_tasks:
+  en: "AI tasks: %{count}"
+  it: "Attività AI: %{count}"
+
+ai_sequence.current_revision:
+  en: "Current revision: %{id}"
+  it: "Versione corrente: %{id}"
+
+ai_sequence.revising:
+  en: "Revising %{id}; the previous version remains available"
+  it: "Revisione di %{id}; la versione precedente resta disponibile"
+
+ai_sequence.stage_queued:
+  en: "Queued"
+  it: "In coda"
+
+ai_sequence.stage_preparing:
+  en: "Preparing"
+  it: "Preparazione"
+
+ai_sequence.stage_analyzing:
+  en: "Analyzing"
+  it: "Analisi"
+
+ai_sequence.stage_generating:
+  en: "Generating"
+  it: "Generazione"
+
+ai_sequence.stage_validating:
+  en: "Validating"
+  it: "Validazione"
+
+ai_sequence.stage_rendering:
+  en: "Rendering"
+  it: "Rendering"
+
+ai_sequence.stage_completed:
+  en: "Completed"
+  it: "Completato"
+
+ai_sequence.stage_failed:
+  en: "Failed"
+  it: "Errore"
+
+ai_sequence.stage_cancelled:
+  en: "Cancelled"
+  it: "Annullato"
+
+ai_sequence.missing_sources:
+  en: "This media was generated with AI, but its source archive is missing or unreadable. Restore the project's .ai-sequences directory to edit it. The existing video remains usable."
+  it: "Questo media è stato generato con AI, ma l'archivio dei sorgenti manca o non è leggibile. Ripristina la cartella .ai-sequences del progetto per modificarlo. Il video esistente resta utilizzabile."
+
+ai_sequence.tab:
+  en: "AI Infographic"
+  it: "Infografica AI"
+
+ai_sequence.context_title:
+  en: "Based on"
+  it: "Basata su"
+
+ai_sequence.context_clips:
+  en: "%{count} selected clip(s)"
+  it: "%{count} clip selezionata/e"
+
+ai_sequence.context_marks:
+  en: "In/Out range"
+  it: "Intervallo In/Out"
+
+ai_sequence.context_words:
+  en: "%{count} transcribed words will be used"
+  it: "%{count} parole trascritte verranno usate"
+
+ai_sequence.context_none:
+  en: "No clip selected: the animation will be free. Select a clip on the timeline to base it on its content."
+  it: "Nessuna clip selezionata: l'animazione sarà libera. Seleziona una clip in timeline per basarla sul suo contenuto."
+
+ai_sequence.chip_frames:
+  en: "Video frames"
+  it: "Fotogrammi video"
+
+ai_sequence.chip_audio:
+  en: "Audio"
+  it: "Audio"
+
+ai_sequence.chip_audio_hint:
+  en: "Send audio excerpts too"
+  it: "Invia anche estratti audio"
+
+ai_sequence.chip_audio_gemini:
+  en: "Audio is only used with Gemini"
+  it: "L'audio viene usato solo con Gemini"
+
+ai_sequence.style_auto:
+  en: "Automatic"
+  it: "Automatico"
+
+ai_sequence.style_minimal:
+  en: "Minimal"
+  it: "Minimale"
+
+ai_sequence.style_bold:
+  en: "Bold"
+  it: "Audace"
+
+ai_sequence.style_technical:
+  en: "Technical"
+  it: "Tecnico"
+
+ai_sequence.style_corporate:
+  en: "Corporate"
+  it: "Aziendale"
+
+ai_sequence.length:
+  en: "Length"
+  it: "Durata"
+
+ai_sequence.length_auto:
+  en: "AI decides"
+  it: "Decide l'AI"
+
+ai_sequence.length_clip:
+  en: "Like the clip"
+  it: "Come la clip"
+
+ai_sequence.length_custom:
+  en: "Custom"
+  it: "Personalizzata"
+
+ai_sequence.default_model:
+  en: "default model"
+  it: "modello predefinito"
+
+ai_sequence.change_provider:
+  en: "Change provider and model in AI settings"
+  it: "Cambia provider e modello nelle impostazioni AI"
+
+ai_sequence.placeholder:
+  en: "AI generating…"
+  it: "Generazione AI…"

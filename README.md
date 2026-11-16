@@ -20,6 +20,7 @@ Built for editing, picture and sound, with timelines that travel to and from oth
 [Discord](https://discord.gg/3v2xjXFnZv) •
 [Features](#features) •
 [Build from source](docs/BUILDING.md) •
+[AI Sequence Generator](docs/AI_SEQUENCES.md) •
 [Architecture](ARCHITECTURE.md) •
 [Contributing](#contributing)
 

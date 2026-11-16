@@ -16,15 +16,17 @@ pub enum Section {
     Playback,
     Recording,
     Integrations,
+    AiProviders,
     Shortcuts,
 }
 
 impl Section {
-    const ALL: [Section; 5] = [
+    const ALL: [Section; 6] = [
         Section::General,
         Section::Playback,
         Section::Recording,
         Section::Integrations,
+        Section::AiProviders,
         Section::Shortcuts,
     ];
 
@@ -34,6 +36,7 @@ impl Section {
             Section::Playback => t!("settings.section_playback"),
             Section::Recording => t!("settings.section_recording"),
             Section::Integrations => t!("settings.section_integrations"),
+            Section::AiProviders => t!("settings.section_ai"),
             Section::Shortcuts => t!("settings.section_shortcuts"),
         }
     }
@@ -60,6 +63,11 @@ pub struct SettingsDialog {
     /// Lives in its own owner-only file, never in the settings.
     gemini_key: String,
     gemini_notice: Option<String>,
+    ai_models: Vec<String>,
+    ai_model_request: Option<std::sync::mpsc::Receiver<Result<Vec<String>, String>>>,
+    ai_model_error: Option<String>,
+    ai_probe: Option<crate::ai_sequence::availability::Probe>,
+    ai_status: Vec<(crate::ai_sequence::Provider, String)>,
 }
 
 pub struct SettingsDialogResponse {
@@ -81,6 +89,11 @@ impl SettingsDialog {
             recording_formats: AudioFileFormat::available(),
             gemini_key: crate::ai_clips::load_key().unwrap_or_default(),
             gemini_notice: None,
+            ai_models: Vec::new(),
+            ai_model_request: None,
+            ai_model_error: None,
+            ai_probe: None,
+            ai_status: Vec::new(),
         }
     }
 
@@ -99,6 +112,7 @@ impl SettingsDialog {
         response.changed |= self.capture_key(ctx, &mut settings.keymap);
         egui::Window::new(t!("settings.title"))
             .id(egui::Id::new("settings_window"))
+            .vscroll(true)
             .open(&mut response.open)
             .collapsible(false)
             .default_size([640.0, 480.0])
@@ -138,6 +152,14 @@ impl SettingsDialog {
                                 &mut self.gemini_notice,
                             );
                         }
+                        Section::AiProviders => {
+                            response.changed |= self.ai_section(ui, settings);
+                            response.gemini_key_changed |= gemini_key_section(
+                                ui,
+                                &mut self.gemini_key,
+                                &mut self.gemini_notice,
+                            );
+                        }
                         Section::Shortcuts => {
                             response.changed |= self.shortcuts_section(ui, &mut settings.keymap);
                         }
@@ -148,6 +170,135 @@ impl SettingsDialog {
             self.capture = None;
         }
         response
+    }
+
+    fn ai_section(&mut self, ui: &mut egui::Ui, settings: &mut Settings) -> bool {
+        use crate::ai_sequence::{Provider, availability::Probe};
+        if self.ai_status.is_empty() && self.ai_probe.is_none() {
+            self.ai_probe = Some(Probe::start());
+        }
+        if let Some(statuses) = self.ai_probe.as_ref().and_then(|probe| probe.poll()) {
+            self.ai_status = statuses;
+            self.ai_probe = None;
+        }
+        if self.ai_probe.is_some() {
+            ui.spinner();
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(150));
+        }
+        for (provider, status) in &self.ai_status {
+            ui.label(format!("{}: {status}", provider.label()));
+        }
+        if ui.button(t!("ai_sequence.detect")).clicked() {
+            self.ai_probe = Some(Probe::start());
+        }
+        let mut changed = false;
+        ui.separator();
+        ui.label(t!("ai_sequence.default_provider"));
+        let previous_provider = settings.ai_provider;
+        egui::ComboBox::from_id_salt("ai_default_provider")
+            .selected_text(settings.ai_provider.label())
+            .show_ui(ui, |ui| {
+                for provider in Provider::ALL {
+                    changed |= ui
+                        .selectable_value(&mut settings.ai_provider, provider, provider.label())
+                        .changed();
+                }
+            });
+        settings.remember_ai_model_on_provider_change(previous_provider);
+        ui.label(t!("ai_sequence.settings_model"));
+        changed |= ui.text_edit_singleline(&mut settings.ai_model).changed();
+        if let Some(result) = self
+            .ai_model_request
+            .as_ref()
+            .and_then(|rx| rx.try_recv().ok())
+        {
+            self.ai_model_request = None;
+            match result {
+                Ok(models) => {
+                    self.ai_models = models;
+                    self.ai_model_error = None;
+                }
+                Err(error) => self.ai_model_error = Some(error),
+            }
+        }
+        if self.ai_model_request.is_some() {
+            ui.spinner();
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(150));
+        } else if ui.button(t!("ai_sequence.list_models")).clicked() {
+            let (tx, rx) = std::sync::mpsc::channel();
+            self.ai_model_request = Some(rx);
+            std::thread::spawn(move || {
+                let _ = tx.send(crate::gemini::list_models());
+            });
+        }
+        if !self.ai_models.is_empty()
+            && settings.ai_provider == crate::ai_sequence::Provider::Gemini
+        {
+            egui::ComboBox::from_id_salt("gemini_accessible_models")
+                .selected_text(&settings.ai_model)
+                .show_ui(ui, |ui| {
+                    for model in &self.ai_models {
+                        changed |= ui
+                            .selectable_value(&mut settings.ai_model, model.clone(), model)
+                            .changed();
+                    }
+                });
+            ui.small(t!("ai_sequence.listing_hint"));
+        }
+        if let Some(error) = &self.ai_model_error {
+            ui.colored_label(crate::theme::ERROR, error);
+        }
+        ui.label(t!("ai_sequence.hydrogen_hint"));
+        if settings.ai_provider == crate::ai_sequence::Provider::Gemini {
+            ui.label(crate::gemini::free_tier_label(&settings.ai_model));
+        }
+        changed |= sequence_api_section(ui, settings);
+        ui.hyperlink_to(
+            t!("ai_sequence.pricing_tiers"),
+            "https://aistudio.google.com/docs/pricing",
+        );
+        ui.hyperlink_to(
+            t!("ai_sequence.quotas"),
+            "https://aistudio.google.com/rate-limit",
+        );
+        ui.separator();
+        ui.label(t!("ai_sequence.attempts"));
+        changed |= ui
+            .add(egui::Slider::new(
+                &mut settings.ai_limits.max_attempts,
+                1..=5,
+            ))
+            .changed();
+        ui.label(t!("ai_sequence.provider_timeout"));
+        changed |= ui
+            .add(
+                egui::DragValue::new(&mut settings.ai_limits.provider_timeout_secs)
+                    .range(10..=3600),
+            )
+            .changed();
+        ui.label(t!("ai_sequence.render_timeout"));
+        changed |= ui
+            .add(egui::DragValue::new(&mut settings.ai_limits.render_timeout_secs).range(10..=3600))
+            .changed();
+        ui.label(t!("ai_sequence.runtime"));
+        for (label, path) in [
+            (
+                t!("ai_sequence.runtime_directory"),
+                &mut settings.ai_runtime.directory,
+            ),
+            (t!("ai_sequence.node"), &mut settings.ai_runtime.node),
+            (t!("ai_sequence.browser"), &mut settings.ai_runtime.browser),
+        ] {
+            ui.label(label);
+            let mut text = path.to_string_lossy().into_owned();
+            if ui.text_edit_singleline(&mut text).changed() {
+                *path = text.into();
+                changed = true;
+            }
+        }
+        changed
     }
 
     fn capture_key(&mut self, ctx: &egui::Context, keymap: &mut Keymap) -> bool {
@@ -678,5 +829,33 @@ fn playback_section(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
         }
         ui.label(egui::RichText::new(t!("settings.proxy_quality_note")).weak());
     });
+    changed
+}
+
+pub(crate) fn sequence_api_section(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
+    let mut changed = ui
+        .checkbox(&mut settings.ai_free_only, t!("ai_sequence.free_only"))
+        .changed();
+    if settings.ai_free_only {
+        let identity = crate::gemini::configured_key()
+            .ok()
+            .map(|key| crate::gemini::key_identity(&key));
+        let mut confirmed = identity.is_some() && identity == settings.ai_free_key_identity;
+        if ui
+            .add_enabled(
+                identity.is_some(),
+                egui::Checkbox::new(&mut confirmed, t!("ai_sequence.confirm_unbilled")),
+            )
+            .changed()
+        {
+            settings.ai_free_key_identity = if confirmed { identity } else { None };
+            changed = true;
+        }
+        ui.small(t!("ai_sequence.billing_limit"));
+    } else {
+        changed |= ui
+            .checkbox(&mut settings.ai_allow_api, t!("ai_sequence.allow_billing"))
+            .changed();
+    }
     changed
 }

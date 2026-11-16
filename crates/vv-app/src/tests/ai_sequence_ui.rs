@@ -1,0 +1,244 @@
+use super::*;
+
+fn app() -> VenturiApp {
+    let mut app = VenturiApp::default();
+    let clip = vv_core::Clip::from_source_range(
+        vv_core::ClipId(1),
+        vv_core::ClipSource::SolidColor,
+        0,
+        300,
+        0,
+        vv_core::Rational::one(),
+    );
+    let mut track = vv_core::Track::new(vv_core::TrackKind::Video);
+    track.clips.push(clip);
+    let timeline = app.session.project.timelines.insert(vv_core::Timeline {
+        name: "Context".into(),
+        fps: vv_core::Rational::new(30, 1),
+        resolution: (1920, 1080),
+        tracks: vec![track],
+        markers: Vec::new(),
+        master: Default::default(),
+    });
+    app.timeline_id = Some(timeline);
+    app.session.project.captions.insert(
+        timeline,
+        vv_core::Captions {
+            words: vec![
+                vv_core::CaptionWord {
+                    start_ms: 500,
+                    end_ms: 1000,
+                    text: "Before".into(),
+                },
+                vv_core::CaptionWord {
+                    start_ms: 2500,
+                    end_ms: 4500,
+                    text: "CPU".into(),
+                },
+            ],
+            ..Default::default()
+        },
+    );
+    app
+}
+
+#[test]
+fn timeline_in_out_range_works_without_selected_clips_and_crops_caption_times() {
+    let mut app = app();
+    app.ai_sequences.use_marks = true;
+    app.ai_sequences.length = Length::Clip;
+    app.ai_sequences.style = "Minimal purple diagrams".into();
+    app.timeline_state.export_marks.mark_in = Some(60);
+    app.timeline_state.export_marks.mark_out = Some(120);
+    let request = app.ai_sequence_request().unwrap();
+    assert_eq!(request.start, 60);
+    assert_eq!(request.composition.frames, 60);
+    assert_eq!(request.style, "Minimal purple diagrams");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&request.context).unwrap(),
+        serde_json::json!([{"start_ms":500,"end_ms":2000,"text":"CPU"}])
+    );
+    assert_eq!(request.anchor_clip, Some(1));
+}
+
+#[test]
+fn prompt_only_does_not_send_project_captions_or_media() {
+    let mut app = app();
+    app.timeline_state.playhead = 75;
+    let request = app.ai_sequence_request().unwrap();
+    assert_eq!(request.context, "[]");
+    assert!(request.media.is_empty());
+}
+
+#[test]
+fn ai_interface_strings_are_available_in_every_locale() {
+    for key in [
+        "ai_sequence.title",
+        "ai_sequence.intro",
+        "ai_sequence.prompt_hint",
+        "ai_sequence.marks",
+        "ai_sequence.transparent",
+        "ai_sequence.style",
+        "ai_sequence.runtime_directory",
+        "ai_sequence.node",
+        "ai_sequence.browser",
+        "ai_sequence.new_composition",
+        "ai_sequence.generate",
+        "ai_sequence.save_first",
+        "ai_sequence.jobs",
+        "ai_sequence.cancelling",
+        "ai_sequence.cancel",
+        "ai_sequence.error_details",
+        "ai_sequence.provider_events",
+        "ai_sequence.usage_requests",
+        "ai_sequence.usage",
+        "ai_sequence.import",
+        "ai_sequence.revise",
+        "ai_sequence.retry",
+        "ai_sequence.revision_hint",
+        "ai_sequence.generate_revision",
+        "ai_sequence.fresh_session",
+        "ai_sequence.revision_provider",
+        "ai_sequence.preview",
+        "ai_sequence.apply_version",
+        "ai_sequence.suggestions",
+        "ai_sequence.suggestions_hint",
+        "ai_sequence.analysis_model",
+        "ai_sequence.analyzing",
+        "ai_sequence.cancel_analysis",
+        "ai_sequence.refresh_analysis",
+        "ai_sequence.analyze",
+        "ai_sequence.analysis_usage",
+        "ai_sequence.generate_selected",
+        "ai_sequence.discard",
+        "ai_sequence.other_projects",
+        "ai_sequence.open_project",
+        "ai_sequence.detect",
+        "ai_sequence.default_provider",
+        "ai_sequence.settings_model",
+        "ai_sequence.list_models",
+        "ai_sequence.listing_hint",
+        "ai_sequence.hydrogen_hint",
+        "ai_sequence.pricing_tiers",
+        "ai_sequence.quotas",
+        "ai_sequence.attempts",
+        "ai_sequence.provider_timeout",
+        "ai_sequence.render_timeout",
+        "ai_sequence.runtime",
+        "ai_sequence.free_only",
+        "ai_sequence.confirm_unbilled",
+        "ai_sequence.billing_limit",
+        "ai_sequence.allow_billing",
+        "ai_sequence.access_disabled",
+        "ai_sequence.free_refused",
+        "ai_sequence.key_changed",
+        "ai_sequence.active_tasks",
+        "ai_sequence.tab",
+        "ai_sequence.context_title",
+        "ai_sequence.length_auto",
+        "ai_sequence.length_clip",
+        "ai_sequence.length_custom",
+        "ai_sequence.placeholder",
+        "ai_sequence.current_revision",
+        "ai_sequence.revising",
+        "ai_sequence.stage_queued",
+        "ai_sequence.stage_preparing",
+        "ai_sequence.stage_analyzing",
+        "ai_sequence.stage_generating",
+        "ai_sequence.stage_validating",
+        "ai_sequence.stage_rendering",
+        "ai_sequence.stage_completed",
+        "ai_sequence.stage_failed",
+        "ai_sequence.stage_cancelled",
+    ] {
+        for locale in rust_i18n::available_locales!() {
+            assert!(
+                crate::_rust_i18n_try_translate(&locale, key).is_some(),
+                "{locale}: {key}"
+            );
+        }
+    }
+}
+
+#[test]
+fn failed_ai_imports_clear_pending_references_and_keep_a_retryable_result() {
+    let mut app = app();
+    app.ai_sequences.prompt = "Synthetic import failure test".into();
+    let root = vv_media::test_support::TempDir::new("vv-ai-import-failure");
+    let project = root.join("project.tandem");
+    app.session.set_path(Some(project.clone()));
+    let store = crate::ai_sequence::Store::new(&root.join("sources")).unwrap();
+    let job = store.create(app.ai_sequence_request().unwrap()).unwrap();
+    app.ai_sequences
+        .pending_imports
+        .insert(job.id.clone(), (project, job.clone()));
+    app.ai_sequences
+        .import_jobs
+        .insert((app.session.epoch(), 42), job.id.clone());
+    app.ai_import_finished(42, &["Disk full during import".into()]);
+    assert!(app.ai_sequences.pending_imports.is_empty());
+    assert!(app.ai_sequences.import_jobs.is_empty());
+    assert!(
+        app.ai_sequences
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("Disk full")
+    );
+    assert!(store.load(&job.id).is_ok());
+}
+
+#[test]
+fn background_ai_import_completion_preserves_the_viewer_and_user_selection() {
+    let mut app = app();
+    app.timeline_state.selected.insert((0, vv_core::ClipId(1)));
+    app.ai_sequences
+        .import_jobs
+        .insert((app.session.epoch(), 7), "sequence".into());
+    app.import_warnings = vec!["Existing unrelated warning".into()];
+    app.handle_session_event(vv_session::SessionEvent::ImportStarted { job: 7 });
+    assert_eq!(app.import_warnings, vec!["Existing unrelated warning"]);
+    app.handle_session_event(vv_session::SessionEvent::ImportFinished {
+        job: 7,
+        imported: Vec::new(),
+        errors: Vec::new(),
+    });
+    assert!(app.browsing.is_none());
+    assert!(
+        app.timeline_state
+            .selected
+            .contains(&(0, vv_core::ClipId(1)))
+    );
+    assert!(app.ai_sequences.import_jobs.is_empty());
+}
+
+#[test]
+fn length_modes_set_the_composition_and_let_the_ai_decide_by_default() {
+    let mut app = app();
+    app.timeline_state.playhead = 30;
+    let request = app.ai_sequence_request().unwrap();
+    assert!(request.auto_duration);
+    assert_eq!(request.composition.frames, 900);
+
+    app.ai_sequences.length = Length::Clip;
+    assert_eq!(app.ai_sequence_request().unwrap().composition.frames, 150);
+
+    app.ai_sequences.length = Length::Custom;
+    app.ai_sequences.custom_seconds = 7.0;
+    let request = app.ai_sequence_request().unwrap();
+    assert!(!request.auto_duration);
+    assert_eq!(request.composition.frames, 210);
+}
+
+#[test]
+fn selected_clip_is_the_context_and_no_selection_is_a_free_animation() {
+    let mut app = app();
+    app.ai_sequences.length = Length::Clip;
+    assert!(app.ai_range().unwrap().is_none());
+    app.timeline_state.selected.insert((0, vv_core::ClipId(1)));
+    let range = app.ai_range().unwrap().unwrap();
+    assert_eq!((range.start, range.end, range.clips), (0, 300, 1));
+    let request = app.ai_sequence_request().unwrap();
+    assert_eq!(request.composition.frames, 300);
+    assert_eq!(request.anchor_clip, Some(1));
+}

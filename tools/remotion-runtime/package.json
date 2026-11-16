@@ -1,0 +1,13 @@
+{
+  "name": "tandem-remotion-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": { "setup-browser": "node setup-browser.cjs" },
+  "dependencies": {
+    "@remotion/bundler": "4.0.237",
+    "@remotion/renderer": "4.0.237",
+    "remotion": "4.0.237",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

@@ -6060,3 +6060,86 @@ fn an_image_that_removes_its_background_asks_for_an_image_matte() {
     assert!(requests[0].image);
     assert_eq!(requests[0].content_hash, hash);
 }
+
+#[test]
+fn save_as_copies_ai_sources_in_background_and_preserves_edits_made_during_copy() {
+    let root = vv_media::test_support::TempDir::new("vv-ai-save-as");
+    let old = root.join("old.tandem");
+    let new = root.join("new.tandem");
+    let mut app = VenturiApp::default();
+    let clip = make_timeline_with_clip(&mut app, 0, 0, 10);
+    let timeline = app.timeline_id.unwrap();
+    let media = insert_compound_media(&mut app, timeline);
+    let source = crate::ai_sequence::portable::directory(&old).join("123-1-0");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::write(source.join("Scene.tsx"), "export default () => null").unwrap();
+    std::fs::write(source.join("result.mp4"), "rendered media").unwrap();
+    app.session.project.media_pool[media].compound = None;
+    app.session.project.media_pool[media].path = source.join("result.mp4");
+    app.session.save_to(&old).unwrap();
+    app.save_project_to(&new);
+    assert_eq!(app.session.path(), Some(old.as_path()));
+    assert!(app.ai_activity() > 0);
+    app.session.apply(Box::new(vv_core::SetClipValue::new(
+        timeline,
+        0,
+        clip,
+        vv_core::CommandLabel::MoveClips,
+        99,
+        |clip| &mut clip.timeline_start,
+    )));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while app.session.path() == Some(old.as_path())
+        && app.project_error.is_none()
+        && std::time::Instant::now() < deadline
+    {
+        app.poll_ai_source_copy();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(app.project_error.is_none(), "{:?}", app.project_error);
+    assert_eq!(app.session.path(), Some(new.as_path()));
+    let saved = vv_core::load_project(&new).unwrap();
+    assert_eq!(
+        saved.timelines[timeline]
+            .clip(0, clip)
+            .unwrap()
+            .timeline_start,
+        99
+    );
+    assert_eq!(
+        saved.media_pool[media].path,
+        crate::ai_sequence::portable::directory(&new).join("123-1-0/result.mp4")
+    );
+    assert!(saved.media_pool[media].path.is_file());
+    assert_eq!(
+        vv_core::load_project(&old).unwrap().timelines[timeline]
+            .clip(0, clip)
+            .unwrap()
+            .timeline_start,
+        0
+    );
+}
+
+#[test]
+fn changing_project_during_ai_source_copy_does_not_save_or_replace_the_new_project() {
+    let root = vv_media::test_support::TempDir::new("vv-ai-save-switch");
+    let old = root.join("old.tandem");
+    let new = root.join("new.tandem");
+    let mut app = VenturiApp::default();
+    app.session.save_to(&old).unwrap();
+    let source = crate::ai_sequence::portable::directory(&old);
+    std::fs::create_dir(&source).unwrap();
+    std::fs::write(source.join("Scene.tsx"), "export default () => null").unwrap();
+    app.save_project_to(&new);
+    app.session
+        .replace_project(vv_core::Project::default(), None);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while app.ai_activity() > 0 && std::time::Instant::now() < deadline {
+        app.poll_ai_source_copy();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(app.session.path(), None);
+    assert!(!new.exists());
+    assert!(!crate::ai_sequence::portable::directory(&new).exists());
+    assert!(source.join("Scene.tsx").is_file());
+}

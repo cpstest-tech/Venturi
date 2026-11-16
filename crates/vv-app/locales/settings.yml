@@ -460,3 +460,7 @@ settings.gemini_key_deleted:
 settings.gemini_key_location:
   en: "Saved in %{path} (readable only by you)"
   it: "Salvata in %{path} (leggibile solo da te)"
+
+settings.section_ai:
+  en: AI Providers
+  it: Provider AI

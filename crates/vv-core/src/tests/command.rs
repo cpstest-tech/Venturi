@@ -344,3 +344,56 @@ fn set_cover_is_undoable() {
     history.undo(&mut project);
     assert!(project.view.covers.is_empty());
 }
+
+#[test]
+fn ai_provenance_survives_relink_save_and_remove_media_undo() {
+    let (mut project, _) = project();
+    let media = project.media_pool.insert(MediaItem {
+        path: "generated.mov".into(),
+        meta: MediaMeta {
+            duration_frames: 100,
+            fps: Rational::new(25, 1),
+            width: 64,
+            height: 48,
+            has_video: true,
+            has_audio: false,
+            sample_rate: 0,
+            channels: 0,
+            audio_streams: 0,
+            file: Default::default(),
+        },
+        content_hash: 1,
+        compound: None,
+        folder: None,
+    });
+    let mut history = History::default();
+    history.do_command(
+        &mut project,
+        Box::new(SetAiSequence::new(media, "123-1-0".into())),
+    );
+    assert_eq!(
+        project.ai_sequences.get(&media).map(String::as_str),
+        Some("123-1-0")
+    );
+    project.media_pool[media].path = "relocated/renamed.mov".into();
+    let serialized = crate::project_to_string(&project).unwrap();
+    let restored = crate::persistence::project_from_str(&serialized).unwrap();
+    assert_eq!(
+        restored.ai_sequences.get(&media),
+        project.ai_sequences.get(&media)
+    );
+    history.do_command(&mut project, Box::new(RemoveMedia::new(media)));
+    assert!(!project.ai_sequences.contains_key(&media));
+    history.undo(&mut project);
+    assert_eq!(
+        project.ai_sequences.get(&media).map(String::as_str),
+        Some("123-1-0")
+    );
+    history.undo(&mut project);
+    assert!(!project.ai_sequences.contains_key(&media));
+    history.redo(&mut project);
+    assert_eq!(
+        project.ai_sequences.get(&media).map(String::as_str),
+        Some("123-1-0")
+    );
+}

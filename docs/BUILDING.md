@@ -283,3 +283,11 @@ The workflow refuses a tag that does not match the Cargo version.
 
 Run manually from the Actions tab, it only builds and leaves the files as
 workflow artifacts.
+
+## Optional AI sequence runtime
+
+The AI Sequence Generator uses a separately installed local Remotion runtime,
+Node and Chromium. Linux rendering requires bubblewrap and working user/network
+namespaces. See [AI_SEQUENCES.md](AI_SEQUENCES.md) for the pinned runtime setup,
+provider authentication, free-only Gemini settings and live-test instructions.
+The editor and ordinary video rendering do not require this optional runtime.

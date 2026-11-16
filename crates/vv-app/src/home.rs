@@ -357,6 +357,11 @@ impl VenturiApp {
     }
 
     fn show_rename_dialog(&mut self, ctx: &egui::Context) {
+        let ai_busy = self
+            .home
+            .rename
+            .as_ref()
+            .is_some_and(|dialog| self.ai_project_busy(&dialog.file));
         let Some(dialog) = self.home.rename.as_mut() else {
             return;
         };
@@ -378,11 +383,20 @@ impl VenturiApp {
             });
         });
         let mut renamed = false;
-        if confirm {
+        if confirm && ai_busy {
+            dialog.error = Some(
+                "Wait for AI generation to finish or cancel its jobs before renaming the project"
+                    .into(),
+            );
+        } else if confirm {
             match projects::rename_project(&dialog.file, &dialog.name) {
                 Ok(_) => renamed = true,
                 Err(e) => dialog.error = Some(fs_error_message(&e)),
             }
+        }
+        if renamed {
+            let path = dialog.file.clone();
+            self.release_ai_project(&path);
         }
         if renamed || cancel || modal.should_close() {
             self.home.rename = None;
@@ -414,7 +428,13 @@ impl VenturiApp {
                 cancel = ui.button(t!("common.cancel")).clicked();
             });
         });
-        if confirm {
+        if confirm && self.ai_project_busy(&file) {
+            self.home.error = Some(
+                "Wait for AI generation to finish or cancel its jobs before deleting the project"
+                    .into(),
+            );
+        } else if confirm {
+            self.release_ai_project(&file);
             match projects::delete_project(&file) {
                 Ok(()) => self.home.invalidate(),
                 Err(e) => self.home.error = Some(fs_error_message(&e)),
@@ -530,6 +550,14 @@ impl VenturiApp {
         let Some(old_file) = self.session.path().map(Path::to_path_buf) else {
             return;
         };
+        if self.ai_project_busy(&old_file) {
+            self.project_error = Some(
+                "Wait for AI generation to finish or cancel its jobs before renaming the project"
+                    .into(),
+            );
+            return;
+        }
+        self.release_ai_project(&old_file);
         if projects::project_name(&old_file) == new_name.trim() || !self.flush_autosave() {
             return;
         }
@@ -549,6 +577,7 @@ impl VenturiApp {
                 return;
             }
         };
+        crate::ai_sequence::portable::rebase(&mut self.session.project, &old_file, &new_file);
         if let (Some(old_dir), Some(new_dir)) = (old_file.parent(), new_file.parent()) {
             projects::rebase_media_paths(&mut self.session.project, old_dir, new_dir);
         }

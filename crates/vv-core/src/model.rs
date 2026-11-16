@@ -3354,6 +3354,9 @@ pub struct Project {
     /// rebuilds the clips from these without transcribing again.
     #[serde(default)]
     pub captions: std::collections::BTreeMap<TimelineId, crate::captions::Captions>,
+    /// AI provenance survives media path relinking.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub ai_sequences: std::collections::BTreeMap<MediaId, String>,
 }
 
 /// Where the user left the project, to resume from there when it is reopened.

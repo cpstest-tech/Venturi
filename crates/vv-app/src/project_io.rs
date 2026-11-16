@@ -129,7 +129,9 @@ impl VenturiApp {
         match event {
             // The agent gets the outcome of its own jobs; the user's view and
             // warnings stay as they are.
-            E::ImportStarted { job } if !self.is_agent_job(job) => self.import_warnings.clear(),
+            E::ImportStarted { job } if !self.is_agent_job(job) && !self.ai_import_running(job) => {
+                self.import_warnings.clear()
+            }
             E::ImportStarted { .. } => {}
             E::MediaAdded { media_id, .. } => self.enqueue_media_background_jobs(media_id),
             E::ImportFinished {
@@ -137,6 +139,9 @@ impl VenturiApp {
                 imported,
                 errors,
             } => {
+                if self.ai_import_finished(job, &errors) {
+                    return;
+                }
                 // Everything was already in the pool: nothing started.
                 if (imported.is_empty() && errors.is_empty()) || self.is_agent_job(job) {
                     return;
@@ -491,14 +496,48 @@ impl VenturiApp {
     }
 
     pub(crate) fn save_project_to(&mut self, path: &Path) {
+        if self.begin_ai_source_copy(path) {
+            return;
+        }
+        self.finish_save_after_ai_copy(path, false);
+    }
+
+    pub(crate) fn finish_save_after_ai_copy(&mut self, path: &Path, sources_prepared: bool) {
         self.store_view();
+        let previous_file = self.session.path().map(Path::to_path_buf);
+        let previous_project = if previous_file.as_deref().is_some_and(|old| old != path) {
+            let old = previous_file.as_deref().unwrap();
+            if !sources_prepared {
+                match crate::ai_sequence::portable::copy(old, path) {
+                    Ok(_) => {}
+                    Err(error) => {
+                        self.project_error =
+                            Some(format!("Cannot copy AI sequence sources: {error}"));
+                        return;
+                    }
+                }
+            }
+            let previous = self.session.project.clone();
+            crate::ai_sequence::portable::rebase(&mut self.session.project, old, path);
+            Some(previous)
+        } else {
+            None
+        };
         self.copy_library_media_into_project(path);
         match self.session.save_to(path) {
             Ok(()) => {
                 self.project_error = None;
                 self.remember_recent_project(path.to_path_buf());
             }
-            Err(e) => self.project_error = Some(t!("project.save_failed", error = e).into_owned()),
+            Err(e) => {
+                if let Some(project) = previous_project {
+                    self.session.project = project;
+                }
+                if sources_prepared {
+                    let _ = std::fs::remove_dir_all(crate::ai_sequence::portable::directory(path));
+                }
+                self.project_error = Some(t!("project.save_failed", error = e).into_owned());
+            }
         }
     }
 

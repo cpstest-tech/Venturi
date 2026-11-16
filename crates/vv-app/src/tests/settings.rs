@@ -665,3 +665,44 @@ fn only_the_shortcuts_changed_from_the_defaults_are_saved() {
     assert_eq!(saved, ["split", "toggle_disabled"]);
     assert_eq!(Settings::load(&path).keymap, settings.keymap);
 }
+
+#[test]
+fn ai_provider_settings_round_trip_without_storing_a_gemini_key() {
+    let directory = TempDir::new("vv-settings-ai");
+    let path = directory.path().join("settings.json");
+    let mut settings = Settings::default();
+    settings.ai_provider = crate::ai_sequence::Provider::OpenCode;
+    settings.ai_model = "local/model".into();
+    settings.ai_runtime.directory = "/opt/tandem-remotion".into();
+    settings.ai_runtime.node = "/usr/bin/node".into();
+    settings.ai_allow_api = true;
+    settings.save(&path).unwrap();
+    let restored = Settings::load(&path);
+    assert_eq!(restored.ai_provider, settings.ai_provider);
+    assert_eq!(restored.ai_model, settings.ai_model);
+    assert_eq!(restored.ai_runtime, settings.ai_runtime);
+    assert!(restored.ai_allow_api);
+    let text = std::fs::read_to_string(path).unwrap();
+    assert!(!text.contains("gemini.key"));
+    assert!(!text.contains("api_key"));
+}
+
+#[test]
+fn each_ai_provider_keeps_its_own_model_and_cli_defaults_do_not_receive_a_gemini_model() {
+    use crate::ai_sequence::Provider;
+    let mut settings = Settings::default();
+    settings.ai_provider = Provider::Codex;
+    settings.remember_ai_model_on_provider_change(Provider::Gemini);
+    assert!(settings.ai_model.is_empty());
+    settings.ai_model = "custom-codex".into();
+    settings.ai_provider = Provider::Claude;
+    settings.remember_ai_model_on_provider_change(Provider::Codex);
+    assert!(settings.ai_model.is_empty());
+    settings.ai_model = "custom-claude".into();
+    settings.ai_provider = Provider::Codex;
+    settings.remember_ai_model_on_provider_change(Provider::Claude);
+    assert_eq!(settings.ai_model, "custom-codex");
+    settings.ai_provider = Provider::Gemini;
+    settings.remember_ai_model_on_provider_change(Provider::Codex);
+    assert_eq!(settings.ai_model, "gemini-4-hydrogen");
+}

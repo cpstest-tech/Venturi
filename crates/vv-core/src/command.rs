@@ -2856,7 +2856,7 @@ impl Command for RemoveKeyframe {
 #[derive(Debug)]
 pub struct RemoveMedia {
     media: MediaId,
-    removed: RefCell<Option<(MediaItem, Option<Timeline>)>>,
+    removed: RefCell<Option<(MediaItem, Option<Timeline>, Option<String>)>>,
 }
 
 impl RemoveMedia {
@@ -2878,17 +2878,66 @@ impl Command for RemoveMedia {
             return;
         };
         let nested = item.compound.and_then(|id| project.timelines.remove(id));
-        *self.removed.borrow_mut() = Some((item, nested));
+        let sequence = project.ai_sequences.remove(&self.media);
+        *self.removed.borrow_mut() = Some((item, nested, sequence));
     }
 
     fn undo(&self, project: &mut Project) {
-        let Some((item, nested)) = self.removed.borrow_mut().take() else {
+        let Some((item, nested, sequence)) = self.removed.borrow_mut().take() else {
             return;
         };
         if let (Some(id), Some(nested)) = (item.compound, nested) {
             project.timelines.insert_at(id, nested);
         }
         project.media_pool.insert_at(self.media, item);
+        if let Some(sequence) = sequence {
+            project.ai_sequences.insert(self.media, sequence);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SetAiSequence {
+    media: MediaId,
+    sequence: String,
+    old: Option<Option<String>>,
+}
+
+impl SetAiSequence {
+    pub fn new(media: MediaId, sequence: String) -> Self {
+        Self {
+            media,
+            sequence,
+            old: None,
+        }
+    }
+}
+
+impl Command for SetAiSequence {
+    fn label(&self) -> CommandLabel {
+        CommandLabel::ImportMedia
+    }
+
+    fn apply(&mut self, project: &mut Project) {
+        if project.media_pool.contains_key(self.media) {
+            self.old = Some(
+                project
+                    .ai_sequences
+                    .insert(self.media, self.sequence.clone()),
+            );
+        }
+    }
+
+    fn undo(&self, project: &mut Project) {
+        match &self.old {
+            Some(Some(previous)) => {
+                project.ai_sequences.insert(self.media, previous.clone());
+            }
+            Some(None) => {
+                project.ai_sequences.remove(&self.media);
+            }
+            None => {}
+        }
     }
 }
 

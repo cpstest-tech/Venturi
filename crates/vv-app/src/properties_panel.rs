@@ -1778,6 +1778,7 @@ impl VenturiApp {
                                     self.clip_tab = properties_tabs::ClipTab::Video;
                                 }
                             }
+                            if video_targets.len() == 1 { self.show_ai_properties(ui, video_targets[0], &mut pending_effects); }
                             properties_tabs::tab_bar(ui, &mut self.clip_tab, on_subtitle);
                             ui.separator();
                             self.properties_tab = if self.clip_tab == properties_tabs::ClipTab::Audio {

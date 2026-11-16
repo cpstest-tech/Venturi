@@ -194,60 +194,9 @@ fn cache_path(fingerprint: u64) -> Result<PathBuf, String> {
         .join(format!("{fingerprint:016x}.json")))
 }
 
-pub(crate) fn key_path() -> Result<PathBuf, String> {
-    let config = std::env::var_os("XDG_CONFIG_HOME")
-        .filter(|path| !path.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-        .ok_or("Cannot locate the user configuration directory")?;
-    Ok(config.join("tandem").join("gemini.key"))
-}
-
-pub(crate) fn load_key() -> Result<String, String> {
-    load_key_at(&key_path()?)
-}
-
-fn load_key_at(path: &Path) -> Result<String, String> {
-    match std::fs::read_to_string(path) {
-        Ok(key) => Ok(key.trim().to_owned()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-        Err(error) => Err(error.to_string()),
-    }
-}
-
-pub(crate) fn save_key(key: &str) -> Result<(), String> {
-    save_key_at(&key_path()?, key)
-}
-
-fn save_key_at(path: &Path, key: &str) -> Result<(), String> {
-    static NEXT_KEY_TEMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    std::fs::create_dir_all(path.parent().unwrap()).map_err(|error| error.to_string())?;
-    let temp = path.with_extension(format!(
-        "tmp-{}-{}",
-        std::process::id(),
-        NEXT_KEY_TEMP.fetch_add(1, Ordering::Relaxed)
-    ));
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(&temp).map_err(|error| error.to_string())?;
-    std::io::Write::write_all(&mut file, key.trim().as_bytes())
-        .map_err(|error| error.to_string())?;
-    file.sync_all().map_err(|error| error.to_string())?;
-    std::fs::rename(temp, path).map_err(|error| error.to_string())
-}
-
-pub(crate) fn delete_key() -> Result<(), String> {
-    match std::fs::remove_file(key_path()?) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error.to_string()),
-    }
-}
+#[cfg(test)]
+use crate::gemini::{api_error, is_transient, load_key_at, save_key_at};
+pub(crate) use crate::gemini::{delete_key, key_path, load_key, save_key};
 
 fn source_fingerprint(path: &Path) -> Result<u64, String> {
     source_fingerprint_cancelled(path, &AtomicBool::new(false))
@@ -361,89 +310,12 @@ fn gemini(
     parse_suggestions(text)
 }
 
-fn cancellable_sleep(cancel: &AtomicBool, duration: std::time::Duration) -> Result<(), String> {
-    let until = std::time::Instant::now() + duration;
-    while std::time::Instant::now() < until {
-        if cancel.load(Ordering::Relaxed) {
-            return Err("Cancelled".into());
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    Ok(())
-}
-
-fn is_transient(status: u16) -> bool {
-    matches!(status, 429 | 500 | 502 | 503 | 504)
-}
-
-/// Gemini's own message, e.g. "The model is overloaded", instead of the bare status.
-fn api_error(status: u16, body: &[u8]) -> String {
-    let message = serde_json::from_slice::<serde_json::Value>(body)
-        .ok()
-        .and_then(|v| v.pointer("/error/message")?.as_str().map(str::to_owned));
-    match message {
-        Some(message) => format!("Gemini error {status}: {message}"),
-        None => format!("Gemini error {status}"),
-    }
-}
-
-/// `generateContent` with backoff on overload, then once more on `FALLBACK_MODEL`.
 fn generate(
     request: &serde_json::Value,
     key: &str,
     cancel: &AtomicBool,
 ) -> Result<serde_json::Value, String> {
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .http_status_as_error(false)
-        .timeout_global(Some(std::time::Duration::from_secs(300)))
-        .build()
-        .into();
-    let payload = request.to_string();
-    let mut last_error = String::new();
-    for model in [MODEL, FALLBACK_MODEL] {
-        let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-        );
-        for attempt in 0..4 {
-            if cancel.load(Ordering::Relaxed) {
-                return Err("Cancelled".into());
-            }
-            let mut response = match agent
-                .post(&url)
-                .header("x-goog-api-key", key)
-                .header("content-type", "application/json")
-                .send(payload.as_bytes())
-            {
-                Ok(response) => response,
-                Err(error) => {
-                    last_error = error.to_string();
-                    cancellable_sleep(cancel, std::time::Duration::from_secs(2 << attempt))?;
-                    continue;
-                }
-            };
-            let status = response.status().as_u16();
-            let retry_after = response
-                .headers()
-                .get("retry-after")
-                .and_then(|v| v.to_str().ok()?.parse::<u64>().ok());
-            let body = response
-                .body_mut()
-                .with_config()
-                .limit(64 * 1024 * 1024)
-                .read_to_vec()
-                .map_err(|e| e.to_string())?;
-            if status == 200 {
-                return serde_json::from_slice(&body).map_err(|e| e.to_string());
-            }
-            last_error = api_error(status, &body);
-            if !is_transient(status) {
-                return Err(last_error);
-            }
-            let wait = retry_after.unwrap_or(2 << attempt).min(30);
-            cancellable_sleep(cancel, std::time::Duration::from_secs(wait))?;
-        }
-    }
-    Err(last_error)
+    crate::gemini::generate(request, key, cancel, &[MODEL, FALLBACK_MODEL], true)
 }
 
 fn parse_suggestions(text: &str) -> Result<Vec<Suggestion>, String> {
@@ -453,25 +325,7 @@ fn parse_suggestions(text: &str) -> Result<Vec<Suggestion>, String> {
 }
 
 fn frame_at(path: &Path, at_ms: u32) -> Result<CachedFrame, String> {
-    let mut decoder = vv_media::Decoder::open(path).map_err(|e| e.to_string())?;
-    decoder
-        .seek_to_time(f64::from(at_ms) / 1000.0)
-        .map_err(|e| e.to_string())?;
-    let (_, frame) = decoder
-        .next_frame()
-        .map_err(|e| e.to_string())?
-        .ok_or("No video frame at candidate")?;
-    let thumb = vv_media::thumbnail::downscale_to_rgba(&frame, 320);
-    let mut png_data = Vec::new();
-    {
-        let mut encoder = png::Encoder::new(&mut png_data, thumb.width, thumb.height);
-        encoder.set_color(png::ColorType::Rgba);
-        encoder.set_depth(png::BitDepth::Eight);
-        let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
-        writer
-            .write_image_data(&thumb.rgba)
-            .map_err(|e| e.to_string())?;
-    }
+    let png_data = crate::ai_context::frame_png(path, f64::from(at_ms) / 1000.0)?;
     Ok(CachedFrame {
         at_ms,
         png_base64: base64::engine::general_purpose::STANDARD.encode(png_data),
@@ -1486,3 +1340,28 @@ impl VenturiApp {
 #[cfg(test)]
 #[path = "tests/ai_clips.rs"]
 mod tests;
+
+pub(crate) fn cached_words(
+    path: &Path,
+    cancel: &AtomicBool,
+) -> Result<Option<Vec<CaptionWord>>, String> {
+    let Some(root) = crate::library::Library::default_root() else {
+        return Ok(None);
+    };
+    if !root.join("ai-clips").is_dir() {
+        return Ok(None);
+    }
+    let fingerprint = source_fingerprint_cancelled(path, cancel)?;
+    let cache_file = cache_path(fingerprint)?;
+    let file = match std::fs::File::open(cache_file) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.to_string()),
+    };
+    let cache: Cache =
+        serde_json::from_reader(file.take(64 * 1024 * 1024)).map_err(|e| e.to_string())?;
+    if cache.fingerprint != fingerprint {
+        return Ok(None);
+    }
+    Ok(Some(cache.words))
+}

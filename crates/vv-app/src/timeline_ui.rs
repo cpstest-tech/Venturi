@@ -104,7 +104,17 @@ pub enum TimelineCommand {
     Group,
 }
 
+/// A running AI generation: reserves its spot on the timeline until the clip lands.
+#[derive(Clone, Debug)]
+pub(crate) struct AiPlaceholder {
+    pub start: FrameIdx,
+    pub len: FrameIdx,
+    pub label: String,
+    pub detail: String,
+}
+
 pub struct TimelineState {
+    pub(crate) ai_placeholders: Vec<AiPlaceholder>,
     pub tool: TimelineTool,
     /// Selected clips. Empty if no clip is selected (it must not
     /// be confused with "no timeline": here it is only the state of the
@@ -468,6 +478,7 @@ pub(crate) const KINETIC_VELOCITY_GAIN: f32 = 1.6;
 impl Default for TimelineState {
     fn default() -> Self {
         Self {
+            ai_placeholders: Vec::new(),
             tool: TimelineTool::default(),
             selected: BTreeSet::new(),
             can_record: false,
@@ -4473,6 +4484,27 @@ pub fn show_timeline(
                         egui::Color32::from_white_alpha(80),
                     );
                 }
+                if !state.ai_placeholders.is_empty()
+                    && let Some(top) = row_order.first().copied()
+                {
+                    let time = ui.input(|i| i.time) as f32;
+                    for pending in &state.ai_placeholders {
+                        paint_ai_placeholder(
+                            &track_painter(top),
+                            pending,
+                            egui::Rect::from_min_size(
+                                egui::pos2(
+                                    origin.x + pending.start as f32 * px_per_frame,
+                                    origin.y + row_y[top],
+                                ),
+                                egui::vec2(pending.len as f32 * px_per_frame, row_height),
+                            ),
+                            time,
+                        );
+                    }
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(50));
+                }
                 paint_playhead(
                     &painter,
                     origin,
@@ -6271,6 +6303,47 @@ fn paint_recording_waveform(
         painter.line_segment([egui::pos2(x, mid - h), egui::pos2(x, mid + h)], stroke);
         x += 1.0;
     }
+}
+
+fn paint_ai_placeholder(
+    painter: &egui::Painter,
+    pending: &AiPlaceholder,
+    rect: egui::Rect,
+    time: f32,
+) {
+    let accent = crate::theme::ACCENT;
+    painter.rect_filled(rect, 4.0, accent.gamma_multiply(0.18));
+    let stripe = 18.0;
+    let shift = (time * 24.0) % (stripe * 2.0);
+    let clipped = painter.with_clip_rect(painter.clip_rect().intersect(rect));
+    let mut x = rect.left() - rect.height() - stripe * 2.0 + shift;
+    while x < rect.right() {
+        clipped.add(egui::Shape::convex_polygon(
+            vec![
+                egui::pos2(x, rect.bottom()),
+                egui::pos2(x + stripe, rect.bottom()),
+                egui::pos2(x + stripe + rect.height(), rect.top()),
+                egui::pos2(x + rect.height(), rect.top()),
+            ],
+            accent.gamma_multiply(0.14),
+            egui::Stroke::NONE,
+        ));
+        x += stripe * 2.0;
+    }
+    painter.rect_stroke(
+        rect,
+        4.0,
+        egui::Stroke::new(1.5, accent),
+        egui::StrokeKind::Inside,
+    );
+    let text = format!("{} · {}", pending.label, pending.detail);
+    clipped.text(
+        rect.left_center() + egui::vec2(8.0, 0.0),
+        egui::Align2::LEFT_CENTER,
+        text,
+        egui::FontId::proportional(12.0),
+        egui::Color32::WHITE,
+    );
 }
 
 /// Playhead line plus a triangular head in the ruler.

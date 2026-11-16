@@ -159,9 +159,15 @@ pub fn rebase_media_paths(project: &mut Project, old_dir: &Path, new_dir: &Path)
     changed
 }
 
-fn rebase_file(file: &Path, old_dir: &Path, new_dir: &Path) -> Result<(), ProjectFsError> {
+fn rebase_file(file: &Path, old_file: &Path) -> Result<(), ProjectFsError> {
     let mut project = vv_core::load_project(file)?;
-    if rebase_media_paths(&mut project, old_dir, new_dir) {
+    let sequences = crate::ai_sequence::portable::rebase(&mut project, old_file, file);
+    let media = rebase_media_paths(
+        &mut project,
+        old_file.parent().unwrap_or(Path::new(".")),
+        file.parent().unwrap_or(Path::new(".")),
+    );
+    if sequences || media {
         vv_core::save_project(&project, file)?;
     }
     Ok(())
@@ -186,13 +192,15 @@ pub fn rename_project(file: &Path, new_name: &str) -> Result<PathBuf, ProjectFsE
     if new_dir.exists() && !same_file(&new_dir, dir) {
         return Err(ProjectFsError::AlreadyExists);
     }
+    crate::ai_sequence::portable::check_rename(file, &project_file(&new_dir))?;
     std::fs::rename(dir, &new_dir)?;
     let moved = new_dir.join(file.file_name().unwrap_or_default());
     let new_file = project_file(&new_dir);
     if moved != new_file {
         std::fs::rename(&moved, &new_file)?;
     }
-    rebase_file(&new_file, dir, &new_dir)?;
+    crate::ai_sequence::portable::rename_in_directory(file, &new_file)?;
+    rebase_file(&new_file, file)?;
     Ok(new_file)
 }
 
@@ -208,7 +216,10 @@ pub fn rename_loose_file(file: &Path, new_name: &str) -> Result<PathBuf, Project
     if new_file.exists() && !same_file(&new_file, file) {
         return Err(ProjectFsError::AlreadyExists);
     }
+    crate::ai_sequence::portable::check_rename(file, &new_file)?;
+    crate::ai_sequence::portable::rename_in_directory(file, &new_file)?;
     std::fs::rename(file, &new_file)?;
+    rebase_file(&new_file, file)?;
     Ok(new_file)
 }
 
@@ -229,7 +240,8 @@ pub fn duplicate_project(file: &Path, suffix: &str) -> Result<PathBuf, ProjectFs
     let copied = new_dir.join(file.file_name().unwrap_or_default());
     let new_file = project_file(&new_dir);
     std::fs::rename(&copied, &new_file)?;
-    rebase_file(&new_file, dir, &new_dir)?;
+    crate::ai_sequence::portable::rename_in_directory(file, &new_file)?;
+    rebase_file(&new_file, file)?;
     Ok(new_file)
 }
 
@@ -258,13 +270,15 @@ pub fn delete_project(file: &Path) -> Result<(), ProjectFsError> {
 /// Copies a `.vvproj` saved anywhere into a new folder of `root`,
 /// migrated to the current format. The original stays untouched.
 pub fn import_project(src: &Path, root: &Path) -> Result<PathBuf, ProjectFsError> {
-    let project = vv_core::load_project(src)?;
+    let mut project = vv_core::load_project(src)?;
     let base = validate_name(&project_name(src))
         .unwrap_or_else(|_| t!("home.new_project_prefix").into_owned());
     std::fs::create_dir_all(root)?;
     let dir = root.join(unique_name(root, &base));
     std::fs::create_dir(&dir)?;
     let file = project_file(&dir);
+    crate::ai_sequence::portable::copy(src, &file)?;
+    crate::ai_sequence::portable::rebase(&mut project, src, &file);
     vv_core::save_project(&project, &file)?;
     Ok(file)
 }

@@ -204,3 +204,67 @@ fn a_project_opened_from_elsewhere_is_renamed_in_place() {
     assert!(renamed.is_file());
     assert!(!file.exists());
 }
+
+fn with_ai_sources(file: &Path) -> vv_core::MediaId {
+    let directory = crate::ai_sequence::portable::directory(file).join("123-1-0");
+    std::fs::create_dir_all(directory.join("assets")).unwrap();
+    std::fs::write(directory.join("Scene.tsx"), "export default () => null").unwrap();
+    std::fs::write(
+        directory.join("job.json"),
+        r#"{"source":"export default () => null"}"#,
+    )
+    .unwrap();
+    std::fs::write(directory.join("result.mov"), "rendered media").unwrap();
+    std::fs::write(directory.join("assets/data.json"), "[1,2,3]").unwrap();
+    let mut project = vv_core::load_project(file).unwrap();
+    let id = project
+        .media_pool
+        .insert(media_item(directory.join("result.mov")));
+    vv_core::save_project(&project, file).unwrap();
+    id
+}
+
+#[test]
+fn copied_and_imported_projects_keep_ai_sources_and_use_their_own_rendered_media() {
+    let root = temp_root("ai-copy");
+    let file = create_project(&root, "Original").unwrap();
+    let media = with_ai_sources(&file);
+    let duplicate = duplicate_project(&file, "copy").unwrap();
+    let destination_root = temp_root("ai-import");
+    let imported = import_project(&file, &destination_root).unwrap();
+    for destination in [&duplicate, &imported] {
+        let directory = crate::ai_sequence::portable::directory(destination).join("123-1-0");
+        assert!(directory.join("Scene.tsx").is_file());
+        assert!(directory.join("assets/data.json").is_file());
+        assert_eq!(
+            vv_core::load_project(destination).unwrap().media_pool[media].path,
+            directory.join("result.mov")
+        );
+    }
+    assert!(
+        crate::ai_sequence::portable::directory(&file)
+            .join("123-1-0/Scene.tsx")
+            .is_file()
+    );
+}
+
+#[test]
+fn managed_and_loose_project_renames_preserve_ai_source_links() {
+    let root = temp_root("ai-rename");
+    let file = create_project(&root, "Original").unwrap();
+    let media = with_ai_sources(&file);
+    let renamed = rename_project(&file, "New Name").unwrap();
+    let directory = crate::ai_sequence::portable::directory(&renamed).join("123-1-0");
+    assert!(directory.join("Scene.tsx").is_file());
+    assert_eq!(
+        vv_core::load_project(&renamed).unwrap().media_pool[media].path,
+        directory.join("result.mov")
+    );
+    let loose = rename_loose_file(&renamed, "Loose").unwrap();
+    let directory = crate::ai_sequence::portable::directory(&loose).join("123-1-0");
+    assert!(directory.join("Scene.tsx").is_file());
+    assert_eq!(
+        vv_core::load_project(&loose).unwrap().media_pool[media].path,
+        directory.join("result.mov")
+    );
+}
