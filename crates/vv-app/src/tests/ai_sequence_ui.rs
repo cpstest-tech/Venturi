@@ -134,6 +134,8 @@ fn ai_interface_strings_are_available_in_every_locale() {
         "ai_sequence.key_changed",
         "ai_sequence.active_tasks",
         "ai_sequence.tab",
+        "ai_sequence.context_clip",
+        "ai_sequence.context_no_timeline",
         "ai_sequence.context_title",
         "ai_sequence.length_auto",
         "ai_sequence.length_clip",
@@ -258,9 +260,16 @@ fn running_generations_reserve_their_place_and_failures_are_dismissable() {
     let store = crate::ai_sequence::Store::new(&root.join("sources")).unwrap();
     let mut job = store.create(app.ai_sequence_request().unwrap()).unwrap();
     job.stage = Stage::Generating;
-    let mut queue = Queue::open(&project).unwrap();
-    queue.jobs.push(job.clone());
-    app.ai_sequences.queues.insert(project.clone(), queue);
+    app.ai_sequences
+        .queues
+        .insert(project.clone(), Queue::open(&project).unwrap());
+    assert!(app.ai_placeholders().is_empty());
+    app.ai_sequences
+        .queues
+        .get_mut(&project)
+        .unwrap()
+        .jobs
+        .push(job.clone());
 
     let placeholders = app.ai_placeholders();
     assert_eq!(placeholders.len(), 1);
@@ -315,4 +324,28 @@ fn the_tab_renders_within_a_narrow_library_panel() {
             ctx.globally_used_rect().width()
         );
     }
+}
+
+#[test]
+fn auto_length_placeholder_stays_short_until_the_model_decides() {
+    let mut app = app();
+    app.ai_sequences.prompt = "Auto length".into();
+    let root = vv_media::test_support::TempDir::new("vv-ai-auto-placeholder");
+    let project = root.join("project.tandem");
+    app.session.set_path(Some(project.clone()));
+    let store = crate::ai_sequence::Store::new(&root.join("sources")).unwrap();
+    let mut job = store.create(app.ai_sequence_request().unwrap()).unwrap();
+    assert_eq!(job.request.composition.frames, 900);
+    job.stage = Stage::Generating;
+    app.ai_sequences
+        .queues
+        .insert(project.clone(), Queue::open(&project).unwrap());
+    app.ai_placeholders();
+    app.ai_sequences
+        .queues
+        .get_mut(&project)
+        .unwrap()
+        .jobs
+        .push(job);
+    assert_eq!(app.ai_placeholders()[0].len, 240);
 }

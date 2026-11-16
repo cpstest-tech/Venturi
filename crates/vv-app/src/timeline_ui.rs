@@ -4503,7 +4503,9 @@ pub fn show_timeline(
                         let rect = egui::Rect::from_min_size(
                             egui::pos2(
                                 origin.x + pending.start as f32 * px_per_frame,
-                                origin.y + row_y[top],
+                                // The new track is above all others and may be scrolled
+                                // out of view: stay at the top of the video pane.
+                                track_pane_rect(top).top(),
                             ),
                             egui::vec2(pending.len as f32 * px_per_frame, row_height),
                         );

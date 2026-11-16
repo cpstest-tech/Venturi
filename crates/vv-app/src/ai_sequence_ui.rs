@@ -31,7 +31,7 @@ pub(crate) struct State {
     import_jobs: HashMap<(u64, vv_session::JobId), String>,
     import_owner: Option<(u64, Option<PathBuf>)>,
     dismissed_placeholders: std::collections::HashSet<String>,
-    live_jobs: std::collections::HashSet<String>,
+    earlier_jobs: Option<(PathBuf, std::collections::HashSet<String>)>,
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -44,6 +44,7 @@ enum Length {
 
 const AUTO_MAX_SECONDS: f64 = 30.0;
 const NO_CONTEXT_SECONDS: f64 = 5.0;
+const AUTO_PLACEHOLDER_SECONDS: f64 = 8.0;
 
 const STYLES: [(&str, &str); 4] = [
     (
@@ -204,6 +205,7 @@ impl VenturiApp {
             }
         }
 
+        ui.add_space(theme::SPACE_2);
         ui.heading(t!("ai_sequence.title"));
         ui.weak(t!("ai_sequence.intro"));
         ui.add_space(theme::SPACE_2);
@@ -271,7 +273,9 @@ impl VenturiApp {
         ui.horizontal_wrapped(|ui| {
             generate = ui
                 .add_enabled(
-                    project_path.is_some() && !self.ai_sequences.prompt.trim().is_empty(),
+                    project_path.is_some()
+                        && self.timeline_id.is_some()
+                        && !self.ai_sequences.prompt.trim().is_empty(),
                     egui::Button::new(if self.ai_sequences.parent.is_some() {
                         t!("ai_sequence.generate_revision")
                     } else {
@@ -402,7 +406,11 @@ impl VenturiApp {
     }
 
     fn show_ai_context_card(&mut self, ui: &mut egui::Ui) {
-        let range = self.ai_range();
+        let range = if self.timeline_id.is_some() {
+            self.ai_range()
+        } else {
+            Ok(None)
+        };
         ui.group(|ui| {
             ui.set_width(ui.available_width());
             ui.strong(t!("ai_sequence.context_title"));
@@ -412,6 +420,8 @@ impl VenturiApp {
                     let words = self.ai_range_words(range);
                     let source = if range.from_marks {
                         t!("ai_sequence.context_marks")
+                    } else if range.clips == 1 {
+                        t!("ai_sequence.context_clip")
                     } else {
                         t!("ai_sequence.context_clips", count = range.clips)
                     };
@@ -443,7 +453,11 @@ impl VenturiApp {
                     });
                 }
                 Ok(None) => {
-                    ui.weak(t!("ai_sequence.context_none"));
+                    ui.weak(if self.timeline_id.is_some() {
+                        t!("ai_sequence.context_none")
+                    } else {
+                        t!("ai_sequence.context_no_timeline")
+                    });
                 }
                 Err(error) => {
                     ui.colored_label(theme::ERROR, error);
@@ -518,19 +532,21 @@ impl VenturiApp {
                 from_marks: true,
             }));
         }
-        let clips: Vec<_> = self
+        let selected: Vec<_> = self
             .timeline_state
             .selected
             .iter()
             .filter_map(|(track, id)| {
-                timeline
-                    .tracks
-                    .get(*track)?
-                    .clips
-                    .iter()
-                    .find(|c| c.id == *id)
+                let track = timeline.tracks.get(*track)?;
+                let clip = track.clips.iter().find(|c| c.id == *id)?;
+                Some((track.kind, clip))
             })
             .collect();
+        let clips: Vec<_> = selected.iter().map(|(_, clip)| *clip).collect();
+        let video_clips = selected
+            .iter()
+            .filter(|(kind, _)| *kind == TrackKind::Video)
+            .count();
         let Some(first) = clips.iter().min_by_key(|c| c.timeline_start) else {
             return Ok(None);
         };
@@ -543,7 +559,11 @@ impl VenturiApp {
                 .unwrap_or(first.timeline_start),
             anchor: Some(first.id.0),
             anchor_details: anchor_for(first, first.source_in()),
-            clips: clips.len(),
+            clips: if video_clips > 0 {
+                video_clips
+            } else {
+                clips.len()
+            },
             from_marks: false,
         }))
     }
@@ -1231,14 +1251,17 @@ impl VenturiApp {
         ) else {
             return Vec::new();
         };
-        // Only failures seen live get a block, not those of earlier sessions.
-        self.ai_sequences.live_jobs.extend(
-            queue
-                .jobs
-                .iter()
-                .filter(|job| !job.stage.terminal())
-                .map(|job| job.id.clone()),
-        );
+        // Failures of earlier sessions get no block: remember what the queue held when first seen.
+        if self
+            .ai_sequences
+            .earlier_jobs
+            .as_ref()
+            .is_none_or(|(owner, _)| owner != path)
+        {
+            let ids = queue.jobs.iter().map(|job| job.id.clone()).collect();
+            self.ai_sequences.earlier_jobs = Some((path.to_path_buf(), ids));
+        }
+        let earlier = &self.ai_sequences.earlier_jobs.as_ref().unwrap().1;
         queue
             .jobs
             .iter()
@@ -1251,14 +1274,22 @@ impl VenturiApp {
                         || (job.stage == Stage::Completed
                             && self.ai_sequences.pending_imports.contains_key(&job.id))
                         || (job.stage == Stage::Failed
-                            && self.ai_sequences.live_jobs.contains(&job.id)
+                            && !earlier.contains(&job.id)
                             && !self.ai_sequences.dismissed_placeholders.contains(&job.id)))
             })
             .filter_map(|job| {
                 let composition = &job.request.composition;
                 let start = crate::ai_sequence::insertion::position(timeline, &job.request).ok()?;
+                // Until the model picks a length, don't reserve the whole maximum.
+                let frames = if job.request.auto_duration && job.stage != Stage::Completed {
+                    composition
+                        .frames
+                        .min((composition.fps * AUTO_PLACEHOLDER_SECONDS) as u32)
+                } else {
+                    composition.frames
+                };
                 let len = vv_core::convert_frames(
-                    i64::from(composition.frames),
+                    i64::from(frames),
                     vv_core::Rational::from_fps(composition.fps),
                     timeline.fps,
                 )

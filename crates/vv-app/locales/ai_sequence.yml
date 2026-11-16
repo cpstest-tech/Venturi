@@ -299,16 +299,20 @@ ai_sequence.missing_sources:
   it: "Questo media è stato generato con AI, ma l'archivio dei sorgenti manca o non è leggibile. Ripristina la cartella .ai-sequences del progetto per modificarlo. Il video esistente resta utilizzabile."
 
 ai_sequence.tab:
-  en: "AI Infographic"
-  it: "Infografica AI"
+  en: "Infographic"
+  it: "Infografica"
 
 ai_sequence.context_title:
   en: "Based on"
   it: "Basata su"
 
 ai_sequence.context_clips:
-  en: "%{count} selected clip(s)"
-  it: "%{count} clip selezionata/e"
+  en: "%{count} selected clips"
+  it: "%{count} clip selezionate"
+
+ai_sequence.context_clip:
+  en: "Selected clip"
+  it: "Clip selezionata"
 
 ai_sequence.context_marks:
   en: "In/Out range"
@@ -393,3 +397,7 @@ ai_sequence.placeholder_failed:
 ai_sequence.dismiss:
   en: "Dismiss"
   it: "Scarta"
+
+ai_sequence.context_no_timeline:
+  en: "Add a clip to the timeline to start."
+  it: "Aggiungi una clip alla timeline per iniziare."
