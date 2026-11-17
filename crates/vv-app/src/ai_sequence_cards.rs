@@ -11,11 +11,7 @@ pub(crate) fn section_title(ui: &mut egui::Ui, number: &str, text: &str) {
     ui.add_space(theme::SPACE_2);
     ui.horizontal_wrapped(|ui| {
         ui.label(egui::RichText::new(number).color(theme::ACCENT).strong());
-        ui.label(
-            egui::RichText::new(text)
-                .strong()
-                .size(theme::FONT_SECTION),
-        );
+        ui.label(egui::RichText::new(text).strong().size(theme::FONT_SECTION));
     });
 }
 
@@ -118,7 +114,11 @@ pub(crate) fn art_modern(painter: &Painter, rect: Rect) {
             theme::ACCENT.gamma_multiply(0.5 + height * 0.5),
         );
     }
-    painter.circle_filled(pos2(rect.right() - 10.0, rect.top() + 10.0), 3.5, theme::ACCENT);
+    painter.circle_filled(
+        pos2(rect.right() - 10.0, rect.top() + 10.0),
+        3.5,
+        theme::ACCENT,
+    );
 }
 
 pub(crate) fn art_vivid(painter: &Painter, rect: Rect) {
@@ -130,7 +130,10 @@ pub(crate) fn art_vivid(painter: &Painter, rect: Rect) {
     );
     painter.rect_filled(
         Rect::from_min_size(
-            pos2(rect.left() + rect.width() * 0.5, rect.top() + rect.height() * 0.28),
+            pos2(
+                rect.left() + rect.width() * 0.5,
+                rect.top() + rect.height() * 0.28,
+            ),
             vec2(rect.width() * 0.38, 7.0),
         ),
         3.5,
@@ -138,7 +141,10 @@ pub(crate) fn art_vivid(painter: &Painter, rect: Rect) {
     );
     painter.rect_filled(
         Rect::from_min_size(
-            pos2(rect.left() + rect.width() * 0.5, rect.top() + rect.height() * 0.56),
+            pos2(
+                rect.left() + rect.width() * 0.5,
+                rect.top() + rect.height() * 0.56,
+            ),
             vec2(rect.width() * 0.26, 7.0),
         ),
         3.5,
@@ -181,7 +187,10 @@ pub(crate) fn art_side(painter: &Painter, rect: Rect) {
         painter.rect_filled(
             Rect::from_min_size(
                 pos2(panel.left() + 4.0, panel.top() + 6.0 + row as f32 * 10.0),
-                vec2((panel.width() - 8.0) * if row == 0 { 0.9 } else { 0.6 }, 3.0),
+                vec2(
+                    (panel.width() - 8.0) * if row == 0 { 0.9 } else { 0.6 },
+                    3.0,
+                ),
             ),
             1.5,
             Color32::from_white_alpha(200),
@@ -216,16 +225,29 @@ fn glyph_for(idea: &Improvement) -> Glyph {
     let text = format!("{} {}", idea.title, idea.instruction).to_lowercase();
     let has = |words: &[&str]| words.iter().any(|word| text.contains(*word));
     if has(&[
-        "anim", "appear", "one by one", "compar", "fluid", "motion", "movimento", "uno alla",
+        "anim",
+        "appear",
+        "one by one",
+        "compar",
+        "fluid",
+        "motion",
+        "movimento",
+        "uno alla",
     ]) {
         Glyph::Motion
     } else if has(&[
-        "color", "colour", "background", "contrast", "sfond", "colore", "palette", "tema",
+        "color",
+        "colour",
+        "background",
+        "contrast",
+        "sfond",
+        "colore",
+        "palette",
+        "tema",
     ]) {
         Glyph::Color
     } else if has(&[
-        "text", "title", "font", "bigger", "larger", "readab", "testo", "titolo", "ingrand",
-        "legg",
+        "text", "title", "font", "bigger", "larger", "readab", "testo", "titolo", "ingrand", "legg",
     ]) {
         Glyph::Text
     } else {
@@ -238,10 +260,7 @@ fn paint_glyph(painter: &Painter, center: Pos2, glyph: &Glyph, color: Color32) {
     match glyph {
         Glyph::Sparkle => {
             for (dx, dy) in [(5.5, 0.0), (0.0, 5.5)] {
-                painter.line_segment(
-                    [center - vec2(dx, dy), center + vec2(dx, dy)],
-                    stroke,
-                );
+                painter.line_segment([center - vec2(dx, dy), center + vec2(dx, dy)], stroke);
             }
             for (dx, dy) in [(3.0, 3.0), (3.0, -3.0)] {
                 painter.line_segment(
@@ -333,7 +352,10 @@ pub(crate) fn improvement_card(
     let glyph = glyph_for(idea);
     let painter = ui.painter();
     painter.rect(rect, theme::RADIUS_PANEL, fill, stroke, StrokeKind::Inside);
-    let center = pos2(rect.left() + pad + badge / 2.0, rect.top() + pad + badge / 2.0);
+    let center = pos2(
+        rect.left() + pad + badge / 2.0,
+        rect.top() + pad + badge / 2.0,
+    );
     let accent = if enabled {
         theme::ACCENT
     } else {

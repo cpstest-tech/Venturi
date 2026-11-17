@@ -486,9 +486,7 @@ impl VenturiApp {
                                 }
                                 if !job.usage_history.is_empty() {
                                     ui.collapsing(t!("ai_sequence.usage_requests"), |ui| {
-                                        for (index, usage) in
-                                            job.usage_history.iter().enumerate()
-                                        {
+                                        for (index, usage) in job.usage_history.iter().enumerate() {
                                             ui.label(format!("{}: {}", index + 1, usage));
                                         }
                                     });
@@ -834,7 +832,10 @@ impl VenturiApp {
             );
             if !transcript {
                 media.retain(|source| {
-                    !matches!(source, crate::ai_sequence::context::Source::Transcript { .. })
+                    !matches!(
+                        source,
+                        crate::ai_sequence::context::Source::Transcript { .. }
+                    )
                 });
             }
             media
