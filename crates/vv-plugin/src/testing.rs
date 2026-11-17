@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use vv_core::{EffectId, PluginState, Vst3Effect};
 
@@ -103,6 +103,9 @@ fn target_dir() -> PathBuf {
 }
 
 fn build_bundle() -> PathBuf {
+    // A concurrent cargo run can rebuild the fixture and remove the artifact being copied.
+    static BUILD: Mutex<()> = Mutex::new(());
+    let _build = BUILD.lock().unwrap_or_else(PoisonError::into_inner);
     let target = target_dir();
     // Own target dir: the outer cargo holds the lock on the shared one while tests run.
     let output = Command::new(env!("CARGO"))
