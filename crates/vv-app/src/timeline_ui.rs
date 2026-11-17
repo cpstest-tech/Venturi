@@ -109,6 +109,7 @@ pub enum TimelineCommand {
 pub(crate) struct AiPlaceholder {
     pub job: String,
     pub failed: bool,
+    pub done: bool,
     pub start: FrameIdx,
     pub len: FrameIdx,
     pub label: String,
@@ -4512,15 +4513,22 @@ pub fn show_timeline(
                         paint_ai_placeholder(&track_painter(top), pending, rect, time);
                         let visible = rect.intersect(track_pane_rect(top));
                         if visible.is_positive() {
-                            ui.interact(
+                            let mut response = ui.interact(
                                 visible,
                                 egui::Id::new(("ai_placeholder", &pending.job)),
                                 egui::Sense::click(),
-                            )
-                            .context_menu(|ui| {
+                            );
+                            if pending.failed {
+                                if response.clicked() {
+                                    state.ai_placeholder_action =
+                                        Some(AiPlaceholderAction::Retry(pending.job.clone()));
+                                }
+                                response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
+                            }
+                            response.context_menu(|ui| {
                                 use AiPlaceholderAction as Action;
                                 if pending.failed {
-                                    if ui.button(t!("ai_sequence.retry")).clicked() {
+                                    if ui.button(t!("ai_sequence.retry_short")).clicked() {
                                         state.ai_placeholder_action =
                                             Some(Action::Retry(pending.job.clone()));
                                         ui.close();
@@ -6351,12 +6359,14 @@ fn paint_ai_placeholder(
 ) {
     let accent = if pending.failed {
         crate::theme::ERROR
+    } else if pending.done {
+        crate::theme::SUCCESS
     } else {
         crate::theme::ACCENT
     };
     painter.rect_filled(rect, 4.0, accent.gamma_multiply(0.18));
     let stripe = 18.0;
-    let shift = if pending.failed {
+    let shift = if pending.failed || pending.done {
         0.0
     } else {
         (time * 24.0) % (stripe * 2.0)

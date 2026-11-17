@@ -154,6 +154,39 @@ fn ai_interface_strings_are_available_in_every_locale() {
         "ai_sequence.stage_completed",
         "ai_sequence.stage_failed",
         "ai_sequence.stage_cancelled",
+        "ai_sequence.prompt_example",
+        "ai_sequence.section_what",
+        "ai_sequence.use_transcript",
+        "ai_sequence.section_style",
+        "ai_sequence.look_simple",
+        "ai_sequence.look_simple_hint",
+        "ai_sequence.look_modern",
+        "ai_sequence.look_modern_hint",
+        "ai_sequence.look_vivid",
+        "ai_sequence.look_vivid_hint",
+        "ai_sequence.section_where",
+        "ai_sequence.where_overlay",
+        "ai_sequence.where_overlay_hint",
+        "ai_sequence.where_side",
+        "ai_sequence.where_side_hint",
+        "ai_sequence.where_full",
+        "ai_sequence.where_full_hint",
+        "ai_sequence.placement_side",
+        "ai_sequence.placement_side_hint",
+        "ai_sequence.generate_infographic",
+        "ai_sequence.advanced",
+        "ai_sequence.placeholder_done",
+        "ai_sequence.placeholder_adding",
+        "ai_sequence.placeholder_retry",
+        "ai_sequence.retry_short",
+        "ai_sequence.edit_title",
+        "ai_sequence.edit_subtitle",
+        "ai_sequence.apply_change",
+        "ai_sequence.or_try",
+        "ai_sequence.suggestion_hover",
+        "ai_sequence.editing",
+        "ai_sequence.edit_failed",
+        "ai_sequence.edit_details",
     ] {
         for locale in rust_i18n::available_locales!() {
             assert!(
@@ -348,4 +381,51 @@ fn auto_length_placeholder_stays_short_until_the_model_decides() {
         .jobs
         .push(job);
     assert_eq!(app.ai_placeholders()[0].len, 240);
+}
+
+#[test]
+fn the_transcript_can_be_left_out_of_the_request() {
+    let mut app = app();
+    app.timeline_state.selected.insert((0, vv_core::ClipId(1)));
+    assert_ne!(app.ai_sequence_request().unwrap().context, "[]");
+    app.ai_sequences.no_transcript = true;
+    assert_eq!(app.ai_sequence_request().unwrap().context, "[]");
+}
+
+#[test]
+fn the_modern_look_is_the_default_style() {
+    let mut app = app();
+    assert!(app.ai_sequence_request().unwrap().style.starts_with("Modern"));
+    app.ai_sequences.style = LOOKS[2].prompt.into();
+    assert!(app.ai_sequence_request().unwrap().style.starts_with("Vivid"));
+}
+
+#[test]
+fn suggestion_cards_fit_narrow_panels() {
+    let idea = crate::ai_sequence::Improvement {
+        id: "bigger-title".into(),
+        title: "Make the title bigger".into(),
+        description: "Enlarge the title and raise its contrast so it reads from far away.".into(),
+        instruction: "Enlarge the title".into(),
+    };
+    let ctx = egui::Context::default();
+    for width in [200.0_f32, 320.0, 800.0] {
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(width, 600.0),
+            )),
+            ..Default::default()
+        };
+        let mut clicked = false;
+        let mut output = ctx.run_ui(raw, |ui| {
+            clicked = crate::ai_sequence_cards::improvement_card(ui, &idea, true).clicked();
+        });
+        output.textures_delta.clear();
+        assert!(!clicked);
+        assert!(
+            ctx.globally_used_rect().width() <= width + 1.0,
+            "card overflows at {width}"
+        );
+    }
 }

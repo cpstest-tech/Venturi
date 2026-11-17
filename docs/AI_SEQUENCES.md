@@ -1,7 +1,11 @@
 # AI Sequence Generator
 
 The **AI Infographic** tab of the library, next to AI Clips, describes and
-generates animations. It is based on the clips selected on the timeline (or the
+generates animations. It has three steps: what to show (with an option to use the
+selected clip's speech), a style card (Simple, Modern, Vivid; Modern by default) and
+a placement card (Above the video, Side by side, Full screen), then one *Generate
+infographic* button. Provider, length, layout details, context chips, visual
+suggestions and the job list live under *Advanced options*. It is based on the clips selected on the timeline (or the
 In/Out range); with no selection the animation is free. The length is *Like the
 clip*, *AI decides* (default; the model returns `duration_seconds`, at most 30 s)
 or *Custom*. While a job runs, a striped "AI generating…" block reserves its spot
@@ -53,9 +57,10 @@ Project captions are cropped to that range. If they are absent, background
 extraction reuses the Viral Clips transcript cache, and otherwise transcribes
 just the selected excerpt locally with Whisper, so CLI providers (which get no
 audio) still receive timestamped speech. The prompt asks for an animation
-synchronized with those words. The Layout option picks Full screen, Pill (a
-lower-third capsule) or Above the head (talking-head overlay); the last two are
-always rendered transparent. Prompt-only mode sends no project captions or media.
+synchronized with those words. The placement cards map to Full screen, Overlay
+(Pill, a lower-third capsule, or Above the head, picked under Advanced) and Side by
+side (the graphic fills the right of the frame; the video is not resized, so its
+right part is covered); every non-fullscreen layout is rendered transparent. Prompt-only mode sends no project captions or media.
 Optional context includes up to three representative raw source frames and up
 to three raw source audio excerpts (10 seconds each, at most 30 seconds total).
 Frames use the same decoder/downscale helper as Viral Clips. Audio uses the
@@ -118,9 +123,18 @@ clips from a worker thread.
 
 ## Revisions and visual suggestions
 
-Selecting a generated clip adds an AI section to Properties. It can request a
-background revision, preview completed media in the existing viewer, and apply
-or restore a version. Revisions inherit the original composition configuration
+Selecting a generated clip adds an AI section to Properties: *Edit with AI*, a
+text box with *Apply change*, and up to three suggestion cards. Each generation
+(including every revision) asks the model for three structured suggestions
+(`id`, `title`, `description`, `instruction`) about the composition it just wrote;
+they are stored in the job, parsed leniently (missing or malformed means no cards),
+and hide once their instruction was already applied in the family. Clicking a card
+starts a revision with its instruction, no second click. While any revision of the
+family runs the controls are disabled. A finished revision is applied to the clip
+automatically through the same undoable replacement command; if that fails (locked
+track, clip changed, too short) the previous version stays and the error is shown.
+Revisions keep the current length. Under *Versions and details* the panel can
+still preview completed media in the existing viewer, and apply or restore a version. Revisions inherit the original composition configuration
 and source. Applying changes only the selected clip's media source through an
 undoable command; it preserves position, trim, speed, effects and fades. The
 application rejects locked tracks, missing clips, stale expected sources,

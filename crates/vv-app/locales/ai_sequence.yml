@@ -15,8 +15,8 @@ ai_sequence.title:
   it: "Infografica AI"
 
 ai_sequence.intro:
-  en: "Describe what to show. The AI designs an animation from the selected clip and places it on the timeline."
-  it: "Descrivi cosa vuoi mostrare. L'AI crea un'animazione a partire dalla clip selezionata e la mette in timeline."
+  en: "Select a video, describe the graphic you want and press Generate. It is added to the timeline automatically."
+  it: "Seleziona un video, descrivi la grafica che vuoi e premi Genera. Verrà inserita automaticamente nella timeline."
 
 ai_sequence.prompt_hint:
   en: "What should the animation show? e.g. “Animated bar chart: sales grow from 20% to 80%”"
@@ -99,8 +99,8 @@ ai_sequence.retry:
   it: "Riprova come nuova attività"
 
 ai_sequence.revision_hint:
-  en: "Describe changes to this composition"
-  it: "Descrivi le modifiche alla composizione"
+  en: "e.g. Make the title bigger and change the background"
+  it: "Es. Rendi il titolo più grande e cambia lo sfondo"
 
 ai_sequence.generate_revision:
   en: "Generate revision"
@@ -342,26 +342,6 @@ ai_sequence.chip_audio_gemini:
   en: "Audio is only used with Gemini"
   it: "L'audio viene usato solo con Gemini"
 
-ai_sequence.style_auto:
-  en: "Automatic"
-  it: "Automatico"
-
-ai_sequence.style_minimal:
-  en: "Minimal"
-  it: "Minimale"
-
-ai_sequence.style_bold:
-  en: "Bold"
-  it: "Audace"
-
-ai_sequence.style_technical:
-  en: "Technical"
-  it: "Tecnico"
-
-ai_sequence.style_corporate:
-  en: "Corporate"
-  it: "Aziendale"
-
 ai_sequence.length:
   en: "Length"
   it: "Durata"
@@ -421,3 +401,135 @@ ai_sequence.placement_above_head:
 ai_sequence.placement_overlay_hint:
   en: "Transparent overlay above the video, for talking heads."
   it: "Overlay trasparente sopra il video, per i talking head."
+
+ai_sequence.prompt_example:
+  en: "e.g. Explain how AI helps with programming"
+  it: "Es. Spiega come l'AI aiuta a programmare"
+
+ai_sequence.section_what:
+  en: "What do you want to show?"
+  it: "Cosa vuoi mostrare?"
+
+ai_sequence.use_transcript:
+  en: "Use the speech of the selected clip"
+  it: "Usa il parlato della clip selezionata"
+
+ai_sequence.section_style:
+  en: "Choose a style"
+  it: "Scegli lo stile"
+
+ai_sequence.look_simple:
+  en: "Simple"
+  it: "Semplice"
+
+ai_sequence.look_simple_hint:
+  en: "Minimal and essential"
+  it: "Minimale ed essenziale"
+
+ai_sequence.look_modern:
+  en: "Modern"
+  it: "Moderno"
+
+ai_sequence.look_modern_hint:
+  en: "Clean, dynamic and contemporary"
+  it: "Pulito, dinamico e contemporaneo"
+
+ai_sequence.look_vivid:
+  en: "Vivid"
+  it: "Vivace"
+
+ai_sequence.look_vivid_hint:
+  en: "Colorful and expressive"
+  it: "Colorato ed espressivo"
+
+ai_sequence.section_where:
+  en: "Where to place it?"
+  it: "Dove inserirla?"
+
+ai_sequence.where_overlay:
+  en: "Above the video"
+  it: "Sopra il video"
+
+ai_sequence.where_overlay_hint:
+  en: "Overlaid on the video"
+  it: "In sovrimpressione sul video"
+
+ai_sequence.where_side:
+  en: "Side by side"
+  it: "A lato"
+
+ai_sequence.where_side_hint:
+  en: "Next to the video, on the right"
+  it: "Accanto al video, sulla destra"
+
+ai_sequence.where_full:
+  en: "Full screen"
+  it: "Schermo intero"
+
+ai_sequence.where_full_hint:
+  en: "The graphic fills the whole screen"
+  it: "La grafica occupa tutto lo schermo"
+
+ai_sequence.placement_side:
+  en: "Side by side"
+  it: "A lato"
+
+ai_sequence.placement_side_hint:
+  en: "The graphic takes the right side; the video stays visible on the left."
+  it: "La grafica occupa il lato destro; il video resta visibile a sinistra."
+
+ai_sequence.generate_infographic:
+  en: "Generate infographic"
+  it: "Genera infografica"
+
+ai_sequence.advanced:
+  en: "Advanced options"
+  it: "Opzioni avanzate"
+
+ai_sequence.placeholder_done:
+  en: "Infographic ready"
+  it: "Infografica pronta"
+
+ai_sequence.placeholder_adding:
+  en: "Adding to the timeline"
+  it: "Inserimento in timeline"
+
+ai_sequence.placeholder_retry:
+  en: "Click to retry"
+  it: "Clicca per riprovare"
+
+ai_sequence.retry_short:
+  en: "Retry"
+  it: "Riprova"
+
+ai_sequence.edit_title:
+  en: "Edit with AI"
+  it: "Modifica con AI"
+
+ai_sequence.edit_subtitle:
+  en: "What do you want to change in your infographic?"
+  it: "Cosa vuoi cambiare nella tua infografica?"
+
+ai_sequence.apply_change:
+  en: "Apply change"
+  it: "Applica modifica"
+
+ai_sequence.or_try:
+  en: "Or try one of these suggestions"
+  it: "Oppure prova uno di questi suggerimenti"
+
+ai_sequence.suggestion_hover:
+  en: "Apply this change"
+  it: "Applica questa modifica"
+
+ai_sequence.editing:
+  en: "Applying your change…"
+  it: "Sto applicando la modifica…"
+
+ai_sequence.edit_failed:
+  en: "The last change could not be applied. Your current version is unchanged."
+  it: "Non è stato possibile applicare l'ultima modifica. La versione attuale è rimasta invariata."
+
+ai_sequence.edit_details:
+  en: "Versions and details"
+  it: "Versioni e dettagli"

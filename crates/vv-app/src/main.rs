@@ -9,6 +9,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 mod ai_clips;
 mod ai_context;
 mod ai_sequence;
+mod ai_sequence_cards;
 mod ai_sequence_ui;
 mod app_menu;
 mod auto_cut;

@@ -62,10 +62,11 @@ pub enum Placement {
     Fullscreen,
     Pill,
     AboveHead,
+    Side,
 }
 
 impl Placement {
-    pub const ALL: [Self; 3] = [Self::Fullscreen, Self::Pill, Self::AboveHead];
+    pub const ALL: [Self; 4] = [Self::Fullscreen, Self::Pill, Self::AboveHead, Self::Side];
 
     /// Overlays must stay transparent so the speaker remains visible.
     pub fn is_overlay(self) -> bool {
@@ -77,6 +78,9 @@ impl Placement {
             Self::Fullscreen => "Full-screen graphic: use the whole canvas.",
             Self::Pill => {
                 "Pill overlay: one compact rounded capsule (fully rounded ends, about 70-85% of the canvas width, at most about 14% of its height) centered horizontally in the lower third, above the bottom 12% safe area. Keep text short and large. Everything outside the pill must be fully transparent so the video shows through."
+            }
+            Self::Side => {
+                "Side-by-side layout: the graphic is a clean opaque panel with rounded corners and margins on the right 45% of the canvas, vertically centered, with large readable text. The left half of the canvas must stay fully transparent so the video shows through."
             }
             Self::AboveHead => {
                 "Above-the-head overlay for a talking-head video: place the graphic in the empty space above the speaker's head, inside the top 30% of the canvas, centered on the speaker (use the attached frames to locate the head). Never cover the face. Everything else must be fully transparent so the speaker stays visible."
@@ -187,6 +191,18 @@ pub struct Job {
     pub events: Vec<String>,
     #[serde(default)]
     pub attachments: Vec<context::Attachment>,
+    /// Edits the model proposed for this exact composition.
+    #[serde(default)]
+    pub improvements: Vec<Improvement>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Improvement {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    /// Sent as the revision prompt when the user picks the suggestion.
+    pub instruction: String,
 }
 
 pub use store::Store;

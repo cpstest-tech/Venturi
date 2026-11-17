@@ -1,4 +1,4 @@
-use super::{Job, Provider};
+use super::{Improvement, Job, Provider};
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::AtomicBool;
@@ -24,7 +24,20 @@ pub trait Adapter {
         let auto = job.request.auto_duration;
         let mut properties =
             serde_json::json!({"source":{"type":"STRING"},"transparent":{"type":"BOOLEAN"}});
-        let mut required = vec!["source", "transparent"];
+        properties["suggestions"] = serde_json::json!({
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "id": {"type": "STRING"},
+                    "title": {"type": "STRING"},
+                    "description": {"type": "STRING"},
+                    "instruction": {"type": "STRING"}
+                },
+                "required": ["id", "title", "description", "instruction"]
+            }
+        });
+        let mut required = vec!["source", "transparent", "suggestions"];
         if auto {
             properties["duration_seconds"] = serde_json::json!({"type":"NUMBER"});
             required.push("duration_seconds");
@@ -32,7 +45,7 @@ pub trait Adapter {
         let schema =
             serde_json::json!({"type":"OBJECT", "properties":properties, "required":required});
         let prompt = format!(
-            "{prompt}\nReturn the required JSON fields source and transparent. The current render transparency is {}. Preserve it unless the user asks for a transparent/opaque background or overlay. The transparent flag controls the actual rendered alpha channel, so update the component background consistently.{}",
+            "{prompt}\nReturn the required JSON fields source and transparent. The current render transparency is {}. Preserve it unless the user asks for a transparent/opaque background or overlay. The transparent flag controls the actual rendered alpha channel, so update the component background consistently. Also return suggestions: exactly three different, concrete edits the user could ask for next to improve THIS composition, based on what you just wrote. Each has an id (short slug), a title of at most 4 words, a description of one short plain sentence a non-technical person understands (no jargon, no code terms), and an instruction: a precise edit request addressed to you, specific to elements that exist in the source. Write them in the language of the user request. Do not repeat edits listed in the earlier requests.{}",
             job.request.composition.transparent,
             if auto {
                 " Also return duration_seconds: the length in seconds that best fits the content, between 1 and the maximum in Configuration. Design the animation to fill exactly that length."
@@ -46,6 +59,7 @@ pub trait Adapter {
             source: parse_source(&reply.text)?,
             transparent,
             duration_seconds: parse_duration(&reply.text),
+            improvements: parse_improvements(&reply.text),
             usage: reply.usage,
             session: reply.session,
             events: reply.events,
@@ -65,6 +79,7 @@ pub struct Output {
     pub source: String,
     pub transparent: Option<bool>,
     pub duration_seconds: Option<f64>,
+    pub improvements: Vec<Improvement>,
     pub usage: Option<serde_json::Value>,
     pub session: Option<String>,
     pub events: Vec<String>,
@@ -379,4 +394,58 @@ pub fn parse_duration(text: &str) -> Option<f64> {
         .get("duration_seconds")?
         .as_f64()
         .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
+}
+
+fn text_field<'a>(item: &'a serde_json::Value, name: &str) -> &'a str {
+    item.get(name)
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .unwrap_or("")
+}
+
+fn limited(text: &str, max: usize) -> String {
+    text.chars().take(max).collect()
+}
+
+/// Lenient on purpose: a missing or malformed list only means no suggestions.
+pub fn parse_improvements(text: &str) -> Vec<Improvement> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return Vec::new();
+    };
+    let Some(items) = value.get("suggestions").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    let mut result: Vec<Improvement> = Vec::new();
+    for item in items {
+        let title = text_field(item, "title");
+        let description = text_field(item, "description");
+        let instruction = text_field(item, "instruction");
+        if title.is_empty() || description.is_empty() || instruction.is_empty() {
+            continue;
+        }
+        if result.iter().any(|known| {
+            known.title.eq_ignore_ascii_case(title)
+                || known.instruction.eq_ignore_ascii_case(instruction)
+        }) {
+            continue;
+        }
+        let mut id: String = text_field(item, "id")
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+            .take(32)
+            .collect();
+        if id.is_empty() || result.iter().any(|known| known.id == id) {
+            id = format!("idea-{}", result.len() + 1);
+        }
+        result.push(Improvement {
+            id,
+            title: limited(title, 60),
+            description: limited(description, 240),
+            instruction: limited(instruction, 1000),
+        });
+        if result.len() == 3 {
+            break;
+        }
+    }
+    result
 }

@@ -906,6 +906,68 @@ fn jobs_saved_before_placement_existed_load_as_fullscreen() {
     assert_eq!(loaded.placement, Placement::Fullscreen);
     assert!(!Placement::Fullscreen.is_overlay());
     assert!(Placement::Pill.is_overlay() && Placement::AboveHead.is_overlay());
+    assert!(Placement::Side.is_overlay());
+    assert!(Placement::Side.instructions().contains("Side-by-side"));
+}
+
+#[test]
+fn improvements_are_parsed_leniently_deduplicated_and_capped_at_three() {
+    let text = r#"{"source":"x","suggestions":[
+        {"id":"a b!","title":"Bigger code","description":"Make the code larger.","instruction":"Enlarge the code block"},
+        {"id":"","title":"bigger code","description":"Same title","instruction":"Other"},
+        {"id":"x","title":"","description":"No title","instruction":"Nothing"},
+        {"id":"two","title":"Fade in","description":"Items appear one at a time.","instruction":"Fade the items in one by one"},
+        {"id":"two","title":"Contrast","description":"Easier to read.","instruction":"Raise the contrast"},
+        {"id":"four","title":"Fourth","description":"Extra","instruction":"Extra"}]}"#;
+    let ideas = provider::parse_improvements(text);
+    assert_eq!(ideas.len(), 3);
+    assert_eq!(ideas[0].id, "ab");
+    assert_eq!(ideas[1].title, "Fade in");
+    assert_eq!(ideas[2].id, "idea-3");
+    assert_eq!(ideas[2].instruction, "Raise the contrast");
+}
+
+#[test]
+fn missing_or_malformed_improvements_mean_no_suggestions() {
+    for text in [
+        "not json",
+        r#"{"source":"x"}"#,
+        r#"{"suggestions":"x"}"#,
+        r#"{"suggestions":[{"title":"Only a title"}]}"#,
+    ] {
+        assert!(provider::parse_improvements(text).is_empty(), "{text}");
+    }
+}
+
+#[test]
+fn jobs_saved_before_improvements_existed_load_without_them() {
+    let store = Store::new(&directory()).unwrap();
+    let job = store.create(request()).unwrap();
+    let mut value = serde_json::to_value(&job).unwrap();
+    value.as_object_mut().unwrap().remove("improvements");
+    let loaded: Job = serde_json::from_value(value).unwrap();
+    assert!(loaded.improvements.is_empty());
+}
+
+#[test]
+fn revisions_list_the_earlier_requests_oldest_first() {
+    let store = Store::new(&directory()).unwrap();
+    let mut first = store.create(request()).unwrap();
+    first.stage = Stage::Completed;
+    store.save(&first).unwrap();
+    let mut second_request = request();
+    second_request.parent = Some(first.id.clone());
+    second_request.prompt = "Make it blue".into();
+    let mut second = store.create(second_request).unwrap();
+    second.stage = Stage::Completed;
+    store.save(&second).unwrap();
+    let mut third_request = request();
+    third_request.parent = Some(second.id.clone());
+    let third = store.create(third_request).unwrap();
+    let text = queue::earlier_requests(&store, &third);
+    assert!(text.find("Animated bars") < text.find("Make it blue"));
+    assert!(text.contains("Make it blue"));
+    assert!(queue::earlier_requests(&store, &first).is_empty());
 }
 
 #[test]
