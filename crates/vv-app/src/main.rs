@@ -5118,8 +5118,40 @@ fn app_icon() -> Option<egui::IconData> {
     })
 }
 
+/// Desktop launches have no visible stderr: keep panics in `crash.log` next to the library.
+fn install_crash_log() {
+    let Some(path) = library::Library::default_root()
+        .and_then(|root| root.parent().map(|dir| dir.join("crash.log")))
+    else {
+        return;
+    };
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        default(info);
+        use std::io::Write;
+        let seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |time| time.as_secs());
+        let thread = std::thread::current();
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            let _ = writeln!(
+                file,
+                "--- unix time {seconds}, version {}, thread {}\n{info}\n{backtrace}",
+                env!("CARGO_PKG_VERSION"),
+                thread.name().unwrap_or("unnamed")
+            );
+        }
+    }));
+}
+
 fn main() -> eframe::Result<()> {
     env_logger::init();
+    install_crash_log();
 
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("mcp") {

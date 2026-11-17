@@ -165,8 +165,38 @@ fn ai_interface_strings_are_available_in_every_locale() {
         "ai_sequence.look_vivid",
         "ai_sequence.look_vivid_hint",
         "ai_sequence.section_where",
-        "ai_sequence.where_overlay",
-        "ai_sequence.where_overlay_hint",
+        "ai_sequence.placement_pill_hint",
+        "ai_sequence.placement_above_head_hint",
+        "ai_sequence.tab_generate",
+        "ai_sequence.tab_suggestions",
+        "ai_sequence.history",
+        "ai_sequence.setup_title",
+        "ai_sequence.setup_node",
+        "ai_sequence.setup_packages",
+        "ai_sequence.setup_browser",
+        "ai_sequence.setup_isolation",
+        "ai_sequence.setup_waiting",
+        "ai_sequence.setup_failed",
+        "ai_sequence.setup_retry",
+        "ai_sequence.setup_done",
+        "ai_sequence.setup_queued",
+        "ai_sequence.suggestions_intro",
+        "ai_sequence.scope_title",
+        "ai_sequence.scope_selection",
+        "ai_sequence.scope_timeline",
+        "ai_sequence.scope_select_clip",
+        "ai_sequence.focus_title",
+        "ai_sequence.focus_hint",
+        "ai_sequence.analysis_with",
+        "ai_sequence.ideas_found",
+        "ai_sequence.select_all",
+        "ai_sequence.select_none",
+        "ai_sequence.jump_to",
+        "ai_sequence.uses_settings",
+        "ai_sequence.change",
+        "ai_sequence.generate_count",
+        "ai_sequence.look_custom",
+        "ai_sequence.use_idea",
         "ai_sequence.where_side",
         "ai_sequence.where_side_hint",
         "ai_sequence.where_full",
@@ -438,4 +468,43 @@ fn suggestion_cards_fit_narrow_panels() {
             "card overflows at {width}"
         );
     }
+}
+
+#[test]
+fn every_style_and_placement_card_is_translated_and_distinct() {
+    let prompts: std::collections::HashSet<_> = LOOKS.iter().map(|look| look.prompt).collect();
+    assert_eq!(prompts.len(), 10);
+    let keys = LOOKS.iter().flat_map(|look| [look.label, look.hint]).chain(
+        PLACEMENTS
+            .iter()
+            .flat_map(|(placement, hint, _)| [placement_key(*placement), *hint]),
+    );
+    for key in keys {
+        for locale in rust_i18n::available_locales!() {
+            assert!(
+                crate::_rust_i18n_try_translate(&locale, key).is_some(),
+                "{locale}: {key}"
+            );
+        }
+    }
+}
+
+#[test]
+fn whole_timeline_analysis_covers_every_frame_without_an_anchor() {
+    let mut app = app();
+    app.ai_sequences.scope = Scope::Timeline;
+    let range = app.ai_analysis_range().unwrap().unwrap();
+    assert_eq!((range.start, range.end, range.anchor), (0, 300, None));
+    let request = app
+        .request_for(Some(range), Length::Clip, "numbers")
+        .unwrap();
+    assert_eq!(request.composition.frames, 300);
+    assert_eq!(request.prompt, "numbers");
+    assert_eq!(request.anchor_clip, None);
+}
+
+#[test]
+fn selection_analysis_needs_a_selected_clip() {
+    let app = app();
+    assert!(app.ai_analysis_range().unwrap().is_none());
 }

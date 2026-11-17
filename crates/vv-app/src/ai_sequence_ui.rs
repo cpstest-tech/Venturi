@@ -1,6 +1,9 @@
 use super::*;
+use crate::ai_sequence::setup::{self, Setup};
 use crate::ai_sequence::{Composition, Job, Placement, Provider, Queue, Request, Stage};
-use crate::ai_sequence_cards::{Art, card_width, choice_card, improvement_card, section_title};
+use crate::ai_sequence_cards::{
+    Art, card_strip, choice_card, improvement_card, section_title, tab_bar,
+};
 use vv_core::Id;
 
 #[derive(Default)]
@@ -36,6 +39,28 @@ pub(crate) struct State {
     dismissed_placeholders: std::collections::HashSet<String>,
     earlier_jobs: Option<(PathBuf, std::collections::HashSet<String>)>,
     pending_applies: HashMap<String, RevisionTarget>,
+    tab: PanelTab,
+    shown_frame: u64,
+    scope: Scope,
+    analysis_prompt: String,
+    setup: Option<Setup>,
+    setup_error: Option<String>,
+    /// Requests submitted while the runtime was still being installed.
+    waiting: Vec<Request>,
+}
+
+#[derive(Clone, Copy, Default, PartialEq)]
+enum PanelTab {
+    #[default]
+    Generate,
+    Suggestions,
+}
+
+#[derive(Clone, Copy, Default, PartialEq)]
+enum Scope {
+    #[default]
+    Selection,
+    Timeline,
 }
 
 /// Where a finished revision lands without a second click.
@@ -66,7 +91,7 @@ struct Look {
 
 const DEFAULT_LOOK: usize = 1;
 
-const LOOKS: [Look; 3] = [
+const LOOKS: [Look; 10] = [
     Look {
         label: "ai_sequence.look_simple",
         hint: "ai_sequence.look_simple_hint",
@@ -85,6 +110,71 @@ const LOOKS: [Look; 3] = [
         prompt: "Vivid: colorful and expressive, bold saturated colors, playful energetic motion",
         art: crate::ai_sequence_cards::art_vivid,
     },
+    Look {
+        label: "ai_sequence.look_corporate",
+        hint: "ai_sequence.look_corporate_hint",
+        prompt: "Corporate: professional and trustworthy, navy and white palette, clean sans-serif type, tidy charts and icons, restrained motion",
+        art: crate::ai_sequence_cards::art_corporate,
+    },
+    Look {
+        label: "ai_sequence.look_neon",
+        hint: "ai_sequence.look_neon_hint",
+        prompt: "Neon: dark background with glowing cyan and magenta lines, futuristic tech feel, light trails and pulsing glows",
+        art: crate::ai_sequence_cards::art_neon,
+    },
+    Look {
+        label: "ai_sequence.look_editorial",
+        hint: "ai_sequence.look_editorial_hint",
+        prompt: "Editorial: magazine/newspaper layout, cream paper background, black serif headlines, thin rules and a single red accent, elegant type-driven motion",
+        art: crate::ai_sequence_cards::art_editorial,
+    },
+    Look {
+        label: "ai_sequence.look_glass",
+        hint: "ai_sequence.look_glass_hint",
+        prompt: "Glass: glassmorphism, frosted translucent panels with soft borders over blurred colorful gradient blobs, gentle floating motion",
+        art: crate::ai_sequence_cards::art_glass,
+    },
+    Look {
+        label: "ai_sequence.look_sketch",
+        hint: "ai_sequence.look_sketch_hint",
+        prompt: "Sketch: hand-drawn whiteboard style, marker strokes that draw themselves on, doodle arrows, circles and icons on a white board",
+        art: crate::ai_sequence_cards::art_sketch,
+    },
+    Look {
+        label: "ai_sequence.look_retro",
+        hint: "ai_sequence.look_retro_hint",
+        prompt: "Retro: 70s/80s vintage look, warm orange, mustard and brown palette, sunset stripes, rounded bold type, slight grain",
+        art: crate::ai_sequence_cards::art_retro,
+    },
+    Look {
+        label: "ai_sequence.look_elegant",
+        hint: "ai_sequence.look_elegant_hint",
+        prompt: "Elegant: luxury black and gold, thin serif type, fine lines and generous spacing, slow refined reveals",
+        art: crate::ai_sequence_cards::art_elegant,
+    },
+];
+
+const PLACEMENTS: [(Placement, &str, Art); 4] = [
+    (
+        Placement::Fullscreen,
+        "ai_sequence.where_full_hint",
+        crate::ai_sequence_cards::art_fullscreen,
+    ),
+    (
+        Placement::Pill,
+        "ai_sequence.placement_pill_hint",
+        crate::ai_sequence_cards::art_pill,
+    ),
+    (
+        Placement::AboveHead,
+        "ai_sequence.placement_above_head_hint",
+        crate::ai_sequence_cards::art_above_head,
+    ),
+    (
+        Placement::Side,
+        "ai_sequence.where_side_hint",
+        crate::ai_sequence_cards::art_side,
+    ),
 ];
 
 fn placement_key(placement: Placement) -> &'static str {
@@ -119,6 +209,7 @@ struct Range {
 impl VenturiApp {
     pub(crate) fn poll_ai_sequences(&mut self, ctx: &egui::Context) {
         self.poll_ai_source_copy();
+        self.poll_ai_runtime_setup(ctx);
         let project_path = self.session.path().map(Path::to_path_buf);
         let owner = (self.session.epoch(), project_path.clone());
         if self.ai_sequences.import_owner.as_ref() != Some(&owner) {
@@ -223,35 +314,121 @@ impl VenturiApp {
     }
 
     pub(crate) fn show_ai_sequence_tab(&mut self, ui: &mut egui::Ui) {
-        egui::ScrollArea::vertical()
-            .id_salt("ai_sequence_tab")
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
-                self.show_ai_sequence_contents(ui);
-            });
+        // The tab keeps its scroll offset while hidden; reopening must start from the top.
+        let frame = ui.ctx().cumulative_frame_nr();
+        let reopened = frame > self.ai_sequences.shown_frame + 1;
+        self.ai_sequences.shown_frame = frame;
+        self.ensure_ai_runtime(false);
+        self.open_ai_queue();
+
+        ui.add_space(theme::SPACE_2);
+        ui.heading(t!("ai_sequence.title"));
+        ui.add_space(theme::SPACE_1);
+        let generate_label = t!("ai_sequence.tab_generate");
+        let suggestions_label = t!("ai_sequence.tab_suggestions");
+        let current = self.ai_sequences.tab as usize;
+        let clicked = tab_bar(ui, &[&generate_label, &suggestions_label], current)
+            .filter(|index| *index != current);
+        if let Some(index) = clicked {
+            self.ai_sequences.tab = if index == 0 {
+                PanelTab::Generate
+            } else {
+                PanelTab::Suggestions
+            };
+        }
+        ui.add_space(theme::SPACE_1);
+        let mut area = egui::ScrollArea::vertical()
+            .id_salt(("ai_sequence_tab", self.ai_sequences.tab as usize))
+            .auto_shrink([false, false]);
+        if reopened || clicked.is_some() {
+            area = area.vertical_scroll_offset(0.0);
+        }
+        area.show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            match self.ai_sequences.tab {
+                PanelTab::Generate => self.show_ai_generate(ui),
+                PanelTab::Suggestions => self.show_ai_suggestions(ui),
+            }
+        });
     }
 
-    fn show_ai_sequence_contents(&mut self, ui: &mut egui::Ui) {
-        let project_path = self.session.path().map(Path::to_path_buf);
-        let mut import = None;
-        let mut revise = None;
-        let mut retry = None;
-        if let Some(path) = &project_path
-            && !self.ai_sequences.queues.contains_key(path)
+    fn open_ai_queue(&mut self) {
+        if let Some(path) = self.session.path().map(Path::to_path_buf)
+            && !self.ai_sequences.queues.contains_key(&path)
         {
-            match Queue::open(path) {
+            match Queue::open(&path) {
                 Ok(queue) => {
-                    self.ai_sequences.queues.insert(path.clone(), queue);
+                    self.ai_sequences.queues.insert(path, queue);
                 }
                 Err(error) => self.ai_sequences.error = Some(error),
             }
         }
+    }
 
-        ui.add_space(theme::SPACE_2);
-        ui.heading(t!("ai_sequence.title"));
+    fn ai_style(&self) -> String {
+        if self.ai_sequences.style.is_empty() {
+            LOOKS[DEFAULT_LOOK].prompt.to_owned()
+        } else {
+            self.ai_sequences.style.clone()
+        }
+    }
+
+    fn show_style_cards(&mut self, ui: &mut egui::Ui) {
+        let mut chosen = None;
+        card_strip(ui, "ai_styles", |ui| {
+            for (index, look) in LOOKS.iter().enumerate() {
+                let selected = self.ai_sequences.style == look.prompt
+                    || (self.ai_sequences.style.is_empty() && index == DEFAULT_LOOK);
+                if choice_card(ui, selected, &t!(look.label), look.art)
+                    .on_hover_text(t!(look.hint))
+                    .clicked()
+                {
+                    chosen = Some(look.prompt);
+                }
+            }
+        });
+        if let Some(prompt) = chosen {
+            self.ai_sequences.style = prompt.into();
+        }
+    }
+
+    fn show_placement_cards(&mut self, ui: &mut egui::Ui) {
+        let mut chosen = None;
+        card_strip(ui, "ai_placements", |ui| {
+            for (placement, hint, art) in PLACEMENTS {
+                if choice_card(
+                    ui,
+                    self.ai_sequences.placement == placement,
+                    &t!(placement_key(placement)),
+                    art,
+                )
+                .on_hover_text(t!(hint))
+                .clicked()
+                {
+                    chosen = Some(placement);
+                }
+            }
+        });
+        if let Some(placement) = chosen {
+            self.ai_sequences.placement = placement;
+        }
+        match self.ai_sequences.placement {
+            Placement::Fullscreen => {}
+            Placement::Side => {
+                ui.weak(t!("ai_sequence.placement_side_hint"));
+            }
+            _ => {
+                ui.weak(t!("ai_sequence.placement_overlay_hint"));
+            }
+        }
+    }
+
+    fn show_ai_generate(&mut self, ui: &mut egui::Ui) {
+        let project_path = self.session.path().map(Path::to_path_buf);
+        let mut import = None;
+        let mut revise = None;
+        let mut retry = None;
         ui.weak(t!("ai_sequence.intro"));
-        ui.add_space(theme::SPACE_2);
 
         if let Some(parent) = self.ai_sequences.parent.clone() {
             ui.horizontal_wrapped(|ui| {
@@ -266,88 +443,20 @@ impl VenturiApp {
         section_title(ui, "1", &t!("ai_sequence.section_what"));
         ui.add(
             egui::TextEdit::multiline(&mut self.ai_sequences.prompt)
-                .desired_rows(4)
+                .desired_rows(3)
                 .desired_width(ui.available_width())
                 .hint_text(t!("ai_sequence.prompt_example")),
         );
         if !revising {
             self.show_transcript_choice(ui);
-
             section_title(ui, "2", &t!("ai_sequence.section_style"));
-            let mut chosen = None;
-            ui.horizontal(|ui| {
-                let width = card_width(ui);
-                for (index, look) in LOOKS.iter().enumerate() {
-                    let selected = self.ai_sequences.style == look.prompt
-                        || (self.ai_sequences.style.is_empty() && index == DEFAULT_LOOK);
-                    if choice_card(ui, width, selected, &t!(look.label), look.art)
-                        .on_hover_text(t!(look.hint))
-                        .clicked()
-                    {
-                        chosen = Some(look.prompt);
-                    }
-                }
-            });
-            if let Some(prompt) = chosen {
-                self.ai_sequences.style = prompt.into();
-            }
-
+            self.show_style_cards(ui);
             section_title(ui, "3", &t!("ai_sequence.section_where"));
-            let placement = self.ai_sequences.placement;
-            let mut chosen = None;
-            ui.horizontal(|ui| {
-                let width = card_width(ui);
-                let options: [(&str, &str, bool, Placement, Art); 3] = [
-                    (
-                        "ai_sequence.where_overlay",
-                        "ai_sequence.where_overlay_hint",
-                        matches!(placement, Placement::Pill | Placement::AboveHead),
-                        if matches!(placement, Placement::Pill | Placement::AboveHead) {
-                            placement
-                        } else {
-                            Placement::Pill
-                        },
-                        crate::ai_sequence_cards::art_overlay,
-                    ),
-                    (
-                        "ai_sequence.where_side",
-                        "ai_sequence.where_side_hint",
-                        placement == Placement::Side,
-                        Placement::Side,
-                        crate::ai_sequence_cards::art_side,
-                    ),
-                    (
-                        "ai_sequence.where_full",
-                        "ai_sequence.where_full_hint",
-                        placement == Placement::Fullscreen,
-                        Placement::Fullscreen,
-                        crate::ai_sequence_cards::art_fullscreen,
-                    ),
-                ];
-                for (label, hint, selected, target, art) in options {
-                    if choice_card(ui, width, selected, &t!(label), art)
-                        .on_hover_text(t!(hint))
-                        .clicked()
-                    {
-                        chosen = Some(target);
-                    }
-                }
-            });
-            if let Some(target) = chosen {
-                self.ai_sequences.placement = target;
-            }
-            match self.ai_sequences.placement {
-                Placement::Fullscreen => {}
-                Placement::Side => {
-                    ui.weak(t!("ai_sequence.placement_side_hint"));
-                }
-                _ => {
-                    ui.weak(t!("ai_sequence.placement_overlay_hint"));
-                }
-            }
+            self.show_placement_cards(ui);
         }
 
         ui.add_space(theme::SPACE_3);
+        self.show_ai_runtime_status(ui);
         let can_generate = project_path.is_some()
             && self.timeline_id.is_some()
             && !self.ai_sequences.prompt.trim().is_empty();
@@ -369,7 +478,6 @@ impl VenturiApp {
         }
 
         ui.add_space(theme::SPACE_3);
-        let mut open_other_project = None;
         egui::CollapsingHeader::new(t!("ai_sequence.advanced").into_owned())
             .id_salt("ai_sequence_advanced")
             .show(ui, |ui| {
@@ -393,16 +501,6 @@ impl VenturiApp {
                             );
                         }
                     });
-                    ui.label(t!("ai_sequence.placement"));
-                    ui.horizontal_wrapped(|ui| {
-                        for placement in Placement::ALL {
-                            ui.selectable_value(
-                                &mut self.ai_sequences.placement,
-                                placement,
-                                t!(placement_key(placement)),
-                            );
-                        }
-                    });
                     if !self.ai_sequences.placement.is_overlay() {
                         ui.checkbox(
                             &mut self.ai_sequences.transparent,
@@ -423,81 +521,83 @@ impl VenturiApp {
                 {
                     self.open_settings(settings_dialog::Section::AiProviders);
                 }
+            });
 
-                ui.add_space(theme::SPACE_2);
-                self.show_ai_suggestions(ui);
+        let mut open_other_project = None;
+        let history = project_path
+            .as_ref()
+            .and_then(|path| self.ai_sequences.queues.get(path))
+            .map_or(0, |queue| queue.jobs.len());
+        egui::CollapsingHeader::new(t!("ai_sequence.history", count = history).into_owned())
+            .id_salt("ai_sequence_history")
+            .show(ui, |ui| {
                 open_other_project = self.show_other_ai_jobs(ui, project_path.as_deref());
-
-                if let Some(queue) = project_path
+                let Some(queue) = project_path
                     .as_ref()
                     .and_then(|path| self.ai_sequences.queues.get(path))
-                    && (!queue.jobs.is_empty() || !queue.warnings.is_empty())
-                {
-                    ui.add_space(theme::SPACE_2);
-                    ui.strong(t!("ai_sequence.jobs"));
-                    for warning in &queue.warnings {
-                        ui.colored_label(theme::ERROR, warning);
-                    }
-                    for job in queue.jobs.iter().rev() {
-                        ui.push_id(&job.id, |ui| {
-                            ui.group(|ui| {
-                                ui.set_width(ui.available_width());
-                                ui.horizontal_wrapped(|ui| {
-                                    if !job.stage.terminal() {
-                                        ui.spinner();
-                                    }
-                                    ui.label(
-                                        job.request.prompt.chars().take(60).collect::<String>(),
-                                    );
-                                });
-                                ui.horizontal_wrapped(|ui| {
-                                    ui.weak(job.stage.label());
-                                    if queue.is_cancelling(&job.id) {
-                                        ui.weak(t!("ai_sequence.cancelling"));
-                                    } else if !job.stage.terminal()
-                                        && ui.small_button(t!("ai_sequence.cancel")).clicked()
-                                    {
-                                        queue.cancel(&job.id);
-                                    }
-                                    if job.stage == Stage::Completed {
-                                        if ui.small_button(t!("ai_sequence.import")).clicked() {
-                                            import = Some(job.clone());
-                                        }
-                                        if ui.small_button(t!("ai_sequence.revise")).clicked() {
-                                            revise = Some(job.id.clone());
-                                        }
-                                    } else if job.stage.terminal()
-                                        && ui.small_button(t!("ai_sequence.retry")).clicked()
-                                    {
-                                        retry = Some(job.request.clone());
-                                    }
-                                });
-                                if let Some(error) = &job.error {
-                                    ui.collapsing(t!("ai_sequence.error_details"), |ui| {
-                                        ui.label(error);
-                                    });
+                else {
+                    return;
+                };
+                for warning in &queue.warnings {
+                    ui.colored_label(theme::ERROR, warning);
+                }
+                for job in queue.jobs.iter().rev() {
+                    ui.push_id(&job.id, |ui| {
+                        ui.group(|ui| {
+                            ui.set_width(ui.available_width());
+                            ui.horizontal_wrapped(|ui| {
+                                if !job.stage.terminal() {
+                                    ui.spinner();
                                 }
-                                if !job.events.is_empty() {
-                                    ui.collapsing(t!("ai_sequence.provider_events"), |ui| {
-                                        for event in &job.events {
-                                            ui.label(event);
-                                        }
-                                    });
+                                ui.label(job.request.prompt.chars().take(60).collect::<String>());
+                            });
+                            ui.horizontal_wrapped(|ui| {
+                                ui.weak(job.stage.label());
+                                if queue.is_cancelling(&job.id) {
+                                    ui.weak(t!("ai_sequence.cancelling"));
+                                } else if !job.stage.terminal()
+                                    && ui.small_button(t!("ai_sequence.cancel")).clicked()
+                                {
+                                    queue.cancel(&job.id);
                                 }
-                                if !job.usage_history.is_empty() {
-                                    ui.collapsing(t!("ai_sequence.usage_requests"), |ui| {
-                                        for (index, usage) in job.usage_history.iter().enumerate() {
-                                            ui.label(format!("{}: {}", index + 1, usage));
-                                        }
-                                    });
-                                } else if let Some(usage) = &job.usage {
-                                    ui.collapsing(t!("ai_sequence.usage"), |ui| {
-                                        ui.label(usage.to_string());
-                                    });
+                                if job.stage == Stage::Completed {
+                                    if ui.small_button(t!("ai_sequence.import")).clicked() {
+                                        import = Some(job.clone());
+                                    }
+                                    if ui.small_button(t!("ai_sequence.revise")).clicked() {
+                                        revise = Some(job.id.clone());
+                                    }
+                                } else if job.stage.terminal()
+                                    && ui.small_button(t!("ai_sequence.retry")).clicked()
+                                {
+                                    retry = Some(job.request.clone());
                                 }
                             });
+                            if let Some(error) = &job.error {
+                                ui.collapsing(t!("ai_sequence.error_details"), |ui| {
+                                    ui.label(error);
+                                });
+                            }
+                            if !job.events.is_empty() {
+                                ui.collapsing(t!("ai_sequence.provider_events"), |ui| {
+                                    for event in &job.events {
+                                        ui.label(event);
+                                    }
+                                });
+                            }
+                            if !job.usage_history.is_empty() {
+                                ui.collapsing(t!("ai_sequence.usage_requests"), |ui| {
+                                    for (index, usage) in job.usage_history.iter().enumerate() {
+                                        ui.label(format!("{}: {}", index + 1, usage));
+                                    }
+                                });
+                            } else if let Some(usage) = &job.usage {
+                                ui.collapsing(t!("ai_sequence.usage"), |ui| {
+                                    ui.label(usage.to_string());
+                                });
+                            }
                         });
-                    }
+                    });
                 }
             });
 
@@ -525,6 +625,90 @@ impl VenturiApp {
                     }
                 }
                 Err(error) => self.ai_sequences.error = Some(error),
+            }
+        }
+    }
+
+    fn show_ai_runtime_status(&mut self, ui: &mut egui::Ui) {
+        let mut retry = false;
+        if let Some(setup) = &self.ai_sequences.setup {
+            egui::Frame::new()
+                .fill(theme::BG_RAISED)
+                .corner_radius(theme::RADIUS_PANEL)
+                .inner_margin(theme::SPACE_2)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.strong(t!("ai_sequence.setup_title"));
+                    });
+                    ui.weak(setup.step().label());
+                    if !self.ai_sequences.waiting.is_empty() {
+                        ui.label(t!(
+                            "ai_sequence.setup_waiting",
+                            count = self.ai_sequences.waiting.len()
+                        ));
+                    }
+                });
+            ui.add_space(theme::SPACE_2);
+        } else if let Some(error) = &self.ai_sequences.setup_error {
+            egui::Frame::new()
+                .fill(theme::BG_RAISED)
+                .stroke(egui::Stroke::new(1.0, theme::ERROR))
+                .corner_radius(theme::RADIUS_PANEL)
+                .inner_margin(theme::SPACE_2)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.colored_label(theme::ERROR, t!("ai_sequence.setup_failed"));
+                    ui.label(error);
+                    retry = ui.button(t!("ai_sequence.setup_retry")).clicked();
+                });
+            ui.add_space(theme::SPACE_2);
+        }
+        if retry {
+            self.ensure_ai_runtime(true);
+        }
+    }
+
+    /// Starts the automatic runtime install when the configured one is missing.
+    fn ensure_ai_runtime(&mut self, retry: bool) -> bool {
+        if setup::ready(&self.settings.ai_runtime) {
+            return true;
+        }
+        if self.ai_sequences.setup.is_none() && (retry || self.ai_sequences.setup_error.is_none()) {
+            self.ai_sequences.setup_error = None;
+            match setup::default_directory() {
+                Some(directory) => self.ai_sequences.setup = Some(Setup::start(directory)),
+                None => {
+                    self.ai_sequences.setup_error =
+                        Some("Cannot locate the user data directory".into())
+                }
+            }
+        }
+        false
+    }
+
+    fn poll_ai_runtime_setup(&mut self, ctx: &egui::Context) {
+        let Some(setup) = &self.ai_sequences.setup else {
+            return;
+        };
+        let Some(result) = setup.poll() else {
+            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+            return;
+        };
+        self.ai_sequences.setup = None;
+        match result {
+            Ok(runtime) => {
+                self.settings.ai_runtime = runtime;
+                self.persist_settings();
+                self.toast(t!("ai_sequence.setup_done"));
+                for request in std::mem::take(&mut self.ai_sequences.waiting) {
+                    self.submit_ai_sequence(request);
+                }
+            }
+            Err(error) => {
+                self.ai_sequences.waiting.clear();
+                self.ai_sequences.setup_error = Some(error);
             }
         }
     }
@@ -730,6 +914,32 @@ impl VenturiApp {
         }))
     }
 
+    fn ai_analysis_range(&self) -> Result<Option<Range>, String> {
+        if self.ai_sequences.scope == Scope::Selection {
+            return self.ai_range();
+        }
+        let timeline_id = self.timeline_id.ok_or("Open a timeline first")?;
+        let timeline = &self.session.project.timelines[timeline_id];
+        let end = timeline.total_frames();
+        if end <= 0 {
+            return Ok(None);
+        }
+        let clips = timeline
+            .tracks
+            .iter()
+            .filter(|track| track.kind == TrackKind::Video)
+            .map(|track| track.clips.len())
+            .sum();
+        Ok(Some(Range {
+            start: 0,
+            end,
+            anchor: None,
+            anchor_details: None,
+            clips,
+            from_marks: false,
+        }))
+    }
+
     fn submit_ai_sequence(&mut self, mut request: Request) -> Option<String> {
         if self.ai_sequences.source_copy.is_some() {
             self.ai_sequences.error = Some(
@@ -746,6 +956,12 @@ impl VenturiApp {
                 self.ai_sequences.error = Some(error);
                 return None;
             }
+        }
+        if !self.ensure_ai_runtime(true) {
+            self.ai_sequences.waiting.push(request);
+            self.ai_sequences.error = None;
+            self.toast(t!("ai_sequence.setup_queued"));
+            return None;
         }
         let result = self
             .session
@@ -787,9 +1003,21 @@ impl VenturiApp {
             request.limits = self.settings.ai_limits.clone();
             return Ok(request);
         }
+        self.request_for(
+            self.ai_range()?,
+            self.ai_sequences.length,
+            &self.ai_sequences.prompt,
+        )
+    }
+
+    fn request_for(
+        &self,
+        range: Option<Range>,
+        length: Length,
+        prompt: &str,
+    ) -> Result<Request, String> {
         let timeline_id = self.timeline_id.ok_or("Open a timeline first")?;
         let timeline = &self.session.project.timelines[timeline_id];
-        let range = self.ai_range()?;
         let selection = range.is_some();
         let (start, end, anchor, anchor_details) = match range {
             Some(range) => (range.start, range.end, range.anchor, range.anchor_details),
@@ -801,8 +1029,8 @@ impl VenturiApp {
             ),
         };
         let fps = timeline.fps.as_f64();
-        let auto_duration = self.ai_sequences.length == Length::Auto;
-        let seconds = match self.ai_sequences.length {
+        let auto_duration = length == Length::Auto;
+        let seconds = match length {
             Length::Auto => AUTO_MAX_SECONDS,
             Length::Custom => self.ai_sequences.custom_seconds.max(1.0),
             Length::Clip if end > start => (end - start) as f64 / fps,
@@ -843,13 +1071,9 @@ impl VenturiApp {
             Vec::new()
         };
         Ok(Request {
-            prompt: self.ai_sequences.prompt.clone(),
+            prompt: prompt.to_owned(),
             context: serde_json::to_string(&words).map_err(|e| e.to_string())?,
-            style: if self.ai_sequences.style.is_empty() {
-                LOOKS[DEFAULT_LOOK].prompt.to_owned()
-            } else {
-                self.ai_sequences.style.clone()
-            },
+            style: self.ai_style(),
             placement: self.ai_sequences.placement,
             media,
             provider: self.settings.ai_provider,
@@ -1289,8 +1513,83 @@ impl VenturiApp {
     fn show_ai_suggestions(&mut self, ui: &mut egui::Ui) {
         let mut analyze = false;
         let mut generate = false;
-        ui.collapsing(t!("ai_sequence.suggestions"), |ui| {
-            ui.label(t!("ai_sequence.suggestions_hint"));
+        let mut cancel = false;
+        ui.weak(t!("ai_sequence.suggestions_intro"));
+
+        section_title(ui, "1", &t!("ai_sequence.scope_title"));
+        let mut chosen = None;
+        card_strip(ui, "ai_scope", |ui| {
+            for (scope, key, art) in [
+                (
+                    Scope::Selection,
+                    "ai_sequence.scope_selection",
+                    crate::ai_sequence_cards::art_scope_clip as Art,
+                ),
+                (
+                    Scope::Timeline,
+                    "ai_sequence.scope_timeline",
+                    crate::ai_sequence_cards::art_scope_timeline,
+                ),
+            ] {
+                if choice_card(ui, self.ai_sequences.scope == scope, &t!(key), art).clicked() {
+                    chosen = Some(scope);
+                }
+            }
+        });
+        if let Some(scope) = chosen {
+            self.ai_sequences.scope = scope;
+        }
+        let range = if self.timeline_id.is_some() {
+            self.ai_analysis_range()
+        } else {
+            Ok(None)
+        };
+        let has_range = matches!(range, Ok(Some(_)));
+        match &range {
+            Ok(Some(range)) => {
+                let source = if self.ai_sequences.scope == Scope::Timeline {
+                    t!("ai_sequence.scope_timeline")
+                } else if range.from_marks {
+                    t!("ai_sequence.context_marks")
+                } else if range.clips == 1 {
+                    t!("ai_sequence.context_clip")
+                } else {
+                    t!("ai_sequence.context_clips", count = range.clips)
+                };
+                ui.weak(format!(
+                    "{source} · {:.1} s · {}",
+                    self.ai_range_seconds(range),
+                    t!(
+                        "ai_sequence.context_words",
+                        count = self.ai_range_words(range)
+                    )
+                ));
+            }
+            Ok(None) => {
+                ui.colored_label(
+                    theme::WARNING,
+                    if self.timeline_id.is_some() {
+                        t!("ai_sequence.scope_select_clip")
+                    } else {
+                        t!("ai_sequence.context_no_timeline")
+                    },
+                );
+            }
+            Err(error) => {
+                ui.colored_label(theme::ERROR, error);
+            }
+        }
+
+        section_title(ui, "2", &t!("ai_sequence.focus_title"));
+        ui.add(
+            egui::TextEdit::multiline(&mut self.ai_sequences.analysis_prompt)
+                .desired_rows(2)
+                .desired_width(ui.available_width())
+                .hint_text(t!("ai_sequence.focus_hint")),
+        );
+        ui.add_space(theme::SPACE_1);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(t!("ai_sequence.analysis_with"));
             let previous_provider = self.ai_sequences.analysis_provider;
             egui::ComboBox::from_id_salt("analysis_provider")
                 .selected_text(self.ai_sequences.analysis_provider.label())
@@ -1313,103 +1612,190 @@ impl VenturiApp {
             }
             ui.add(
                 egui::TextEdit::singleline(&mut self.ai_sequences.analysis_model)
+                    .desired_width(150.0)
                     .hint_text(t!("ai_sequence.analysis_model")),
             );
-            if let Some(analysis) = &self.ai_sequences.analysis {
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(t!("ai_sequence.analyzing"));
-                    if ui.button(t!("ai_sequence.cancel_analysis")).clicked() {
-                        analysis.cancel();
-                    }
+        });
+        ui.add_space(theme::SPACE_2);
+        if self.ai_sequences.analysis.is_some() {
+            egui::Frame::new()
+                .fill(theme::BG_RAISED)
+                .corner_radius(theme::RADIUS_PANEL)
+                .inner_margin(theme::SPACE_2)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(t!("ai_sequence.analyzing"));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            cancel = ui.button(t!("ai_sequence.cancel_analysis")).clicked();
+                        });
+                    });
                 });
-            } else {
-                ui.checkbox(
-                    &mut self.ai_sequences.refresh_analysis,
-                    t!("ai_sequence.refresh_analysis"),
-                );
-                analyze = ui.button(t!("ai_sequence.analyze")).clicked();
+        } else {
+            analyze = accent_button(
+                ui,
+                t!("ai_sequence.analyze").into_owned(),
+                has_range && self.session.path().is_some(),
+            )
+            .clicked();
+            ui.checkbox(
+                &mut self.ai_sequences.refresh_analysis,
+                t!("ai_sequence.refresh_analysis"),
+            );
+        }
+        if let Some(error) = &self.ai_sequences.error {
+            ui.colored_label(theme::ERROR, error);
+        }
+
+        let current_project = self.ai_sequences.analysis_project.as_deref() == self.session.path();
+        if current_project && !self.ai_sequences.suggestions.is_empty() {
+            let selected = self
+                .ai_sequences
+                .suggestions
+                .iter()
+                .filter(|s| s.selected)
+                .count();
+            section_title(
+                ui,
+                "3",
+                &t!(
+                    "ai_sequence.ideas_found",
+                    count = self.ai_sequences.suggestions.len()
+                ),
+            );
+            ui.horizontal_wrapped(|ui| {
+                let all = selected == self.ai_sequences.suggestions.len();
+                if ui
+                    .small_button(if all {
+                        t!("ai_sequence.select_none")
+                    } else {
+                        t!("ai_sequence.select_all")
+                    })
+                    .clicked()
+                {
+                    for suggestion in &mut self.ai_sequences.suggestions {
+                        suggestion.selected = !all;
+                    }
+                }
+                if selected > 0
+                    && selected < self.ai_sequences.suggestions.len()
+                    && ui.small_button(t!("ai_sequence.discard")).clicked()
+                {
+                    self.ai_sequences.suggestions.retain(|s| s.selected);
+                }
+            });
+            ui.add_space(theme::SPACE_1);
+            let base = self.ai_sequences.analysis_base.as_ref();
+            let jump_allowed =
+                base.is_some_and(|base| base.timeline == self.timeline_id.map(Id::raw));
+            let mut jump = None;
+            for (index, suggestion) in self.ai_sequences.suggestions.iter_mut().enumerate() {
+                ui.push_id(index, |ui| {
+                    // Not BG_RAISED: the unchecked checkbox would vanish into it.
+                    egui::Frame::new()
+                        .fill(theme::BG_PANEL)
+                        .stroke(egui::Stroke::new(
+                            1.0,
+                            if suggestion.selected {
+                                theme::ACCENT
+                            } else {
+                                theme::BORDER_SUBTLE
+                            },
+                        ))
+                        .corner_radius(theme::RADIUS_PANEL)
+                        .inner_margin(theme::SPACE_2)
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.horizontal(|ui| {
+                                ui.checkbox(
+                                    &mut suggestion.selected,
+                                    egui::RichText::new(t!("ai_sequence.use_idea")).strong(),
+                                );
+                                let time = format!(
+                                    "▶ {:.1}–{:.1} s",
+                                    suggestion.start_ms as f64 / 1000.0,
+                                    suggestion.end_ms as f64 / 1000.0
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui
+                                            .add_enabled(
+                                                jump_allowed,
+                                                egui::Button::new(time).small(),
+                                            )
+                                            .on_hover_text(t!("ai_sequence.jump_to"))
+                                            .clicked()
+                                        {
+                                            jump = Some(suggestion.start_ms);
+                                        }
+                                    },
+                                );
+                            });
+                            ui.add(
+                                egui::TextEdit::multiline(&mut suggestion.description)
+                                    .desired_rows(2)
+                                    .desired_width(ui.available_width()),
+                            );
+                            if !suggestion.reason.trim().is_empty() {
+                                ui.label(
+                                    egui::RichText::new(&suggestion.reason)
+                                        .small()
+                                        .color(theme::TEXT_SECONDARY),
+                                );
+                            }
+                        });
+                });
+                ui.add_space(theme::SPACE_1);
             }
+            if let Some(start_ms) = jump
+                && let Some(base) = &self.ai_sequences.analysis_base
+            {
+                self.timeline_state.playhead =
+                    base.start + (start_ms as f64 * base.composition.fps / 1000.0).round() as i64;
+            }
+
+            ui.add_space(theme::SPACE_2);
+            let look = LOOKS
+                .iter()
+                .find(|look| look.prompt == self.ai_style())
+                .map_or_else(|| t!("ai_sequence.look_custom"), |look| t!(look.label));
+            ui.horizontal_wrapped(|ui| {
+                ui.weak(t!(
+                    "ai_sequence.uses_settings",
+                    style = look,
+                    placement = t!(placement_key(self.ai_sequences.placement))
+                ));
+                if ui.small_button(t!("ai_sequence.change")).clicked() {
+                    self.ai_sequences.tab = PanelTab::Generate;
+                }
+            });
+            self.show_ai_runtime_status(ui);
+            generate = accent_button(
+                ui,
+                t!("ai_sequence.generate_count", count = selected).into_owned(),
+                selected > 0,
+            )
+            .clicked();
             if let Some(usage) = &self.ai_sequences.analysis_usage {
                 ui.collapsing(t!("ai_sequence.analysis_usage"), |ui| {
                     ui.label(usage.to_string());
                 });
             }
-            if self.ai_sequences.analysis_project.as_deref() == self.session.path() {
-                for suggestion in &mut self.ai_sequences.suggestions {
-                    ui.horizontal(|ui| {
-                        ui.checkbox(&mut suggestion.selected, "");
-                        if ui
-                            .small_button(format!(
-                                "{:.1}–{:.1}s",
-                                suggestion.start_ms as f64 / 1000.0,
-                                suggestion.end_ms as f64 / 1000.0
-                            ))
-                            .clicked()
-                            && let Some(base) = &self.ai_sequences.analysis_base
-                            && base.timeline == self.timeline_id.map(Id::raw)
-                        {
-                            self.timeline_state.playhead = base.start
-                                + (suggestion.start_ms as f64 * base.composition.fps / 1000.0)
-                                    .round() as i64;
-                        }
-                    });
-                    ui.text_edit_multiline(&mut suggestion.description);
-                    ui.small(&suggestion.reason);
-                }
-                generate = ui
-                    .add_enabled(
-                        self.ai_sequences.suggestions.iter().any(|s| s.selected),
-                        egui::Button::new(t!("ai_sequence.generate_selected")),
-                    )
-                    .clicked();
-                if ui.small_button(t!("ai_sequence.discard")).clicked() {
-                    self.ai_sequences.suggestions.retain(|s| s.selected);
-                }
-            }
-        });
-        if analyze {
-            let parent = self.ai_sequences.parent.take();
-            let result = self.ai_sequence_request();
-            self.ai_sequences.parent = parent;
-            match result {
-                Ok(mut request) => {
-                    request.provider = self.ai_sequences.analysis_provider;
-                    request.model = self.ai_sequences.analysis_model.clone();
-                    request.api_access = self.settings.sequence_api_access();
-                    if request.provider == Provider::Gemini && request.model.trim().is_empty() {
-                        self.ai_sequences.error =
-                            Some("Select a Gemini analysis model first".into());
-                        return;
-                    }
-                    let Some(path) = self.session.path().map(Path::to_path_buf) else {
-                        return;
-                    };
-                    let directory =
-                        crate::ai_sequence::portable::directory(&path).join(".analyses");
-                    let result = std::fs::create_dir_all(&directory)
-                        .map_err(|e| e.to_string())
-                        .and_then(|_| {
-                            crate::ai_sequence::suggestions::Analysis::start(
-                                request,
-                                directory,
-                                self.ai_sequences.refresh_analysis,
-                            )
-                        });
-                    match result {
-                        Ok(analysis) => {
-                            self.ai_sequences.analysis = Some(analysis);
-                            self.ai_sequences.analysis_project = Some(path);
-                            self.ai_sequences.suggestions.clear();
-                            self.ai_sequences.error = None;
-                        }
-                        Err(error) => self.ai_sequences.error = Some(error),
-                    }
-                }
-                Err(error) => self.ai_sequences.error = Some(error),
-            }
         }
-        if generate && let Some(base) = self.ai_sequences.analysis_base.clone() {
+
+        if cancel && let Some(analysis) = &self.ai_sequences.analysis {
+            analysis.cancel();
+        }
+        if analyze {
+            self.start_ai_analysis(range);
+        }
+        if generate && let Some(mut base) = self.ai_sequences.analysis_base.clone() {
+            base.style = self.ai_style();
+            base.placement = self.ai_sequences.placement;
+            base.composition.transparent =
+                self.ai_sequences.transparent || self.ai_sequences.placement.is_overlay();
             let selected: Vec<_> = self
                 .ai_sequences
                 .suggestions
@@ -1430,6 +1816,51 @@ impl VenturiApp {
                     Err(error) => self.ai_sequences.error = Some(error),
                 }
             }
+            self.ai_sequences.suggestions.retain(|s| !s.selected);
+        }
+    }
+
+    fn start_ai_analysis(&mut self, range: Result<Option<Range>, String>) {
+        let analysis_prompt = self.ai_sequences.analysis_prompt.clone();
+        let result =
+            range.and_then(|range| self.request_for(range, Length::Clip, &analysis_prompt));
+        let mut request = match result {
+            Ok(request) => request,
+            Err(error) => {
+                self.ai_sequences.error = Some(error);
+                return;
+            }
+        };
+        // Style is applied at generation time, so it must not split the analysis cache.
+        request.style.clear();
+        request.provider = self.ai_sequences.analysis_provider;
+        request.model = self.ai_sequences.analysis_model.clone();
+        request.api_access = self.settings.sequence_api_access();
+        if request.provider == Provider::Gemini && request.model.trim().is_empty() {
+            self.ai_sequences.error = Some("Select a Gemini analysis model first".into());
+            return;
+        }
+        let Some(path) = self.session.path().map(Path::to_path_buf) else {
+            return;
+        };
+        let directory = crate::ai_sequence::portable::directory(&path).join(".analyses");
+        let result = std::fs::create_dir_all(&directory)
+            .map_err(|e| e.to_string())
+            .and_then(|_| {
+                crate::ai_sequence::suggestions::Analysis::start(
+                    request,
+                    directory,
+                    self.ai_sequences.refresh_analysis,
+                )
+            });
+        match result {
+            Ok(analysis) => {
+                self.ai_sequences.analysis = Some(analysis);
+                self.ai_sequences.analysis_project = Some(path);
+                self.ai_sequences.suggestions.clear();
+                self.ai_sequences.error = None;
+            }
+            Err(error) => self.ai_sequences.error = Some(error),
         }
     }
 }

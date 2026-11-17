@@ -10,6 +10,7 @@ mod provider;
 mod queue;
 mod render;
 pub(crate) mod revision;
+pub(crate) mod setup;
 pub use queue::Queue;
 mod store;
 pub(crate) mod suggestions;
@@ -66,8 +67,6 @@ pub enum Placement {
 }
 
 impl Placement {
-    pub const ALL: [Self; 4] = [Self::Fullscreen, Self::Pill, Self::AboveHead, Self::Side];
-
     /// Overlays must stay transparent so the speaker remains visible.
     pub fn is_overlay(self) -> bool {
         self != Self::Fullscreen

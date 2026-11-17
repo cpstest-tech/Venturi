@@ -131,12 +131,12 @@ ai_sequence.suggestions_hint:
   it: "Analizza il contesto solo su richiesta. Esamina i suggerimenti prima di generare."
 
 ai_sequence.analysis_model:
-  en: "Analysis model (required for Gemini)"
-  it: "Modello di analisi (obbligatorio per Gemini)"
+  en: "Model"
+  it: "Modello"
 
 ai_sequence.analyzing:
-  en: "Analyzing selected captions"
-  it: "Analisi del contesto selezionato"
+  en: "Watching the video and looking for ideas…"
+  it: "Sto guardando il video e cerco idee…"
 
 ai_sequence.cancel_analysis:
   en: "Cancel analysis"
@@ -147,8 +147,8 @@ ai_sequence.refresh_analysis:
   it: "Ignora l'analisi salvata e invia una nuova richiesta"
 
 ai_sequence.analyze:
-  en: "Analyze selected range"
-  it: "Analizza l'intervallo selezionato"
+  en: "Find infographic ideas"
+  it: "Trova idee per infografiche"
 
 ai_sequence.analysis_usage:
   en: "Analysis token usage"
@@ -446,13 +446,7 @@ ai_sequence.section_where:
   en: "Where to place it?"
   it: "Dove inserirla?"
 
-ai_sequence.where_overlay:
-  en: "Above the video"
-  it: "Sopra il video"
 
-ai_sequence.where_overlay_hint:
-  en: "Overlaid on the video"
-  it: "In sovrimpressione sul video"
 
 ai_sequence.where_side:
   en: "Side by side"
@@ -533,3 +527,187 @@ ai_sequence.edit_failed:
 ai_sequence.edit_details:
   en: "Versions and details"
   it: "Versioni e dettagli"
+
+ai_sequence.look_corporate:
+  en: "Corporate"
+  it: "Aziendale"
+
+ai_sequence.look_corporate_hint:
+  en: "Professional navy and white, clean charts"
+  it: "Professionale blu e bianco, grafici puliti"
+
+ai_sequence.look_neon:
+  en: "Neon"
+  it: "Neon"
+
+ai_sequence.look_neon_hint:
+  en: "Dark background with glowing lines"
+  it: "Sfondo scuro con linee luminose"
+
+ai_sequence.look_editorial:
+  en: "Editorial"
+  it: "Editoriale"
+
+ai_sequence.look_editorial_hint:
+  en: "Magazine layout with serif headlines"
+  it: "Impaginazione da rivista con titoli serif"
+
+ai_sequence.look_glass:
+  en: "Glass"
+  it: "Vetro"
+
+ai_sequence.look_glass_hint:
+  en: "Frosted translucent panels over soft gradients"
+  it: "Pannelli traslucidi su sfumature morbide"
+
+ai_sequence.look_sketch:
+  en: "Hand-drawn"
+  it: "Disegnato a mano"
+
+ai_sequence.look_sketch_hint:
+  en: "Whiteboard marker doodles"
+  it: "Schizzi a pennarello da lavagna"
+
+ai_sequence.look_retro:
+  en: "Retro"
+  it: "Retrò"
+
+ai_sequence.look_retro_hint:
+  en: "Warm 70s/80s vintage palette"
+  it: "Palette calda vintage anni '70/'80"
+
+ai_sequence.look_elegant:
+  en: "Elegant"
+  it: "Elegante"
+
+ai_sequence.look_elegant_hint:
+  en: "Luxury black and gold, thin serif type"
+  it: "Nero e oro di lusso, caratteri serif sottili"
+
+ai_sequence.look_custom:
+  en: "Custom"
+  it: "Personalizzato"
+
+ai_sequence.placement_pill_hint:
+  en: "A compact capsule in the lower third, over the video"
+  it: "Una capsula compatta nel terzo inferiore, sopra il video"
+
+ai_sequence.placement_above_head_hint:
+  en: "In the empty space above the speaker's head"
+  it: "Nello spazio vuoto sopra la testa di chi parla"
+
+ai_sequence.tab_generate:
+  en: "Generate"
+  it: "Genera"
+
+ai_sequence.tab_suggestions:
+  en: "Visual suggestions"
+  it: "Suggerimenti visivi"
+
+ai_sequence.history:
+  en: "History (%{count})"
+  it: "Cronologia (%{count})"
+
+ai_sequence.setup_title:
+  en: "Preparing the rendering engine"
+  it: "Preparazione del motore di rendering"
+
+ai_sequence.setup_node:
+  en: "Downloading Node.js (first time only)…"
+  it: "Download di Node.js (solo la prima volta)…"
+
+ai_sequence.setup_packages:
+  en: "Installing the Remotion packages…"
+  it: "Installazione dei pacchetti Remotion…"
+
+ai_sequence.setup_browser:
+  en: "Downloading the headless browser…"
+  it: "Download del browser headless…"
+
+ai_sequence.setup_isolation:
+  en: "Checking the rendering sandbox…"
+  it: "Verifica della sandbox di rendering…"
+
+ai_sequence.setup_waiting:
+  en: "Waiting generations: %{count}. They start automatically when it is ready."
+  it: "Generazioni in attesa: %{count}. Partono da sole appena è pronto."
+
+ai_sequence.setup_failed:
+  en: "The rendering engine could not be prepared"
+  it: "Impossibile preparare il motore di rendering"
+
+ai_sequence.setup_retry:
+  en: "Try again"
+  it: "Riprova"
+
+ai_sequence.setup_done:
+  en: "Rendering engine ready"
+  it: "Motore di rendering pronto"
+
+ai_sequence.setup_queued:
+  en: "Preparing the rendering engine: generation starts automatically when it is ready"
+  it: "Preparo il motore di rendering: la generazione partirà da sola appena è pronto"
+
+ai_sequence.suggestions_intro:
+  en: "The AI watches your video and proposes where an infographic would help. Pick the ideas you like and generate them in one go."
+  it: "L'AI guarda il video e propone dove un'infografica aiuterebbe. Scegli le idee che ti piacciono e generale tutte insieme."
+
+ai_sequence.scope_title:
+  en: "What should it analyze?"
+  it: "Cosa analizzare?"
+
+ai_sequence.scope_selection:
+  en: "Selected clip"
+  it: "Clip selezionata"
+
+ai_sequence.scope_timeline:
+  en: "Whole timeline"
+  it: "Tutta la timeline"
+
+ai_sequence.scope_select_clip:
+  en: "Select a clip in the timeline, or choose the whole timeline."
+  it: "Seleziona una clip nella timeline, oppure scegli tutta la timeline."
+
+ai_sequence.focus_title:
+  en: "Anything specific? (optional)"
+  it: "Qualcosa in particolare? (facoltativo)"
+
+ai_sequence.focus_hint:
+  en: "E.g. numbers and comparisons, step-by-step explanations…"
+  it: "Es. numeri e confronti, spiegazioni passo per passo…"
+
+ai_sequence.analysis_with:
+  en: "Analyze with"
+  it: "Analizza con"
+
+ai_sequence.ideas_found:
+  en: "Ideas found: %{count}"
+  it: "Idee trovate: %{count}"
+
+ai_sequence.select_all:
+  en: "Select all"
+  it: "Seleziona tutte"
+
+ai_sequence.select_none:
+  en: "Deselect all"
+  it: "Deseleziona tutte"
+
+ai_sequence.jump_to:
+  en: "Move the playhead here"
+  it: "Sposta la testina qui"
+
+ai_sequence.uses_settings:
+  en: "Style: %{style} · Position: %{placement}"
+  it: "Stile: %{style} · Posizione: %{placement}"
+
+ai_sequence.change:
+  en: "Change"
+  it: "Cambia"
+
+ai_sequence.generate_count:
+  en: "Generate the chosen ideas (%{count})"
+  it: "Genera le idee scelte (%{count})"
+
+ai_sequence.use_idea:
+  en: "Use this idea"
+  it: "Usa questa idea"
