@@ -2850,13 +2850,15 @@ impl Command for RemoveKeyframe {
     }
 }
 
+type RemovedMedia = (MediaItem, Option<Timeline>, Option<String>);
+
 /// Removes a media from the pool; its clips stay offline. For a compound
 /// clip the nested timeline disappears too, otherwise it would stay orphaned
 /// in the project (and its name taken, see `alloc_compound_name`).
 #[derive(Debug)]
 pub struct RemoveMedia {
     media: MediaId,
-    removed: RefCell<Option<(MediaItem, Option<Timeline>, Option<String>)>>,
+    removed: RefCell<Option<RemovedMedia>>,
 }
 
 impl RemoveMedia {

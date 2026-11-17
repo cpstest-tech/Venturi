@@ -275,7 +275,14 @@ pub(super) fn earlier_requests(store: &Store, job: &Job) -> String {
         let Ok(previous) = store.load(&id) else {
             break;
         };
-        prompts.push(previous.request.prompt.chars().take(300).collect::<String>());
+        prompts.push(
+            previous
+                .request
+                .prompt
+                .chars()
+                .take(300)
+                .collect::<String>(),
+        );
         next = previous.request.parent;
     }
     if prompts.is_empty() {

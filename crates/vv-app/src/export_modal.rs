@@ -81,7 +81,6 @@ struct Derived {
     size: (u32, u32),
     fps: vv_core::Rational,
     mbps: f64,
-    recommended: f64,
     seconds: f64,
     estimate: Estimate,
 }
@@ -166,7 +165,6 @@ impl ExportModal {
             size,
             fps,
             mbps,
-            recommended,
             seconds,
             estimate,
         }

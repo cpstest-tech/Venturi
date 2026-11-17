@@ -52,7 +52,7 @@ impl Analysis {
             if signal.load(Ordering::Relaxed) {return Err("Cancelled".into());}
             if !refresh && let Some(report)=read_report(&directory,&input)? {return Ok(report);}
 
-            let mut job = Job { id:"analysis".into(), request:input,stage:Stage::Analyzing,error:None,attempt:1,source:None,usage:None,usage_history:Vec::new(),imported:false,session:None,events:Vec::new(),attachments:Vec::new() };
+            let mut job = Job { id:"analysis".into(), request:input,stage:Stage::Analyzing,error:None,attempt:1,source:None,usage:None,usage_history:Vec::new(),imported:false,session:None,events:Vec::new(),attachments:Vec::new(),improvements:Vec::new() };
             super::context::prepare(&mut job,&directory,None,&signal)?;
             let schema = serde_json::json!({"type":"OBJECT", "properties":{"suggestions":{"type":"ARRAY", "items":{"type":"OBJECT", "properties":{"start_ms":{"type":"INTEGER"},"end_ms":{"type":"INTEGER"},"description":{"type":"STRING"},"reason":{"type":"STRING"}},"required":["start_ms","end_ms","description","reason"]}}},"required":["suggestions"]});
             let duration_ms = (f64::from(job.request.composition.frames)/job.request.composition.fps*1000.0).round() as u64;

@@ -395,9 +395,19 @@ fn the_transcript_can_be_left_out_of_the_request() {
 #[test]
 fn the_modern_look_is_the_default_style() {
     let mut app = app();
-    assert!(app.ai_sequence_request().unwrap().style.starts_with("Modern"));
+    assert!(
+        app.ai_sequence_request()
+            .unwrap()
+            .style
+            .starts_with("Modern")
+    );
     app.ai_sequences.style = LOOKS[2].prompt.into();
-    assert!(app.ai_sequence_request().unwrap().style.starts_with("Vivid"));
+    assert!(
+        app.ai_sequence_request()
+            .unwrap()
+            .style
+            .starts_with("Vivid")
+    );
 }
 
 #[test]
