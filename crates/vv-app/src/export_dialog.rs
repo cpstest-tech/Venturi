@@ -51,6 +51,7 @@ pub struct ExportDialog {
 }
 
 impl ExportDialog {
+    #[cfg_attr(not(test), expect(dead_code, reason = "used only by tests"))]
     pub fn new(settings: ExportSettings, gpu_decoders: Vec<HwDevice>) -> Self {
         Self {
             path_text: settings.output_path.display().to_string(),
@@ -71,6 +72,7 @@ impl ExportDialog {
     }
 
     /// With the settings of `ExportSettings::preferred`.
+    #[cfg_attr(not(test), expect(dead_code, reason = "used only by tests"))]
     pub fn preferred(output_path: PathBuf, gpu_decoders: Vec<HwDevice>) -> Self {
         let settings = ExportSettings::with_preferred_audio(output_path);
         Self {
@@ -563,6 +565,7 @@ fn validate_path(text: &str) -> Result<PathBuf, Cow<'static, str>> {
 
 /// Path proposed on the first export: "<project>-<timeline>.mp4", next to
 /// the project if it was saved.
+#[cfg_attr(not(test), expect(dead_code, reason = "used only by tests"))]
 pub fn default_output_path(
     project_path: Option<&Path>,
     project_name: &str,
