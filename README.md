@@ -12,10 +12,9 @@ Built for free AI assisted video editing.
 [![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://rustup.rs)
 
 [Website](https://venturivideo.github.io/Venturi/) •
-[Discord](https://discord.gg/3v2xjXFnZv) •
+[Discord](https://discord.gg/PuqMem4AFn) •
 [Features](#features) •
 [Build from source](docs/BUILDING.md) •
-[AI Sequence Generator](docs/AI_SEQUENCES.md) •
 [Architecture](ARCHITECTURE.md) •
 [Contributing](#contributing)
 
@@ -122,7 +121,7 @@ creative projects while AI works in the back to make you faster.
 ## Contributing
 
 Issues and pull requests are welcome. For questions, feedback and feature
-ideas, join the [Discord server](https://discord.gg/3v2xjXFnZv). Before
+ideas, join the [Discord server](https://discord.gg/PuqMem4AFn). Before
 opening a PR:
 
 ```sh
