@@ -4,19 +4,14 @@
 
 # Tandem
 
-**A Linux-first, performance-oriented video editor written in Rust.**
+**A video editor where AI works with you, not for you.**
 
-Built for editing, picture and sound, with timelines that travel to and from other NLEs via OpenTimelineIO.
+Built for free AI assisted video editing.
 
-[![CI](https://github.com/VenturiVideo/Venturi/actions/workflows/ci.yml/badge.svg)](https://github.com/VenturiVideo/Venturi/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/VenturiVideo/Venturi?label=release)](https://github.com/VenturiVideo/Venturi/releases/latest)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://rustup.rs)
-[![Discord](https://img.shields.io/badge/chat-Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/3v2xjXFnZv)
 
 [Website](https://venturivideo.github.io/Venturi/) •
-[Documentation](https://kb.morrolinux.ovh/books/venturi-architecture) •
-[Download](https://github.com/VenturiVideo/Venturi/releases/latest) •
 [Discord](https://discord.gg/3v2xjXFnZv) •
 [Features](#features) •
 [Build from source](docs/BUILDING.md) •
@@ -24,27 +19,24 @@ Built for editing, picture and sound, with timelines that travel to and from oth
 [Architecture](ARCHITECTURE.md) •
 [Contributing](#contributing)
 
-<img src="media/tandem.png" alt="Tandem editing a multi-track timeline, with the animation curve editor and the Color window open" width="100%">
+<img src="media/tandem.png" alt="Tandem editing a multi-track timeline, with the AI infographics generator open" width="100%">
 
 </div>
 
 ---
 
-Tandem does little, and does it well. It is an editing-focused NLE:
-multi-track cutting, the transforms and tools you actually reach for while
-editing, keyframes on every parameter, transitions, compound clips, ripple
-delete, and the audio tools to finish the sound in place: a mixer with an
-effect chain per track and voiceover recording. No node editor, no grading
-suite, no node-based compositor. Editing is where the time goes, so that is
-the part that has to be perfect.
+Tandem keeps the workflow you already know from CapCut
+while having AI help you reach your vision as quick as
+possible. Tools like AI Clips and Auto Cutting help you
+express your creativity without fighting with tools or
+have AI make slop for you.
 
-**NOTE: Tandem is alpha software and is considered unstable, especially the save format. Please use at your own risk.**
-
+---
 
 ## Features
 
 - **Fast playback and scrubbing.** Timeline-wide frame cache, optional
-  background proxies, playback up to 8x with pitch-preserved audio.
+  background proxies, playback up to 8x with pitch-preserved audio, best in class.
 - **Hardware accelerated.** Decoding on NVDEC, Vulkan video or VideoToolbox,
   compositing on the GPU (Vulkan, Metal), export on NVENC, Vulkan or
   VideoToolbox, with software as the fallback.
@@ -70,22 +62,24 @@ the part that has to be perfect.
 - **Color correction.** Shadows, midtones, highlights and offset wheels,
   auto balance and GPU scopes (waveform, RGB parade, vectorscope,
   histogram), composed in 16-bit float.
-- **Interoperability.** Timelines move in both directions through
-  OpenTimelineIO, tested with DaVinci Resolve, for 10-bit grading and
-  finishing.
 - **Drivable by AI agents.** A built-in MCP server lets an agent such as
   Claude Code import, cut, measure audio, look at frames and export, on its
   own or in the window you are editing. See [docs/MCP.md](docs/MCP.md).
-- **Linux first.** Developed and tested on Linux, not ported to it. Also runs
-  on Apple Silicon Macs, and possibly Windows.
-
+- **Budget friendly AI.** Features can be used by Claude Code, Codex, OpenCode
+  and free Gemini API. Not needing to pay massive API costs and still
+  getting the full experience.
+- **AI Clips.** Chooses the best moments from your long videos and puts
+  them in your timeline, ready to post.
+- **AI Infographics.** Describe your idea and have AI generate it, or
+  just let AI choose where it would help out your video.
+  
 ## Install
 
 On Linux (x86_64 or aarch64), download and run the
 [installer](https://github.com/VenturiVideo/Venturi/releases/latest/download/install.sh):
 
 ```sh
-curl -fL https://github.com/VenturiVideo/Venturi/releases/latest/download/install.sh -o install.sh
+curl -fL https://github.com/cpstest-tech/Venturi/releases/latest/download/install.sh -o install.sh
 bash install.sh
 ```
 
@@ -105,7 +99,7 @@ menu entry, icons and MIME registration; your projects are preserved.
 AppImages may require FUSE 2; without it, run
 `tandem --appimage-extract-and-run`.
 
-For macOS or a manual Linux installation, grab the latest build from the
+For macOS, Windows or a manual Linux installation, grab the latest build from the
 [Releases](https://github.com/VenturiVideo/Venturi/releases/latest) page:
 
 | Platform | File | Notes |
@@ -122,8 +116,8 @@ To build from source, see [docs/BUILDING.md](docs/BUILDING.md).
 
 ## The name
 
-Tandem is built for the rhythm of editing: picture, sound and story moving
-together in one focused workspace.
+Tandem, just like the bike. You're working and controlling your
+creative projects while AI works in the back to make you faster.
 
 ## Contributing
 
@@ -146,6 +140,3 @@ and [AGENTS.md](AGENTS.md); the design is in [ARCHITECTURE.md](ARCHITECTURE.md).
 ## Licence
 
 GPL-3.0-or-later, see [LICENSE](LICENSE).
-
-DaVinci Resolve is a trademark of Blackmagic Design Pty Ltd. Tandem is an
-independent project, not affiliated with or endorsed by Blackmagic Design.
