@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tandem — the video editor where AI works with you</title>
+<meta name="description" content="Tandem is a free, open-source, GPU-accelerated video editor. A real timeline, color, audio and keyframes, with AI that helps you instead of replacing you.">
+<meta name="theme-color" content="#0b0b0f">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tandem — the video editor where AI works with you">
+<meta property="og:description" content="Free, open-source, GPU-accelerated video editing with AI Clips, AI Infographics and a built-in MCP server.">
+<meta property="og:image" content="https://venturivideo.github.io/Venturi/assets/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-linux" viewBox="0 0 64 64">
+    <ellipse cx="32" cy="38" rx="17" ry="22" fill="#14141a"/>
+    <ellipse cx="32" cy="43" rx="11" ry="15" fill="#f4f1ea"/>
+    <ellipse cx="32" cy="18" rx="12" ry="13" fill="#14141a"/>
+    <ellipse cx="27.5" cy="16" rx="3.4" ry="4.2" fill="#fff"/><ellipse cx="36.5" cy="16" rx="3.4" ry="4.2" fill="#fff"/>
+    <circle cx="28.3" cy="16.8" r="1.7" fill="#14141a"/><circle cx="35.7" cy="16.8" r="1.7" fill="#14141a"/>
+    <path d="M25.5 23.5c2.5-2.6 10.5-2.6 13 0-1.8 3.4-11.2 3.4-13 0z" fill="#f6b21b"/>
+    <ellipse cx="22" cy="58" rx="9" ry="4.2" fill="#f6b21b"/><ellipse cx="42" cy="58" rx="9" ry="4.2" fill="#f6b21b"/>
+  </symbol>
+  <symbol id="i-apple" viewBox="0 0 24 24"><path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></symbol>
+  <symbol id="i-windows" viewBox="0 0 24 24"><path fill="currentColor" d="M0 3.4 9.8 2v9.5H0zM11 1.8 24 0v11.4H11zM0 12.6h9.8V22L0 20.6zm11 0h13V24l-13-1.8z"/></symbol>
+  <symbol id="i-discord" viewBox="0 0 24 24"><path fill="currentColor" d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.873-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .078-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .079.01c.12.098.246.198.373.292a.077.077 0 0 1-.007.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.029 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.331c-1.182 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></symbol>
+  <symbol id="i-github" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></symbol>
+
+  <symbol id="f-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5v15l13-7.5z"/><path d="M20 5v14"/></symbol>
+  <symbol id="f-gpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+  <symbol id="f-timeline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="9" height="4" rx="1"/><rect x="13" y="5" width="9" height="4" rx="1"/><rect x="5" y="12" width="12" height="4" rx="1"/><path d="M14 2v20"/><path d="M2 20h5"/></symbol>
+  <symbol id="f-library" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v13H3z"/><path d="M5 4h14M7 1.5h10"/><path d="m10 11 4 2.5-4 2.5z"/></symbol>
+  <symbol id="f-audio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4M7 6v12M11 3v18M15 8v8M19 11v2"/><path d="M21.5 9v6"/></symbol>
+  <symbol id="f-keyframe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 19c5 0 6-13 10-13s5 13 10 13"/><path d="m12 2.5 3 3.5-3 3.5-3-3.5z"/></symbol>
+  <symbol id="f-titles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M12 4v16M9 20h6"/></symbol>
+  <symbol id="f-color" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5.5"/><circle cx="8" cy="15" r="5.5"/><circle cx="16" cy="15" r="5.5"/></symbol>
+  <symbol id="f-agent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 9 3 3-3 3M12 15h6"/></symbol>
+  <symbol id="f-coin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M15 8.5c-.7-1-1.8-1.5-3-1.5-2 0-3.2 1-3.2 2.4 0 3.3 6.4 1.8 6.4 5 0 1.5-1.3 2.6-3.2 2.6-1.4 0-2.6-.6-3.2-1.7M12 5v2M12 17v2"/></symbol>
+  <symbol id="f-scissors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></symbol>
+  <symbol id="f-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c.6 4.6 2.4 7.4 8 8.5-5.6 1.1-7.4 3.9-8 8.5-.6-4.6-2.4-7.4-8-8.5 5.6-1.1 7.4-3.9 8-8.5z"/><path d="M19 17c.3 1.8 1 2.6 3 3-2 .4-2.7 1.2-3 3-.3-1.8-1-2.6-3-3 2-.4 2.7-1.2 3-3z"/></symbol>
+  <symbol id="f-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13M6.5 10.5 12 16l5.5-5.5M4 21h16"/></symbol>
+  <symbol id="f-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+  <symbol id="f-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"/></symbol>
+  <symbol id="f-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<div class="noise" aria-hidden="true"></div>
+
+<header class="nav" id="nav">
+  <a class="brand" href="#top" aria-label="Tandem home"><img src="assets/favicon.svg" alt="" width="34" height="34"><span>tandem</span></a>
+  <nav aria-label="Main">
+    <a href="#features">Features</a>
+    <a href="#ai">AI</a>
+    <a href="#gallery">Screens</a>
+    <a href="#download">Download</a>
+  </nav>
+  <div class="nav-cta">
+    <a class="icon-link" href="https://github.com/VenturiVideo/Venturi" aria-label="GitHub"><svg><use href="#i-github"/></svg></a>
+    <a class="btn btn-discord btn-sm" href="https://discord.gg/PuqMem4AFn"><svg><use href="#i-discord"/></svg><span>Discord</span></a>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+  <div class="grid-bg" aria-hidden="true"></div>
+
+  <div class="hero-copy">
+    <a class="pill reveal" href="https://github.com/VenturiVideo/Venturi/releases/latest">
+      <span class="pill-dot"></span><span>Open source · GPL-3.0</span><b data-version>Latest release</b><svg><use href="#f-arrow"/></svg>
+    </a>
+    <h1 class="reveal">
+      <span class="line">AI works</span>
+      <span class="line"><em>with</em> you,</span>
+      <span class="line">not <em class="strike">for</em> you.</span>
+    </h1>
+    <p class="lead reveal">Tandem is a free, open-source video editor. The timeline you already know, running on your GPU, with an AI co-pilot that finds the best moments and does the busywork.</p>
+    <div class="hero-actions reveal">
+      <a class="btn btn-primary btn-lg" id="hero-download" href="#download">
+        <svg class="os-glyph"><use href="#f-download"/></svg><span>Download Tandem</span>
+      </a>
+      <a class="btn btn-ghost btn-lg" href="https://discord.gg/PuqMem4AFn"><svg><use href="#i-discord"/></svg><span>Join the Discord</span></a>
+    </div>
+    <ul class="os-row reveal" aria-label="Supported platforms">
+      <li><svg class="os-tux"><use href="#i-linux"/></svg>Linux</li>
+      <li><svg><use href="#i-apple"/></svg>macOS</li>
+      <li class="soon"><svg><use href="#i-windows"/></svg>Windows <i>soon</i></li>
+    </ul>
+  </div>
+
+  <div class="hero-stage reveal" id="stage">
+    <div class="window">
+      <div class="window-bar"><i></i><i></i><i></i><span>Tandem — My Project.tandem</span></div>
+      <figure class="shot" data-shot="assets/screens/hero.webp" data-label="Main editor">
+        <div class="faux">
+          <div class="faux-top">
+            <div class="faux-panel"><b></b><b></b><b></b><b></b><b></b><b></b></div>
+            <div class="faux-viewer"><div class="faux-frame"><span class="ph-badge">Screenshot · assets/screens/hero.webp</span></div></div>
+            <div class="faux-panel faux-props"><b></b><b></b><b></b><b></b></div>
+          </div>
+          <div class="faux-tl">
+            <div class="trk"><s style="--l:2%;--w:30%;--c:#a78bfa"></s><s style="--l:34%;--w:22%;--c:#8b5cf6"></s><s style="--l:58%;--w:36%;--c:#a78bfa"></s></div>
+            <div class="trk"><s style="--l:10%;--w:16%;--c:#f472b6"></s><s style="--l:46%;--w:12%;--c:#f472b6"></s></div>
+            <div class="trk aud"><s style="--l:2%;--w:54%;--c:#34d399"></s><s style="--l:58%;--w:36%;--c:#34d399"></s></div>
+            <div class="trk aud"><s style="--l:0%;--w:94%;--c:#60a5fa"></s></div>
+            <div class="playhead"></div>
+          </div>
+        </div>
+      </figure>
+    </div>
+    <div class="float-card fc-1"><svg><use href="#f-spark"/></svg><div><b>AI Clips</b><span>4 highlights found</span></div></div>
+    <div class="float-card fc-2"><svg><use href="#f-gpu"/></svg><div><b>NVDEC · Vulkan</b><span>8× playback</span></div></div>
+    <div class="float-card fc-3"><span class="mcp-dot"></span><div><b>● MCP</b><span>delete_ranges</span></div></div>
+  </div>
+</section>
+
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track">
+    <span>NVDEC</span><span>Vulkan Video</span><span>Metal</span><span>VideoToolbox</span><span>NVENC</span><span>16-bit float</span><span>EBU R128</span><span>VST3</span><span>MCP server</span><span>Proxies</span><span>Compound clips</span><span>Curve editor</span><span>Vectorscope</span><span>Multiband compressor</span>
+    <span>NVDEC</span><span>Vulkan Video</span><span>Metal</span><span>VideoToolbox</span><span>NVENC</span><span>16-bit float</span><span>EBU R128</span><span>VST3</span><span>MCP server</span><span>Proxies</span><span>Compound clips</span><span>Curve editor</span><span>Vectorscope</span><span>Multiband compressor</span>
+  </div>
+</div>
+
+<section class="stats">
+  <div class="stat reveal"><b data-count="8" data-suffix="×">8×</b><span>playback speed, pitch-preserved</span></div>
+  <div class="stat reveal"><b data-count="10000" data-suffix="%">10,000%</b><span>max clip speed, down to 1%</span></div>
+  <div class="stat reveal"><b data-count="16" data-suffix="-bit">16-bit</b><span>float color pipeline</span></div>
+  <div class="stat reveal"><b data-count="4">4</b><span>AI backends, incl. free Gemini</span></div>
+</section>
+
+<section class="section" id="features">
+  <header class="section-head reveal">
+    <p class="kicker">Everything you need</p>
+    <h2>A real editor first.<br><em>Then</em> the magic.</h2>
+    <p class="sub">Tandem keeps the workflow you already know. No node graphs, no subscriptions, no compromises on speed.</p>
+  </header>
+
+  <div class="bento">
+    <article class="card card-xl reveal">
+      <div class="card-text">
+        <span class="ico"><svg><use href="#f-timeline"/></svg></span>
+        <h3>Professional timeline workflow</h3>
+        <p>Scrub tracks with audio, ripple delete, compound clips, magnet snapping, copy/paste properties and clips between projects and windows. Clip speed from 1% to 10,000% and unlimited undo with a jumpable history.</p>
+      </div>
+      <figure class="shot shot-card" data-shot="assets/screens/timeline.webp" data-label="Timeline"></figure>
+    </article>
+
+    <article class="card reveal">
+      <span class="ico"><svg><use href="#f-play"/></svg></span>
+      <h3>Fast playback &amp; scrubbing</h3>
+      <p>Timeline-wide frame cache, optional background proxies and up to 8× playback with pitch-preserved audio.</p>
+      <div class="speed" aria-hidden="true"><i>1×</i><i>2×</i><i>4×</i><i class="on">8×</i></div>
+    </article>
+
+    <article class="card reveal">
+      <span class="ico"><svg><use href="#f-gpu"/></svg></span>
+      <h3>Hardware accelerated</h3>
+      <p>Decode on NVDEC, Vulkan Video or VideoToolbox. Composite on the GPU with Vulkan or Metal. Export on NVENC, Vulkan or VideoToolbox.</p>
+      <div class="chips"><span>NVDEC</span><span>Vulkan</span><span>Metal</span><span>NVENC</span></div>
+    </article>
+
+    <article class="card card-wide reveal">
+      <div class="card-text">
+        <span class="ico"><svg><use href="#f-audio"/></svg></span>
+        <h3>Audio, finished in place</h3>
+        <p>A mixer with per-track and master gain, balance, meters and an effect chain: 6-band EQ and 3-band multiband compressor over the live spectrum, normalization (sample peak, true peak or EBU R128), VST3 plugins. Record voiceover straight onto the timeline.</p>
+      </div>
+      <div class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    </article>
+
+    <article class="card reveal">
+      <span class="ico"><svg><use href="#f-color"/></svg></span>
+      <h3>Color correction</h3>
+      <p>Shadows, midtones, highlights and offset wheels, auto balance and GPU scopes: waveform, RGB parade, vectorscope, histogram.</p>
+      <div class="wheels" aria-hidden="true"><i></i><i></i><i></i></div>
+    </article>
+
+    <article class="card reveal">
+      <span class="ico"><svg><use href="#f-keyframe"/></svg></span>
+      <h3>Keyframes done right</h3>
+      <p>Crop, zoom, rotation, position, speed, opacity, gain: every parameter keyframable, with a dedicated curve editor.</p>
+      <svg class="curve" viewBox="0 0 200 60" aria-hidden="true"><path d="M4 54 C 70 54, 80 6, 196 6"/><circle cx="4" cy="54" r="4"/><circle cx="196" cy="6" r="4"/></svg>
+    </article>
+
+    <article class="card reveal">
+      <span class="ico"><svg><use href="#f-library"/></svg></span>
+      <h3>One library, every project</h3>
+      <p>Media, compound clips and property presets (a 2× punch-in, a drop shadow, a voice level) applied with a drag or a shortcut.</p>
+    </article>
+
+    <article class="card reveal">
+      <span class="ico"><svg><use href="#f-titles"/></svg></span>
+      <h3>Titles, filters, transitions</h3>
+      <p>Titles, solid colors, filters and transitions applied straight from the timeline. No node graph to wire up.</p>
+    </article>
+  </div>
+</section>
+
+<section class="section ai" id="ai">
+  <div class="ai-glow" aria-hidden="true"></div>
+  <header class="section-head reveal">
+    <p class="kicker">Like the bike</p>
+    <h2>You steer.<br><em>AI pedals in the back.</em></h2>
+    <p class="sub">Tools that help you reach your vision faster, without making slop for you. And you don't need to pay massive API bills to use them.</p>
+  </header>
+
+  <div class="ai-grid">
+    <div class="ai-cards">
+      <article class="ai-card reveal">
+        <span class="ico"><svg><use href="#f-scissors"/></svg></span>
+        <div><h3>AI Clips</h3><p>Picks the best moments from your long videos and drops them on your timeline, ready to post.</p></div>
+      </article>
+      <article class="ai-card reveal">
+        <span class="ico"><svg><use href="#f-spark"/></svg></span>
+        <div><h3>AI Infographics</h3><p>Describe your idea and let AI generate it, or let it choose where an infographic would help your video.</p></div>
+      </article>
+      <article class="ai-card reveal">
+        <span class="ico"><svg><use href="#f-agent"/></svg></span>
+        <div><h3>Drivable by AI agents</h3><p>A built-in MCP server lets an agent like Claude Code import, cut, measure audio, look at frames and export, headless or in the window you're editing. Every agent call is its own undo step.</p></div>
+      </article>
+      <article class="ai-card reveal">
+        <span class="ico"><svg><use href="#f-coin"/></svg></span>
+        <div><h3>Budget friendly</h3><p>Runs on the tools you already have.</p>
+          <div class="providers"><span>Claude Code</span><span>Codex</span><span>OpenCode</span><span>Gemini <i>free API</i></span></div>
+        </div>
+      </article>
+    </div>
+
+    <div class="term reveal" id="term">
+      <div class="term-bar"><i></i><i></i><i></i><span>agent ⇄ tandem mcp --attach</span><b class="term-live">● MCP</b></div>
+      <pre class="term-body" aria-label="Example of an agent removing pauses from a recording through Tandem's MCP server"><code id="term-code"></code><span class="caret"></span></pre>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="gallery">
+  <header class="section-head reveal">
+    <p class="kicker">Take a look</p>
+    <h2>Fast by design.<br>Out of your <em>way</em>.</h2>
+  </header>
+  <div class="tabs reveal" role="tablist" aria-label="Screenshots">
+    <button role="tab" aria-selected="true" data-tab="0">Timeline</button>
+    <button role="tab" aria-selected="false" data-tab="1">Color</button>
+    <button role="tab" aria-selected="false" data-tab="2">Audio</button>
+    <button role="tab" aria-selected="false" data-tab="3">AI Clips</button>
+    <button role="tab" aria-selected="false" data-tab="4">Infographics</button>
+  </div>
+  <div class="gallery reveal">
+    <figure class="shot shot-big active" data-shot="assets/screens/gallery-timeline.webp" data-label="Timeline & keyframes"></figure>
+    <figure class="shot shot-big" data-shot="assets/screens/gallery-color.webp" data-label="Color wheels & GPU scopes"></figure>
+    <figure class="shot shot-big" data-shot="assets/screens/gallery-audio.webp" data-label="Mixer, EQ & compressor"></figure>
+    <figure class="shot shot-big" data-shot="assets/screens/gallery-ai-clips.webp" data-label="AI Clips"></figure>
+    <figure class="shot shot-big" data-shot="assets/screens/gallery-infographics.webp" data-label="AI Infographics"></figure>
+  </div>
+</section>
+
+<section class="section" id="download">
+  <header class="section-head center reveal">
+    <p class="kicker">Free · Open source</p>
+    <h2>Get <em>Tandem</em>.</h2>
+    <p class="sub"><span data-version-text>Grab the latest release</span> for your platform.</p>
+  </header>
+
+  <div class="dl-grid">
+    <article class="dl reveal" data-os="linux">
+      <div class="dl-head"><svg class="dl-os os-tux"><use href="#i-linux"/></svg><div><h3>Linux</h3><p>x86_64 · aarch64 · AppImage</p></div></div>
+      <p class="dl-note">One-line installer, no sudo. Adds Tandem to your app menu.</p>
+      <div class="code">
+        <code>curl -fL https://github.com/VenturiVideo/Venturi/releases/latest/download/install.sh -o install.sh &amp;&amp; bash install.sh</code>
+        <button class="copy" type="button" aria-label="Copy install command"><svg class="c1"><use href="#f-copy"/></svg><svg class="c2"><use href="#f-check"/></svg></button>
+      </div>
+      <div class="dl-actions">
+        <a class="btn btn-primary" href="https://github.com/VenturiVideo/Venturi/releases/latest/download/Tandem-x86_64.AppImage"><svg><use href="#f-download"/></svg>AppImage x86_64</a>
+        <a class="btn btn-ghost" href="https://github.com/VenturiVideo/Venturi/releases/latest/download/Tandem-aarch64.AppImage">aarch64</a>
+      </div>
+      <p class="fine">Needs a Vulkan driver. FFmpeg bundled.</p>
+    </article>
+
+    <article class="dl reveal" data-os="mac">
+      <div class="dl-head"><svg class="dl-os"><use href="#i-apple"/></svg><div><h3>macOS</h3><p>Apple Silicon · DMG</p></div></div>
+      <p class="dl-note">Metal compositing and VideoToolbox decode &amp; export.</p>
+      <div class="dl-actions">
+        <a class="btn btn-primary" href="https://github.com/VenturiVideo/Venturi/releases/latest/download/Tandem-arm64.dmg"><svg><use href="#f-download"/></svg>Download for Mac</a>
+      </div>
+      <p class="fine">Ad-hoc signed. <a href="https://github.com/VenturiVideo/Venturi/blob/master/docs/BUILDING.md#opening-the-app-on-another-mac">First launch guide →</a></p>
+    </article>
+
+    <article class="dl dl-soon reveal" data-os="windows" id="dl-windows">
+      <span class="badge">Coming soon</span>
+      <div class="dl-head"><svg class="dl-os win"><use href="#i-windows"/></svg><div><h3>Windows</h3><p>x64 · Installer &amp; portable zip</p></div></div>
+      <p class="dl-note">The Windows build is almost here. Join the Discord to hear the second it drops.</p>
+      <div class="dl-actions">
+        <a class="btn btn-primary win-setup" aria-disabled="true" href="https://github.com/VenturiVideo/Venturi/releases/latest/download/Tandem-windows-x64-setup.exe"><svg><use href="#f-download"/></svg>Installer .exe</a>
+        <a class="btn btn-ghost win-zip" aria-disabled="true" href="https://github.com/VenturiVideo/Venturi/releases/latest/download/Tandem-windows-x64.zip">Portable .zip</a>
+      </div>
+      <p class="fine soon-only"><a href="https://discord.gg/PuqMem4AFn">Get notified on Discord →</a></p>
+    </article>
+  </div>
+
+  <p class="dl-more reveal"><a href="https://github.com/VenturiVideo/Venturi/releases">All releases &amp; notes</a><span>·</span><a href="https://github.com/VenturiVideo/Venturi/blob/master/docs/BUILDING.md">Build from source</a><span>·</span><a href="https://github.com/VenturiVideo/Venturi/blob/master/docs/MCP.md">MCP docs</a></p>
+</section>
+
+<section class="discord-cta reveal">
+  <div class="dc-inner">
+    <svg class="dc-logo"><use href="#i-discord"/></svg>
+    <h2>Ride along with us.</h2>
+    <p>Feedback, feature ideas, bug reports, sneak peeks of the Windows build. The community is where Tandem gets shaped.</p>
+    <a class="btn btn-white btn-lg" href="https://discord.gg/PuqMem4AFn"><svg><use href="#i-discord"/></svg>Join the Discord</a>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="foot-brand">
+    <a class="brand" href="#top"><img src="assets/favicon.svg" alt="" width="30" height="30"><span>tandem</span></a>
+    <p>Tandem, just like the bike. You control your creative projects while AI works in the back to make you faster.</p>
+  </div>
+  <nav class="foot-links" aria-label="Footer">
+    <div><b>Product</b><a href="#features">Features</a><a href="#ai">AI</a><a href="#download">Download</a></div>
+    <div><b>Project</b><a href="https://github.com/VenturiVideo/Venturi">GitHub</a><a href="https://github.com/VenturiVideo/Venturi/blob/master/ARCHITECTURE.md">Architecture</a><a href="https://github.com/VenturiVideo/Venturi/blob/master/docs/BUILDING.md">Build</a></div>
+    <div><b>Community</b><a href="https://discord.gg/PuqMem4AFn">Discord</a><a href="https://github.com/VenturiVideo/Venturi/issues">Issues</a><a href="https://github.com/VenturiVideo/Venturi/blob/master/LICENSE">GPL-3.0 licence</a></div>
+  </nav>
+</footer>
+
+<script src="main.js" defer></script>
+</body>
+</html>

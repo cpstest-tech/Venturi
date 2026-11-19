@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [master]
-    paths: ["site/**", ".github/workflows/pages.yml"]
+    paths: ["website/**", ".github/workflows/pages.yml"]
 
 permissions:
   contents: read
@@ -27,6 +27,6 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: site
+          path: website
       - id: deployment
         uses: actions/deploy-pages@v4
