@@ -2949,7 +2949,8 @@ impl VenturiApp {
         self.session
             .apply(Box::new(vv_core::SetTimelineFps::new(timeline_id, fps)));
         let convert = |frame| vv_core::convert_frames(frame, from, fps);
-        self.timeline_state.playhead = convert(self.timeline_state.playhead);
+        self.timeline_state.playhead =
+            vv_core::convert_frames(self.timeline_state.playhead, from, fps);
         let marks = &mut self.timeline_state.export_marks;
         marks.mark_in = marks.mark_in.map(convert);
         marks.mark_out = marks.mark_out.map(convert);

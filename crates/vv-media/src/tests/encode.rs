@@ -111,7 +111,7 @@ fn default_audio_export_preserves_high_frequencies_and_stereo() {
     for (channel, hz) in [440.0, 19_000.0].into_iter().enumerate() {
         let mut real = 0.0;
         let mut imag = 0.0;
-        for (i, frame) in middle.chunks_exact(2).enumerate() {
+        for (i, frame) in middle.as_chunks::<2>().0.iter().enumerate() {
             let phase = i as f64 * hz * std::f64::consts::TAU / 48_000.0;
             real += frame[channel] as f64 * phase.cos();
             imag += frame[channel] as f64 * phase.sin();
