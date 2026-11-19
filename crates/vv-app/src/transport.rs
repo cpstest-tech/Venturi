@@ -78,6 +78,8 @@ const BAR_HEIGHT: f32 = 30.0;
 const TRACK_Y: f32 = 12.0;
 const SIDE_PADDING: f32 = 10.0;
 const CONTROL_BAR_HEIGHT: f32 = 44.0;
+/// Seek bar plus control bar, without the item spacing between them.
+pub const HEIGHT: f32 = BAR_HEIGHT + CONTROL_BAR_HEIGHT;
 const PLAY_HIT_SIZE: f32 = 28.0;
 
 /// `total` frames of content; the playhead can sit on `0..total`.

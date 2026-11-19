@@ -2941,8 +2941,10 @@ impl VenturiApp {
     /// drawn underneath (and keeps handling the shortcuts) but no longer
     /// receives the mouse. The playback bar appears only with the mouse at the bottom.
     fn show_fullscreen_viewer(&mut self, ctx: &egui::Context) -> transport::TransportResponse {
-        const BAR_ZONE: f32 = 90.0;
+        const BAR_PADDING: egui::Vec2 = egui::vec2(24.0, 12.0);
         let screen = ctx.content_rect();
+        let bar_zone =
+            transport::HEIGHT + ctx.global_style().spacing.item_spacing.y + 2.0 * BAR_PADDING.y;
         let (total, playhead, marks, playing) = self.transport_state();
         let fps = self.transport_fps();
         let options = self.player_options();
@@ -2985,15 +2987,15 @@ impl VenturiApp {
 
                 let hovering_bar = ui
                     .input(|i| i.pointer.hover_pos())
-                    .is_some_and(|p| p.y >= screen.bottom() - BAR_ZONE);
+                    .is_some_and(|p| p.y >= screen.bottom() - bar_zone);
                 if hovering_bar {
                     let bar = egui::Rect::from_min_max(
-                        egui::pos2(screen.left(), screen.bottom() - BAR_ZONE),
+                        egui::pos2(screen.left(), screen.bottom() - bar_zone),
                         screen.max,
                     );
                     ui.painter()
                         .rect_filled(bar, 0.0, egui::Color32::from_black_alpha(170));
-                    let inner = bar.shrink2(egui::vec2(24.0, 24.0));
+                    let inner = bar.shrink2(BAR_PADDING);
                     ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
                         action = transport::show_transport(
                             ui, total, playhead, marks, playing, fps, options,
