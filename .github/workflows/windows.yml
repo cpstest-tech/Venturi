@@ -15,10 +15,17 @@ jobs:
         shell: bash
     env:
       LIBCLANG_PATH: C:\Program Files\LLVM\bin
+      # ggml's nested CMake builds exceed MAX_PATH under the workspace;
+      # Ninja also avoids MSBuild's even deeper .tlog folders.
+      CARGO_TARGET_DIR: C:\t
+      CMAKE_GENERATOR: Ninja
     steps:
       - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
+
+      # cl.exe and the SDK on PATH, which Ninja needs.
+      - uses: ilammy/msvc-dev-cmd@v1
 
       # whisper-rs builds ggml's Vulkan backend: headers, loader and glslc.
       - uses: jakoch/install-vulkan-sdk-action@v1.8.1
@@ -28,8 +35,9 @@ jobs:
           cache: true
           stripdown: true
 
-      - name: Install Inno Setup
+      - name: Install Inno Setup and Ninja
         run: |
+          command -v ninja || choco install ninja -y --no-progress
           command -v iscc || choco install innosetup -y --no-progress
           echo "C:\Program Files (x86)\Inno Setup 6" >> "$GITHUB_PATH"
 
@@ -40,11 +48,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ steps.cache-key.outputs.hash }}
+          workspaces: ". -> C:\\t"
 
       # After rust-cache, whose cleanup would otherwise empty it first.
       - uses: actions/cache@v6
         with:
-          path: target/ffmpeg-windows
+          path: C:\t\ffmpeg-windows
           key: ffmpeg-windows-${{ hashFiles('scripts/build-windows.sh') }}
 
       - name: Build
@@ -54,6 +63,6 @@ jobs:
         with:
           name: Tandem-windows-x64
           path: |
-            target/windows/Tandem-windows-x64.zip
-            target/windows/Tandem-windows-x64-setup.exe
+            C:\t\windows\Tandem-windows-x64.zip
+            C:\t\windows\Tandem-windows-x64-setup.exe
           if-no-files-found: error
