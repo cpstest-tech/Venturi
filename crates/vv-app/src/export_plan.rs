@@ -325,7 +325,7 @@ pub fn parse_bitrate_kbps(output: &str) -> Option<u32> {
 }
 
 pub fn probe_bitrate_kbps(path: &Path) -> Option<u32> {
-    let output = std::process::Command::new("ffprobe")
+    let output = crate::spawn::no_console(&mut std::process::Command::new("ffprobe"))
         .args([
             "-v",
             "error",

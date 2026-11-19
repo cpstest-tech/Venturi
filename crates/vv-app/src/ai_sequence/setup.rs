@@ -113,9 +113,6 @@ pub fn ready(runtime: &Runtime) -> bool {
 }
 
 fn install(directory: &Path, step: &AtomicU8, cancel: &AtomicBool) -> Result<Runtime, String> {
-    if !cfg!(target_os = "linux") {
-        return Err("Local infographic rendering currently requires Linux".into());
-    }
     std::fs::create_dir_all(directory).map_err(|e| format!("Cannot create {directory:?}: {e}"))?;
     let node = install_node(directory, cancel)?;
     step.store(1, Ordering::Relaxed);
@@ -123,6 +120,8 @@ fn install(directory: &Path, step: &AtomicU8, cancel: &AtomicBool) -> Result<Run
     step.store(2, Ordering::Relaxed);
     let browser = install_browser(directory, &node, cancel)?;
     step.store(3, Ordering::Relaxed);
+    // Only Linux renders inside bubblewrap; see render::unsandboxed.
+    #[cfg(target_os = "linux")]
     process::run(
         Command::new("bwrap").arg("--version"),
         cancel,
@@ -138,19 +137,32 @@ fn install(directory: &Path, step: &AtomicU8, cancel: &AtomicBool) -> Result<Run
     })
 }
 
-fn node_platform() -> Result<&'static str, String> {
-    match std::env::consts::ARCH {
-        "x86_64" => Ok("linux-x64"),
-        "aarch64" => Ok("linux-arm64"),
-        other => Err(format!(
-            "No portable Node build for the {other} architecture"
-        )),
-    }
+fn node_platform() -> Result<String, String> {
+    let os = match std::env::consts::OS {
+        "linux" => "linux",
+        "macos" => "darwin",
+        "windows" => "win",
+        other => return Err(format!("No portable Node build for {other}")),
+    };
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        other => {
+            return Err(format!(
+                "No portable Node build for the {other} architecture"
+            ));
+        }
+    };
+    Ok(format!("{os}-{arch}"))
 }
 
 fn install_node(directory: &Path, cancel: &AtomicBool) -> Result<PathBuf, String> {
     let target = directory.join("node");
-    let executable = target.join("bin/node");
+    let executable = if cfg!(windows) {
+        target.join("node.exe")
+    } else {
+        target.join("bin/node")
+    };
     let marker = target.join(".version");
     if executable.is_file() && std::fs::read_to_string(&marker).is_ok_and(|v| v == NODE_VERSION) {
         return Ok(executable);
@@ -163,7 +175,7 @@ fn install_node(directory: &Path, cancel: &AtomicBool) -> Result<PathBuf, String
         cancel,
     )?)
     .map_err(|_| "Invalid Node checksum list")?;
-    let archive_name = format!("{name}.tar.xz");
+    let archive_name = format!("{name}.{}", if cfg!(windows) { "zip" } else { "tar.xz" });
     let expected = sums
         .lines()
         .find_map(|line| {
@@ -183,8 +195,9 @@ fn install_node(directory: &Path, cancel: &AtomicBool) -> Result<PathBuf, String
     let file = staging.join(&archive_name);
     std::fs::write(&file, &archive).map_err(|e| format!("Cannot save Node: {e}"))?;
     process::run(
+        // Windows' own tar.exe (bsdtar) also reads zip archives.
         Command::new("tar")
-            .arg("-xJf")
+            .arg(if cfg!(windows) { "-xf" } else { "-xJf" })
             .arg(&file)
             .arg("-C")
             .arg(&staging),
@@ -211,11 +224,15 @@ fn install_packages(directory: &Path, node: &Path, cancel: &AtomicBool) -> Resul
     }
     std::fs::write(directory.join("package.json"), PACKAGE_JSON).map_err(|e| e.to_string())?;
     std::fs::write(&lock, PACKAGE_LOCK).map_err(|e| e.to_string())?;
-    let npm = node
-        .parent()
-        .and_then(Path::parent)
-        .map(|root| root.join("lib/node_modules/npm/bin/npm-cli.js"))
-        .ok_or("Node installation is incomplete")?;
+    let npm = if cfg!(windows) {
+        node.parent()
+            .map(|root| root.join("node_modules/npm/bin/npm-cli.js"))
+    } else {
+        node.parent()
+            .and_then(Path::parent)
+            .map(|root| root.join("lib/node_modules/npm/bin/npm-cli.js"))
+    }
+    .ok_or("Node installation is incomplete")?;
     process::run(
         node_command(node)
             .arg(npm)
@@ -251,13 +268,12 @@ fn install_browser(directory: &Path, node: &Path, cancel: &AtomicBool) -> Result
 /// npm lifecycle scripts call `node` by name, so the portable one must come first.
 fn node_command(node: &Path) -> Command {
     let mut command = Command::new(node);
-    let bin = node.parent().unwrap_or(Path::new("."));
-    let mut path = std::ffi::OsString::from(bin);
-    if let Some(system) = std::env::var_os("PATH") {
-        path.push(":");
-        path.push(system);
+    let bin = node.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let system = std::env::var_os("PATH").unwrap_or_default();
+    let paths = std::iter::once(bin).chain(std::env::split_paths(&system));
+    if let Ok(path) = std::env::join_paths(paths) {
+        command.env("PATH", path);
     }
-    command.env("PATH", path);
     command
 }
 

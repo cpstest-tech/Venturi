@@ -1,3 +1,5 @@
+// Release builds only: a debug build keeps the console for the logs.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 //! egui window: media pool, viewer, properties panel, timeline. The
 //! viewer composes on the GPU the active clips of all the video tracks and passes
 //! the texture to egui-wgpu without readback (plans/REFACTOR_PIPELINE.md B2).
@@ -63,6 +65,7 @@ mod settings;
 mod settings_dialog;
 mod silence_dialog;
 mod slip_viewer;
+mod spawn;
 mod speed_dialog;
 mod sticker_anim;
 mod stickers;
@@ -5149,7 +5152,29 @@ fn install_crash_log() {
     }));
 }
 
+// The data paths are resolved from the XDG variables and HOME, which Windows
+// does not set: they are mapped to the usual profile folders.
+#[cfg(windows)]
+fn windows_env_defaults() {
+    let defaults = [
+        ("HOME", "USERPROFILE"),
+        ("XDG_CONFIG_HOME", "APPDATA"),
+        ("XDG_DATA_HOME", "APPDATA"),
+        ("XDG_CACHE_HOME", "LOCALAPPDATA"),
+    ];
+    for (name, source) in defaults {
+        if std::env::var_os(name).is_none()
+            && let Some(value) = std::env::var_os(source)
+        {
+            // SAFETY: called first in main, before any other thread starts.
+            unsafe { std::env::set_var(name, value) };
+        }
+    }
+}
+
 fn main() -> eframe::Result<()> {
+    #[cfg(windows)]
+    windows_env_defaults();
     env_logger::init();
     install_crash_log();
 

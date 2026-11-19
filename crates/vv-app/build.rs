@@ -28,7 +28,20 @@ fn link_clang_runtime() {
     println!("cargo:rustc-link-lib=static=clang_rt.osx");
 }
 
+// Icon of tandem.exe in Explorer and the taskbar.
+#[cfg(windows)]
+fn embed_windows_icon() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        return;
+    }
+    let mut resource = winresource::WindowsResource::new();
+    resource.set_icon("../../media/icons/windows/tandem.ico");
+    resource.compile().expect("cannot embed the Windows icon");
+}
+
 fn main() {
+    #[cfg(windows)]
+    embed_windows_icon();
     link_clang_runtime();
     let version = git(&["describe", "--tags", "--exact-match", "HEAD"])
         .or_else(|| git(&["rev-parse", "--short", "HEAD"]))

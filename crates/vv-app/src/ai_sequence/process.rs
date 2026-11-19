@@ -4,6 +4,57 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+/// A CLI on PATH. npm installs `.cmd` shims on Windows, which would go
+/// through cmd.exe and its quoting: their script is run with Node instead.
+pub fn program(name: &str) -> Command {
+    #[cfg(windows)]
+    if let Some(command) = windows_program(name) {
+        return command;
+    }
+    Command::new(name)
+}
+
+#[cfg(windows)]
+fn windows_program(name: &str) -> Option<Command> {
+    let path = std::env::var_os("PATH")?;
+    let found = std::env::split_paths(&path)
+        .flat_map(|dir| ["exe", "cmd", "bat"].map(|ext| dir.join(format!("{name}.{ext}"))))
+        .find(|candidate| candidate.is_file())?;
+    if found
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+    {
+        return Some(Command::new(found));
+    }
+    let dir = found.parent()?;
+    let script = std::fs::read_to_string(&found)
+        .ok()
+        .and_then(|shim| npm_shim_script(&shim).map(|script| dir.join(script)))
+        .filter(|script| script.is_file());
+    let Some(script) = script else {
+        return Some(Command::new(found));
+    };
+    let local_node = dir.join("node.exe");
+    let mut command = if local_node.is_file() {
+        Command::new(local_node)
+    } else {
+        Command::new("node")
+    };
+    command.arg(script);
+    Some(command)
+}
+
+/// The script an npm cmd-shim runs: `"%dp0%\node_modules\pkg\cli.js" %*`.
+#[cfg(any(windows, test))]
+pub(crate) fn npm_shim_script(shim: &str) -> Option<&str> {
+    const PREFIX: &str = "\"%dp0%\\";
+    shim.lines()
+        .rev()
+        .filter_map(|line| line.find(PREFIX).map(|start| &line[start + PREFIX.len()..]))
+        .filter_map(|rest| rest.split('"').next())
+        .find(|script| !script.is_empty() && !script.ends_with(".exe"))
+}
+
 pub fn run(
     command: &mut Command,
     cancel: &AtomicBool,
@@ -40,9 +91,12 @@ pub fn run_with_input(
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
+    crate::spawn::no_console(command);
     let mut child = command
         .spawn()
         .map_err(|e| format!("Cannot start local process: {e}"))?;
+    #[cfg(windows)]
+    let tree = ProcessTree::new(&child);
     #[cfg(unix)]
     {
         use std::os::fd::AsRawFd;
@@ -152,6 +206,8 @@ pub fn run_with_input(
     unsafe {
         libc::kill(-(child.id() as i32), libc::SIGKILL);
     }
+    #[cfg(windows)]
+    drop(tree);
     if result.is_err() {
         let _ = child.kill();
     }
@@ -181,4 +237,57 @@ pub fn run_with_input(
     }
     input_result?;
     Ok(output)
+}
+
+#[cfg(test)]
+#[path = "../tests/ai_sequence/process.rs"]
+mod tests;
+
+/// Windows' counterpart of the process group: closing the job kills every
+/// process the child started.
+#[cfg(windows)]
+struct ProcessTree(Option<windows_sys::Win32::Foundation::HANDLE>);
+
+#[cfg(windows)]
+impl ProcessTree {
+    fn new(child: &std::process::Child) -> Self {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::JobObjects::{
+            AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+            SetInformationJobObject,
+        };
+        // SAFETY: plain Win32 calls on handles owned here or by `child`.
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+            if job.is_null() {
+                return Self(None);
+            }
+            let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let ok = SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                (&raw const limits).cast(),
+                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            ) != 0
+                && AssignProcessToJobObject(job, child.as_raw_handle()) != 0;
+            if !ok {
+                CloseHandle(job);
+                return Self(None);
+            }
+            Self(Some(job))
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for ProcessTree {
+    fn drop(&mut self) {
+        if let Some(job) = self.0.take() {
+            // SAFETY: the handle was created in `new` and is closed once.
+            unsafe { windows_sys::Win32::Foundation::CloseHandle(job) };
+        }
+    }
 }
