@@ -9,6 +9,7 @@ pub mod frame_provider;
 pub mod import_worker;
 mod jobs;
 mod media_tree;
+pub mod motion_blur;
 pub mod relink_job;
 mod session;
 pub mod silence;

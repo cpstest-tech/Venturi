@@ -233,6 +233,11 @@ struct Keyframed<T> { keyframes: Vec<(FrameIdx, T, Interpolation)>, default: T }
    converts to BT.709 I420 on the GPU (compute shader) and reads back the
    planes for the encoder. Decode and composition run on two pipelined
    threads, encode on the export thread itself, the audio mix on a fourth.
+   Motion blur (`vv-session/src/motion_blur.rs`, ported from f0e/blur):
+   every timeline frame is composed and kept on the GPU, duplicates are
+   replaced and the rest interpolated along the Smooth Cut optical flow,
+   and each output frame is the weighted sum of the frames around it
+   (`vv-render/src/frame_blend.rs`).
 6. No video clips (gap on every track): a black frame, the composition of an
    empty stack.
 

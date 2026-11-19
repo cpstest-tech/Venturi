@@ -1898,3 +1898,97 @@ fn the_preview_frame_is_a_small_picture_of_the_output() {
     };
     assert!(r > 200 && g < 40 && b < 40 && a == 255, "{r} {g} {b}");
 }
+
+fn white_then_black_project() -> (Project, TimelineId) {
+    let mut project = Project::default();
+    let track = Track {
+        kind: TrackKind::Video,
+        clips: vec![
+            solid_color_clip(1, 0, 2, black()),
+            solid_color_clip(2, 2, 2, white()),
+        ],
+        muted: false,
+        solo: false,
+        locked: false,
+        crossings: Vec::new(),
+        mix: Default::default(),
+        armed: Default::default(),
+        main: false,
+        subtitles: false,
+        effects: false,
+    };
+    let mut timeline = timeline_with(vec![track]);
+    timeline.resolution = (16, 16);
+    let id = project.timelines.insert(timeline);
+    (project, id)
+}
+
+fn exported_luma(settings: &ExportSettings, project: &Project, id: TimelineId) -> Vec<u8> {
+    export_timeline(
+        project,
+        id,
+        settings,
+        0..4,
+        &Mutex::new(ExportProgress::default()),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    let mut decoder = vv_media::Decoder::open(&settings.output_path).unwrap();
+    let mut luma = Vec::new();
+    while let Some((_, frame)) = decoder.next_frame().unwrap() {
+        luma.push(frame.y[8 * 16 + 8]);
+    }
+    luma
+}
+
+/// Black on frames 0-1, white on 2-3, interpolated 4×: output frame 1 already
+/// carries some of the white that follows it, frame 2 some of the black before.
+#[test]
+fn motion_blur_blends_the_interpolated_frames_around_each_output_frame() {
+    let dir = TempDir::new("vv-motion-blur-export");
+    let (project, id) = white_then_black_project();
+    let mut settings = ExportSettings::new(dir.join("sharp.mp4"));
+    settings.audio = None;
+    let sharp = exported_luma(&settings, &project, id);
+
+    settings.output_path = dir.join("blurred.mp4");
+    settings.motion_blur = Some(Box::new(crate::motion_blur::MotionBlurSettings {
+        interpolation: Some(crate::motion_blur::FpsTarget::Multiplier(4.0)),
+        deduplicate: None,
+        ..Default::default()
+    }));
+    let blurred = exported_luma(&settings, &project, id);
+
+    assert_eq!(blurred.len(), sharp.len(), "{sharp:?} {blurred:?}");
+    assert!(sharp[1] < 25 && sharp[2] > 220, "{sharp:?}");
+    // 5 taps at 0.5, 0.75, 1, 1.25, 1.5: (0.25 + 0.5) / 5 white.
+    let expected_1 = 16.0 + 219.0 * 0.15;
+    assert!(
+        (f64::from(blurred[1]) - expected_1).abs() < 8.0,
+        "{blurred:?}"
+    );
+    let expected_2 = 16.0 + 219.0 * 0.85;
+    assert!(
+        (f64::from(blurred[2]) - expected_2).abs() < 8.0,
+        "{blurred:?}"
+    );
+    assert!(blurred[0] < 25, "{blurred:?}");
+}
+
+/// With deduplication the repeated black frame counts as a drop: it becomes
+/// the halfway point to the white.
+#[test]
+fn motion_blur_deduplication_fills_a_repeated_frame() {
+    let dir = TempDir::new("vv-motion-blur-dedup");
+    let (project, id) = white_then_black_project();
+    let mut settings = ExportSettings::new(dir.join("dedup.mp4"));
+    settings.audio = None;
+    settings.motion_blur = Some(Box::new(crate::motion_blur::MotionBlurSettings {
+        interpolation: None,
+        deduplicate: Some(crate::motion_blur::Deduplicate::default()),
+        ..Default::default()
+    }));
+    let luma = exported_luma(&settings, &project, id);
+    let halfway = 16.0 + 219.0 * 0.5;
+    assert!((f64::from(luma[1]) - halfway).abs() < 8.0, "{luma:?}");
+}

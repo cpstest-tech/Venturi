@@ -311,3 +311,123 @@ export.waits_for_cutout:
 export.cutout_not_ready:
   en: "The background removal is still analysing the clips: export once it is done."
   it: "La rimozione dello sfondo sta ancora analizzando le clip: esporta quando ha finito."
+
+export.motion_blur:
+  en: "Motion blur"
+  it: "Motion blur"
+
+export.blur_amount:
+  en: "Blur amount"
+  it: "Intensità"
+
+export.blur_amount_hint:
+  en: "0 = none, 1 = the whole time between two output frames, above 1 = longer trails."
+  it: "0 = nessuno, 1 = tutto il tempo tra due frame di output, sopra 1 = scie più lunghe."
+
+export.weighting:
+  en: "Weighting"
+  it: "Pesatura"
+
+export.weighting_equal:
+  en: "Equal"
+  it: "Uguale"
+
+export.weighting_gaussian_sym:
+  en: "Gaussian, symmetric"
+  it: "Gaussiana simmetrica"
+
+export.weighting_vegas:
+  en: "Vegas"
+  it: "Vegas"
+
+export.weighting_pyramid:
+  en: "Pyramid"
+  it: "Piramide"
+
+export.weighting_gaussian:
+  en: "Gaussian"
+  it: "Gaussiana"
+
+export.weighting_ascending:
+  en: "Ascending"
+  it: "Crescente"
+
+export.weighting_descending:
+  en: "Descending"
+  it: "Decrescente"
+
+export.weighting_gaussian_reverse:
+  en: "Gaussian, reversed"
+  it: "Gaussiana inversa"
+
+export.weighting_custom:
+  en: "Custom"
+  it: "Personalizzata"
+
+export.custom_weights:
+  en: "Weights"
+  it: "Pesi"
+
+export.custom_weights_hint:
+  en: "Comma-separated, oldest frame first, e.g. 5, 3, 3, 2, 1. Stretched over the blended frames."
+  it: "Separati da virgole, dal frame più vecchio, es. 5, 3, 3, 2, 1. Vengono distribuiti sui frame fusi."
+
+export.invalid_weights:
+  en: "Enter numbers separated by commas."
+  it: "Inserisci numeri separati da virgole."
+
+export.gaussian_mean:
+  en: "Gaussian mean"
+  it: "Media gaussiana"
+
+export.gaussian_std_dev:
+  en: "Gaussian std. dev."
+  it: "Deviazione gaussiana"
+
+export.gaussian_bound:
+  en: "Gaussian bound"
+  it: "Intervallo gaussiano"
+
+export.blur_gamma:
+  en: "Blur gamma"
+  it: "Gamma del blur"
+
+export.blur_gamma_hint:
+  en: "Above 1 the bright parts dominate the trail."
+  it: "Sopra 1 le parti chiare dominano la scia."
+
+export.interpolate:
+  en: "Interpolate to"
+  it: "Interpola a"
+
+export.interpolated_fps_hint:
+  en: "Frame rate the timeline is interpolated to before blending: 600, or a multiplier like 5x. More frames = smoother trails, slower export."
+  it: "Frame rate a cui la timeline viene interpolata prima della fusione: 600, oppure un moltiplicatore come 5x. Più frame = scie più fluide, export più lento."
+
+export.invalid_fps:
+  en: "Write a frame rate (600) or a multiplier (5x)."
+  it: "Scrivi un frame rate (600) o un moltiplicatore (5x)."
+
+export.deduplicate:
+  en: "Deduplicate"
+  it: "Deduplica"
+
+export.deduplicate_hint:
+  en: "Repeated frames (stutter, footage below the timeline's frame rate) are replaced by interpolated ones. Range: how many frames ahead a changed frame is looked for. Threshold: the difference under which a frame counts as repeated."
+  it: "I frame ripetuti (scatti, girato a frame rate più basso della timeline) vengono sostituiti da frame interpolati. Range: quanti frame avanti cercare un frame diverso. Soglia: la differenza sotto cui un frame conta come ripetuto."
+
+export.dedup_range:
+  en: "Range"
+  it: "Range"
+
+export.dedup_threshold:
+  en: "Threshold"
+  it: "Soglia"
+
+export.blur_summary:
+  en: "%{frames} frames at %{fps} fps blended into each output frame."
+  it: "%{frames} frame a %{fps} fps fusi in ogni frame di output."
+
+export.blur_none:
+  en: "No blur at these settings: interpolate to a higher frame rate or raise the amount."
+  it: "Con queste impostazioni non c'è blur: interpola a un frame rate più alto o alza l'intensità."

@@ -919,6 +919,7 @@ pub struct Compositor {
     adapter_name: String,
     /// Built on first use: most projects never need it.
     smooth_cut: std::sync::OnceLock<crate::smooth_cut::SmoothCut>,
+    frame_blend: std::sync::OnceLock<crate::frame_blend::FrameBlend>,
     custom: crate::custom_shader::CustomShaders,
     text: crate::text_gpu::TextGpu,
 }
@@ -1180,6 +1181,7 @@ impl Compositor {
             scratch: Arc::default(),
             adapter_name,
             smooth_cut: std::sync::OnceLock::new(),
+            frame_blend: std::sync::OnceLock::new(),
             custom: crate::custom_shader::CustomShaders::new(&device_for_custom),
             text: crate::text_gpu::TextGpu::new(&device_for_custom),
         };
@@ -1478,18 +1480,87 @@ impl Compositor {
         let a = self.compose(std::slice::from_ref(from), output, TRANSPARENT);
         let b = self.compose(std::slice::from_ref(to), output, TRANSPARENT);
         let out = self.scratch_texture(output.width, output.height);
+        self.smooth_cut().render(
+            &self.device,
+            &self.queue,
+            &self.sampler,
+            &a,
+            &b,
+            &out,
+            progress,
+        );
+        give_back(&mut self.scratch.lock().unwrap(), [a, b]);
+        PooledTexture {
+            texture: Some(out),
+            pool: Arc::clone(&self.scratch),
+        }
+    }
+
+    fn smooth_cut(&self) -> &crate::smooth_cut::SmoothCut {
         self.smooth_cut
             .get_or_init(|| crate::smooth_cut::SmoothCut::new(&self.device))
-            .render(
-                &self.device,
-                &self.queue,
-                &self.sampler,
-                &a,
-                &b,
-                &out,
-                progress,
-            );
-        give_back(&mut self.scratch.lock().unwrap(), [a, b]);
+    }
+
+    fn frame_blend(&self) -> &crate::frame_blend::FrameBlend {
+        self.frame_blend
+            .get_or_init(|| crate::frame_blend::FrameBlend::new(&self.device))
+    }
+
+    /// The optical flow between two composed frames of the same size, both
+    /// ways, for `interpolate_frame`.
+    pub fn frame_flow(&self, a: &wgpu::Texture, b: &wgpu::Texture) -> crate::FramePairFlow {
+        self.smooth_cut().flow(&self.device, &self.queue, a, b)
+    }
+
+    /// The frame at `progress` (0..1) between `a` and `b` along their `flow`.
+    pub fn interpolate_frame(
+        &self,
+        a: &wgpu::Texture,
+        b: &wgpu::Texture,
+        flow: &crate::FramePairFlow,
+        progress: f32,
+    ) -> PooledTexture {
+        let out = self.scratch_texture(a.width(), a.height());
+        self.smooth_cut().morph(
+            &self.device,
+            &self.queue,
+            &self.sampler,
+            a,
+            b,
+            flow,
+            &out,
+            progress,
+        );
+        PooledTexture {
+            texture: Some(out),
+            pool: Arc::clone(&self.scratch),
+        }
+    }
+
+    /// Mean absolute luma difference (0..1) between two frames of the same
+    /// size. Waits for the GPU.
+    pub fn frame_difference(&self, a: &wgpu::Texture, b: &wgpu::Texture) -> f32 {
+        self.frame_blend()
+            .difference(&self.device, &self.queue, a, b)
+    }
+
+    /// An empty weighted sum of frames of `size`, blended after raising
+    /// their colour to `gamma` (1 = as composed).
+    pub fn blend_sum(&self, size: (u32, u32), gamma: f32) -> crate::BlendSum {
+        self.frame_blend().sum(&self.device, size, gamma)
+    }
+
+    pub fn blend_add(&self, sum: &mut crate::BlendSum, frame: &wgpu::Texture, weight: f32) {
+        self.frame_blend()
+            .add(&self.device, &self.queue, sum, frame, weight);
+    }
+
+    /// The sum as a work texture, owned like `render_layers_to_owned_texture_transparent`.
+    pub fn blend_resolve(&self, sum: &crate::BlendSum) -> PooledTexture {
+        let (width, height) = sum.size();
+        let out = self.scratch_texture(width, height);
+        self.frame_blend()
+            .resolve(&self.device, &self.queue, sum, &out);
         PooledTexture {
             texture: Some(out),
             pool: Arc::clone(&self.scratch),

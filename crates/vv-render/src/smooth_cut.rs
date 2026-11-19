@@ -2,7 +2,7 @@
 //! Lucas-Kanade, `shaders/flow.wgsl`) and the morph between them
 //! (`shaders/morph.wgsl`).
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use wgpu::util::DeviceExt;
 
@@ -69,7 +69,31 @@ pub(crate) struct SmoothCut {
     /// One per work format: it can change with the precision.
     morph_pipelines: Mutex<Vec<(wgpu::TextureFormat, wgpu::RenderPipeline)>>,
     dummy: wgpu::Texture,
-    pool: Mutex<Vec<wgpu::Texture>>,
+    pool: Arc<Mutex<Vec<wgpu::Texture>>>,
+}
+
+/// The optical flow between two frames, both ways: estimated once, it serves
+/// every frame interpolated between them. Its textures go back to the pool
+/// when dropped.
+pub struct FramePairFlow {
+    ab: Option<wgpu::Texture>,
+    ba: Option<wgpu::Texture>,
+    /// Of the frames, not of the flow.
+    frame_size: (u32, u32),
+    pool: Arc<Mutex<Vec<wgpu::Texture>>>,
+}
+
+impl Drop for FramePairFlow {
+    fn drop(&mut self) {
+        let textures = [self.ab.take(), self.ba.take()].into_iter().flatten();
+        give_back(&mut self.pool.lock().unwrap(), textures);
+    }
+}
+
+fn give_back(pool: &mut Vec<wgpu::Texture>, textures: impl IntoIterator<Item = wgpu::Texture>) {
+    pool.extend(textures);
+    let excess = pool.len().saturating_sub(64);
+    pool.drain(..excess);
 }
 
 fn texture_entry(
@@ -214,7 +238,7 @@ impl SmoothCut {
             morph_module,
             morph_pipelines: Mutex::default(),
             dummy,
-            pool: Mutex::default(),
+            pool: Arc::default(),
         }
     }
 
@@ -297,7 +321,19 @@ impl SmoothCut {
         out: &wgpu::Texture,
         progress: f32,
     ) {
-        let output = (out.width(), out.height());
+        let flow = self.flow(device, queue, a, b);
+        self.morph(device, queue, sampler, a, b, &flow, out, progress);
+    }
+
+    /// The flow between `a` and `b` (same size), both ways.
+    pub(crate) fn flow(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        a: &wgpu::Texture,
+        b: &wgpu::Texture,
+    ) -> FramePairFlow {
+        let output = (a.width(), a.height());
         let sizes = level_sizes(output);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("vv-render smooth cut encoder"),
@@ -396,11 +432,44 @@ impl SmoothCut {
         let flow_ab = flow(&pyramid_a, &pyramid_b, &mut encoder, &mut used);
         let flow_ba = flow(&pyramid_b, &pyramid_a, &mut encoder, &mut used);
 
+        queue.submit(Some(encoder.finish()));
+        used.retain(|t| *t != flow_ab && *t != flow_ba);
+        // Safe to reuse right away: later work goes on the same queue.
+        give_back(&mut self.pool.lock().unwrap(), used);
+        FramePairFlow {
+            ab: Some(flow_ab),
+            ba: Some(flow_ba),
+            frame_size: output,
+            pool: Arc::clone(&self.pool),
+        }
+    }
+
+    /// Writes into `out` the frame at `progress` between `a` and `b` along
+    /// `flow`, which must be theirs.
+    pub(crate) fn morph(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        sampler: &wgpu::Sampler,
+        a: &wgpu::Texture,
+        b: &wgpu::Texture,
+        flow: &FramePairFlow,
+        out: &wgpu::Texture,
+        progress: f32,
+    ) {
+        let output = (out.width(), out.height());
+        let flow_ab = flow.ab.as_ref().expect("held until Drop");
+        let flow_ba = flow.ba.as_ref().expect("held until Drop");
+        let flow_size = (flow_ab.width(), flow_ab.height());
+        debug_assert_eq!(flow.frame_size, output);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("vv-render morph encoder"),
+        });
         let params = MorphParams {
             out_size: [output.0 as f32, output.1 as f32],
             flow_scale: [
-                output.0 as f32 / sizes[0].0 as f32,
-                output.1 as f32 / sizes[0].1 as f32,
+                output.0 as f32 / flow_size.0 as f32,
+                output.1 as f32 / flow_size.1 as f32,
             ],
             progress: progress.clamp(0.0, 1.0),
             _pad: [0.0; 3],
@@ -410,7 +479,7 @@ impl SmoothCut {
             contents: bytemuck::bytes_of(&params),
             usage: wgpu::BufferUsages::UNIFORM,
         });
-        let (a_view, b_view, ab_view, ba_view) = (view(a), view(b), view(&flow_ab), view(&flow_ba));
+        let (a_view, b_view, ab_view, ba_view) = (view(a), view(b), view(flow_ab), view(flow_ba));
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("vv-render morph bind group"),
             layout: &self.morph_layout,
@@ -465,11 +534,6 @@ impl SmoothCut {
             pass.draw(0..3, 0..1);
         }
         queue.submit(Some(encoder.finish()));
-        // Safe to reuse right away: later work goes on the same queue.
-        let mut pool = self.pool.lock().unwrap();
-        pool.extend(used);
-        let excess = pool.len().saturating_sub(64);
-        pool.drain(..excess);
     }
 
     fn dispatch(

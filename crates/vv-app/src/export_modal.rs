@@ -7,6 +7,9 @@ use std::sync::{Arc, Mutex};
 use vv_core::{FrameIdx, Project, TimelineId};
 use vv_media::{HwDevice, VideoBitrate, VideoCodec, VideoSettings};
 use vv_session::export::{ExportError, ExportProgress, ExportSettings};
+use vv_session::motion_blur::{
+    Deduplicate, FpsTarget, MotionBlurSettings, Weighting, blend_summary,
+};
 
 use super::*;
 use crate::cover::{CoverRender, paint_fitted, paint_skeleton};
@@ -41,6 +44,9 @@ pub(crate) struct ExportModal {
     captions_on: bool,
     captions_open: bool,
     caption_format: CaptionFormat,
+    blur_on: bool,
+    blur_open: bool,
+    blur: MotionBlurForm,
     hw_decode: Vec<HwDevice>,
     detected_kbps: Option<u32>,
     probe: Option<mpsc::Receiver<Option<u32>>>,
@@ -73,7 +79,7 @@ enum Outcome {
     None,
     Close,
     EditCover,
-    Start(StartRequest),
+    Start(Box<StartRequest>),
     CancelRender,
 }
 
@@ -128,6 +134,9 @@ impl ExportModal {
             captions_on: false,
             captions_open: true,
             caption_format: CaptionFormat::Srt,
+            blur_on: false,
+            blur_open: true,
+            blur: MotionBlurForm::default(),
             hw_decode: crate::hw_decode::export_choices(),
             detected_kbps: None,
             probe: Some(rx),
@@ -227,6 +236,9 @@ impl ExportModal {
     }
 
     fn can_start(&self, env: &Env) -> bool {
+        if self.video_on && self.blur_on && self.blur.settings().is_none() {
+            return false;
+        }
         let scanning = env.waits_for_scan && env.project.timelines[env.timeline].has_audio_clips();
         (self.video_on || self.audio_on)
             && !self.name.trim().is_empty()
@@ -250,6 +262,9 @@ impl ExportModal {
         });
         if !tl.has_audio_clips() {
             settings.audio = None;
+        }
+        if self.video_on && self.blur_on {
+            settings.motion_blur = self.blur.settings().map(Box::new);
         }
         if self.audio_on {
             settings.audio_file = Some(vv_session::export::AudioFileExport {
@@ -326,7 +341,7 @@ impl ExportModal {
             outcome = if close {
                 Outcome::Close
             } else {
-                Outcome::Start(self.request(env, &derived))
+                Outcome::Start(Box::new(self.request(env, &derived)))
             };
         }
         outcome
@@ -390,6 +405,17 @@ impl ExportModal {
             &t!("export.video"),
         ) {
             self.video_rows(ui, env, derived);
+        }
+        if self.video_on
+            && section_header(
+                ui,
+                &mut self.blur_on,
+                &mut self.blur_open,
+                &t!("export.motion_blur"),
+            )
+        {
+            let timeline_fps = env.project.timelines[env.timeline].fps;
+            self.blur.rows(ui, timeline_fps, derived.fps);
         }
         if section_header(
             ui,
@@ -763,6 +789,201 @@ fn hardware_encoder() -> VideoCodec {
         .unwrap_or(VideoCodec::X264)
 }
 
+/// What the motion blur section edits: text fields stay as typed, the
+/// settings are parsed from them.
+struct MotionBlurForm {
+    values: MotionBlurSettings,
+    /// Index in `Weighting::PRESETS`, or past it for custom.
+    weighting: usize,
+    custom_weights: String,
+    interpolate: bool,
+    interpolated_fps: String,
+    deduplicate: bool,
+}
+
+impl Default for MotionBlurForm {
+    fn default() -> Self {
+        let values = MotionBlurSettings::default();
+        Self {
+            interpolate: values.interpolation.is_some(),
+            interpolated_fps: values
+                .interpolation
+                .unwrap_or(FpsTarget::Fixed(600))
+                .to_string(),
+            deduplicate: values.deduplicate.is_some(),
+            weighting: 0,
+            custom_weights: "1, 2, 3, 2, 1".to_owned(),
+            values,
+        }
+    }
+}
+
+const CUSTOM_WEIGHTING: usize = Weighting::PRESETS.len();
+
+fn weighting_label(weighting: &Weighting) -> std::borrow::Cow<'static, str> {
+    match weighting {
+        Weighting::Equal => t!("export.weighting_equal"),
+        Weighting::GaussianSym => t!("export.weighting_gaussian_sym"),
+        Weighting::Vegas => t!("export.weighting_vegas"),
+        Weighting::Pyramid => t!("export.weighting_pyramid"),
+        Weighting::Gaussian => t!("export.weighting_gaussian"),
+        Weighting::Ascending => t!("export.weighting_ascending"),
+        Weighting::Descending => t!("export.weighting_descending"),
+        Weighting::GaussianReverse => t!("export.weighting_gaussian_reverse"),
+        Weighting::Custom(_) => t!("export.weighting_custom"),
+    }
+}
+
+impl MotionBlurForm {
+    /// `None` while a text field does not parse.
+    fn settings(&self) -> Option<MotionBlurSettings> {
+        let mut settings = self.values.clone();
+        settings.weighting = match Weighting::PRESETS.get(self.weighting) {
+            Some(preset) => preset.clone(),
+            None => Weighting::parse_custom(&self.custom_weights)?,
+        };
+        settings.interpolation = if self.interpolate {
+            Some(FpsTarget::parse(&self.interpolated_fps)?)
+        } else {
+            None
+        };
+        settings.deduplicate = self
+            .deduplicate
+            .then(|| self.values.deduplicate.unwrap_or_default());
+        Some(settings)
+    }
+
+    fn rows(
+        &mut self,
+        ui: &mut egui::Ui,
+        timeline_fps: vv_core::Rational,
+        output_fps: vv_core::Rational,
+    ) {
+        row(ui, t!("export.blur_amount"), |ui| {
+            ui.spacing_mut().slider_width = 110.0;
+            ui.add(egui::Slider::new(&mut self.values.amount, 0.0..=2.0).show_value(false));
+            ui.add(
+                egui::DragValue::new(&mut self.values.amount)
+                    .range(0.0..=10.0)
+                    .speed(0.01)
+                    .max_decimals(2),
+            );
+            info_icon(ui, &t!("export.blur_amount_hint"));
+        });
+
+        row(ui, t!("export.weighting"), |ui| {
+            let mut items: Vec<_> = Weighting::PRESETS
+                .iter()
+                .enumerate()
+                .map(|(i, w)| (i, weighting_label(w).into_owned(), true))
+                .collect();
+            items.push((
+                CUSTOM_WEIGHTING,
+                t!("export.weighting_custom").into_owned(),
+                true,
+            ));
+            preview_combo(
+                ui,
+                "export_blur_weighting",
+                &mut self.weighting,
+                &items,
+                None,
+                None,
+                None,
+            );
+        });
+        if self.weighting == CUSTOM_WEIGHTING {
+            row(ui, t!("export.custom_weights"), |ui| {
+                ui.add(egui::TextEdit::singleline(&mut self.custom_weights).desired_width(160.0));
+                info_icon(ui, &t!("export.custom_weights_hint"));
+            });
+            if Weighting::parse_custom(&self.custom_weights).is_none() {
+                ui.colored_label(theme::WARNING, t!("export.invalid_weights"));
+            }
+        }
+        if Weighting::PRESETS
+            .get(self.weighting)
+            .is_some_and(Weighting::uses_gaussian)
+        {
+            let gaussian = &mut self.values.gaussian;
+            let reversed_or_plain = Weighting::PRESETS[self.weighting] != Weighting::GaussianSym;
+            if reversed_or_plain {
+                row(ui, t!("export.gaussian_mean"), |ui| {
+                    ui.add(egui::DragValue::new(&mut gaussian.mean).speed(0.05));
+                });
+            }
+            row(ui, t!("export.gaussian_std_dev"), |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut gaussian.std_dev)
+                        .range(0.01..=100.0)
+                        .speed(0.05),
+                );
+            });
+            row(ui, t!("export.gaussian_bound"), |ui| {
+                ui.add(egui::DragValue::new(&mut gaussian.bound.0).speed(0.05));
+                ui.add(egui::DragValue::new(&mut gaussian.bound.1).speed(0.05));
+            });
+        }
+        row(ui, t!("export.blur_gamma"), |ui| {
+            ui.add(
+                egui::DragValue::new(&mut self.values.gamma)
+                    .range(0.1..=10.0)
+                    .speed(0.01)
+                    .max_decimals(2),
+            );
+            info_icon(ui, &t!("export.blur_gamma_hint"));
+        });
+
+        row(ui, "", |ui| {
+            ui.checkbox(&mut self.interpolate, t!("export.interpolate"));
+            ui.add_enabled(
+                self.interpolate,
+                egui::TextEdit::singleline(&mut self.interpolated_fps).desired_width(60.0),
+            );
+            ui.label(egui::RichText::new("fps").color(theme::TEXT_SECONDARY));
+            info_icon(ui, &t!("export.interpolated_fps_hint"));
+        });
+        if self.interpolate && FpsTarget::parse(&self.interpolated_fps).is_none() {
+            ui.colored_label(theme::WARNING, t!("export.invalid_fps"));
+        }
+
+        row(ui, "", |ui| {
+            ui.checkbox(&mut self.deduplicate, t!("export.deduplicate"));
+            info_icon(ui, &t!("export.deduplicate_hint"));
+        });
+        if self.deduplicate {
+            let dedup = self
+                .values
+                .deduplicate
+                .get_or_insert_with(Deduplicate::default);
+            row(ui, t!("export.dedup_range"), |ui| {
+                ui.add(egui::DragValue::new(&mut dedup.range).range(1..=30));
+            });
+            row(ui, t!("export.dedup_threshold"), |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut dedup.threshold)
+                        .range(0.0..=0.5)
+                        .speed(0.0001)
+                        .max_decimals(4),
+                );
+            });
+        }
+
+        if let Some(settings) = self.settings() {
+            let (fps, frames) = blend_summary(&settings, timeline_fps, output_fps);
+            if frames > 1 {
+                ui.weak(t!(
+                    "export.blur_summary",
+                    frames = frames,
+                    fps = trim_fps(fps)
+                ));
+            } else {
+                ui.colored_label(theme::WARNING, t!("export.blur_none"));
+            }
+        }
+    }
+}
+
 fn trim_fps(fps: f64) -> String {
     if (fps - fps.round()).abs() < 0.005 {
         format!("{fps:.0}")
@@ -946,7 +1167,7 @@ impl VenturiApp {
             }
             Outcome::Start(request) => {
                 modal.started_dir = request.settings.output_path.parent().map(Path::to_path_buf);
-                self.start_modal_export(timeline, request);
+                self.start_modal_export(timeline, *request);
                 self.export_modal = Some(modal);
             }
         }

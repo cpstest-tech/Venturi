@@ -34,7 +34,7 @@ pub enum AspectMode {
     Stretch,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ExportSettings {
     pub output_path: PathBuf,
     /// Percentage of the timeline resolution.
@@ -52,6 +52,7 @@ pub struct ExportSettings {
     pub video_enabled: bool,
     /// The audio as a separate file next to the video.
     pub audio_file: Option<AudioFileExport>,
+    pub motion_blur: Option<Box<crate::motion_blur::MotionBlurSettings>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -76,6 +77,7 @@ impl ExportSettings {
             fps: None,
             video_enabled: true,
             audio_file: None,
+            motion_blur: None,
         }
     }
 
@@ -630,17 +632,24 @@ fn export_video(
                 hw: settings.hw_decode.clone(),
                 ..Default::default()
             };
-            for index in 0..total_frames {
+            // Motion blur reads every timeline frame, not one per output frame.
+            let frames: Box<dyn Iterator<Item = FrameIdx>> = if settings.motion_blur.is_some() {
+                Box::new(decode_range.clone())
+            } else {
+                Box::new((0..total_frames).map(|index| {
+                    source_frame(
+                        index,
+                        decode_range.start,
+                        decode_range.end,
+                        timeline_fps,
+                        output_fps,
+                    )
+                }))
+            };
+            for frame in frames {
                 if cancel.load(Ordering::Relaxed) {
                     return;
                 }
-                let frame = source_frame(
-                    index,
-                    decode_range.start,
-                    decode_range.end,
-                    timeline_fps,
-                    output_fps,
-                );
                 let t = std::time::Instant::now();
                 let decoded = decode_video_frame(
                     project,
@@ -664,15 +673,50 @@ fn export_video(
             }
         });
 
+        let source_frames = (range.end - range.start).max(0) as usize;
         scope.spawn(move || {
+            let mut blur = settings.motion_blur.as_ref().map(|blur| {
+                crate::motion_blur::Engine::new(
+                    compositor,
+                    blur,
+                    timeline_fps,
+                    output_fps,
+                    source_frames,
+                    total_frames,
+                    (out_w, out_h),
+                )
+            });
             for decoded in decoded_rx {
                 let t = std::time::Instant::now();
-                let composed = decoded
-                    .map(|layers| compose_export_frame(compositor, &layers, output, settings));
+                let composed: Vec<Result<Vec<u8>, ExportError>> =
+                    match (decoded, &mut blur) {
+                        (Ok(layers), Some(blur)) => blur
+                            .push(compose_export_texture(
+                                compositor, &layers, output, settings,
+                            ))
+                            .into_iter()
+                            .map(Ok)
+                            .collect(),
+                        (decoded, _) => vec![decoded.map(|layers| {
+                            compose_export_frame(compositor, &layers, output, settings)
+                        })],
+                    };
                 progress.lock().unwrap().compose.add(t.elapsed());
-                let failed = composed.is_err();
-                if composed_tx.send(composed).is_err() || failed {
+                for composed in composed {
+                    let failed = composed.is_err();
+                    if composed_tx.send(composed).is_err() || failed {
+                        return;
+                    }
+                }
+            }
+            if let Some(blur) = &mut blur {
+                if cancel.load(Ordering::Relaxed) {
                     return;
+                }
+                for frame in blur.finish() {
+                    if composed_tx.send(Ok(frame)).is_err() {
+                        return;
+                    }
                 }
             }
         });
@@ -826,16 +870,50 @@ fn compose_export_frame(
     output: vv_render::OutputFrame,
     settings: &ExportSettings,
 ) -> Vec<u8> {
-    let (width, height) = output.timeline_size;
     if !settings.needs_timeline_texture(output.timeline_size) {
         return compose_video_frame(compositor, layers, output);
     }
-    // Resize the completed timeline so clip positions, masks and effects keep their geometry.
+    let texture = compose_timeline_texture(compositor, layers, output.timeline_size);
+    compositor.render_layers_i420(&[resized_timeline(&texture, output, settings)], output)
+}
+
+/// Like `compose_export_frame`, but kept on the GPU at the output size.
+fn compose_export_texture(
+    compositor: &vv_render::Compositor,
+    layers: &[OwnedLayer],
+    output: vv_render::OutputFrame,
+    settings: &ExportSettings,
+) -> vv_render::PooledTexture {
+    if !settings.needs_timeline_texture(output.timeline_size) {
+        let layers: Vec<_> = layers.iter().map(OwnedLayer::as_render).collect();
+        return compositor.render_layers_to_owned_texture_transparent(&layers, output);
+    }
+    let texture = compose_timeline_texture(compositor, layers, output.timeline_size);
+    compositor.render_layers_to_owned_texture_transparent(
+        &[resized_timeline(&texture, output, settings)],
+        output,
+    )
+}
+
+// Resize the completed timeline so clip positions, masks and effects keep their geometry.
+fn compose_timeline_texture(
+    compositor: &vv_render::Compositor,
+    layers: &[OwnedLayer],
+    (width, height): (u32, u32),
+) -> vv_render::PooledTexture {
     let layers: Vec<_> = layers.iter().map(OwnedLayer::as_render).collect();
-    let texture = compositor.render_layers_to_owned_texture_transparent(
+    compositor.render_layers_to_owned_texture_transparent(
         &layers,
         vv_render::OutputFrame::exact(width, height),
-    );
+    )
+}
+
+fn resized_timeline<'a>(
+    texture: &'a vv_render::PooledTexture,
+    output: vv_render::OutputFrame,
+    settings: &ExportSettings,
+) -> vv_render::Layer<'a> {
+    let (width, height) = output.timeline_size;
     let sx = output.width as f32 / width.max(1) as f32;
     let sy = output.height as f32 / height.max(1) as f32;
     let scale = sx.min(sy);
@@ -844,17 +922,16 @@ fn compose_export_frame(
         AspectMode::Fill => [sx.max(sy) / scale; 2],
         AspectMode::Stretch => [sx / scale, sy / scale],
     };
-    let layer = vv_render::Layer::new(
+    vv_render::Layer::new(
         vv_render::LayerContent::Texture {
-            texture: &texture,
+            texture,
             source_size: (width, height),
         },
         vv_core::Transform {
             zoom,
             ..Default::default()
         },
-    );
-    compositor.render_layers_i420(&[layer], output)
+    )
 }
 
 /// Writes the audio mix to the encoder as it arrives, aligned to the video

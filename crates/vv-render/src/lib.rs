@@ -7,6 +7,7 @@ mod custom_shader;
 #[cfg(test)]
 #[path = "tests/custom_shader.rs"]
 mod custom_shader_tests;
+mod frame_blend;
 pub mod scopes;
 mod smooth_cut;
 pub mod text;
@@ -20,7 +21,9 @@ pub use compositor::{
     device_limits, fit_output_size,
 };
 pub use custom_shader::CustomPass;
+pub use frame_blend::BlendSum;
 pub use scopes::{ScopeKind, Scopes};
+pub use smooth_cut::FramePairFlow;
 /// Re-exported: whoever owns a texture for `LayerContent::Texture` must use the
 /// same wgpu version as the compositor.
 pub use wgpu;
