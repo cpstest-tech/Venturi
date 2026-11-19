@@ -5,7 +5,7 @@
 # Runs in Git Bash on Windows with the MSVC toolchain, LLVM (bindgen) and the
 # Vulkan SDK (VULKAN_SDK); the installer needs Inno Setup's iscc on PATH.
 #
-# Usage: scripts/build-windows.sh
+# Usage: scripts/build-windows.sh [--fetch-ffmpeg]   (only download FFmpeg)
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -32,6 +32,8 @@ if [ ! -f "$FFMPEG_DIR/lib/avcodec.lib" ]; then
     mv "$TARGET_DIR/$FFMPEG_ZIP" "$FFMPEG_DIR"
     rm "$TARGET_DIR/ffmpeg.zip"
 fi
+
+[ "${1:-}" = --fetch-ffmpeg ] && exit 0
 
 export FFMPEG_DIR="$(cygpath -w "$FFMPEG_DIR")"
 cargo build -p vv-app --release
