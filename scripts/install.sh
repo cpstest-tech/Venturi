@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Release CI replaces this value so downloaded installers stay on their release.
 DEFAULT_VERSION=latest
-RELEASES=https://github.com/VenturiVideo/Venturi/releases
+RELEASES=https://github.com/cpstest-tech/tandem/releases
 
 fail() {
     echo "Error: $*" >&2

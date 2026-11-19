@@ -11,7 +11,7 @@ Built for free AI assisted video editing.
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://rustup.rs)
 
-[Website](https://venturivideo.github.io/Venturi/) •
+[Website](https://cpstest-tech.github.io/tandem/) •
 [Discord](https://discord.gg/PuqMem4AFn) •
 [Features](#features) •
 [Build from source](docs/BUILDING.md) •
@@ -75,10 +75,10 @@ have AI make slop for you.
 ## Install
 
 On Linux (x86_64 or aarch64), download and run the
-[installer](https://github.com/VenturiVideo/Venturi/releases/latest/download/install.sh):
+[installer](https://github.com/cpstest-tech/tandem/releases/latest/download/install.sh):
 
 ```sh
-curl -fL https://github.com/cpstest-tech/Venturi/releases/latest/download/install.sh -o install.sh
+curl -fL https://github.com/cpstest-tech/tandem/releases/latest/download/install.sh -o install.sh
 bash install.sh
 ```
 
@@ -99,12 +99,13 @@ AppImages may require FUSE 2; without it, run
 `tandem --appimage-extract-and-run`.
 
 For macOS, Windows or a manual Linux installation, grab the latest build from the
-[Releases](https://github.com/VenturiVideo/Venturi/releases/latest) page:
+[Releases](https://github.com/cpstest-tech/tandem/releases/latest) page:
 
 | Platform | File | Notes |
 |---|---|---|
 | Linux x86_64 / aarch64 | `Tandem-<arch>.AppImage` | FFmpeg bundled. Needs a Vulkan driver. |
 | macOS (Apple Silicon) | `Tandem-arm64.dmg` | Ad-hoc signed, see [first launch on macOS](docs/BUILDING.md#opening-the-app-on-another-mac). |
+| Windows x64 | `Tandem-windows-x64-setup.exe` / `Tandem-windows-x64.zip` | Installer or portable zip. |
 
 ```sh
 chmod +x Tandem-x86_64.AppImage

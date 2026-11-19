@@ -9,7 +9,7 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="Tandem · free, open-source video editor with AI">
 <meta property="og:description" content="Free, open-source, GPU-accelerated video editing with AI Clips, AI Infographics and a built-in MCP server.">
-<meta property="og:image" content="https://cpstest-tech.github.io/Venturi/assets/og.jpg">
+<meta property="og:image" content="https://cpstest-tech.github.io/tandem/assets/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="assets/favicon.ico" sizes="any">
@@ -57,7 +57,7 @@
     <a href="#download">Download</a>
   </nav>
   <div class="nav-cta">
-    <a class="icon-link" href="https://github.com/cpstest-tech/Venturi" aria-label="GitHub"><svg><use href="#i-github"/></svg></a>
+    <a class="icon-link" href="https://github.com/cpstest-tech/tandem" aria-label="GitHub"><svg><use href="#i-github"/></svg></a>
     <a class="btn btn-discord btn-sm" href="https://discord.gg/PuqMem4AFn"><svg><use href="#i-discord"/></svg><span>Discord</span></a>
   </div>
 </header>
@@ -69,7 +69,7 @@
   <div class="grid-bg" aria-hidden="true"></div>
 
   <div class="hero-copy">
-    <a class="pill reveal" href="https://github.com/cpstest-tech/Venturi/releases/latest">
+    <a class="pill reveal" href="https://github.com/cpstest-tech/tandem/releases/latest">
       <span class="pill-dot"></span><span>Open source · GPL-3.0</span><b data-version>Latest release</b><svg><use href="#f-arrow"/></svg>
     </a>
     <h1 class="reveal">
@@ -87,7 +87,7 @@
     <ul class="os-row reveal" aria-label="Supported platforms">
       <li><svg><use href="#i-linux"/></svg>Linux</li>
       <li><svg><use href="#i-apple"/></svg>macOS</li>
-      <li class="soon"><svg><use href="#i-windows"/></svg>Windows <i>soon</i></li>
+      <li><svg><use href="#i-windows"/></svg>Windows</li>
     </ul>
   </div>
 
@@ -269,12 +269,12 @@
       <div class="dl-head"><svg class="dl-os"><use href="#i-linux"/></svg><div><h3>Linux</h3><p>x86_64 · aarch64 · AppImage</p></div></div>
       <p class="dl-note">One-line installer, no sudo. Adds Tandem to your app menu.</p>
       <div class="code">
-        <code>curl -fL https://github.com/cpstest-tech/Venturi/releases/latest/download/install.sh -o install.sh &amp;&amp; bash install.sh</code>
+        <code>curl -fL https://github.com/cpstest-tech/tandem/releases/latest/download/install.sh -o install.sh &amp;&amp; bash install.sh</code>
         <button class="copy" type="button" aria-label="Copy install command"><svg class="c1"><use href="#f-copy"/></svg><svg class="c2"><use href="#f-check"/></svg></button>
       </div>
       <div class="dl-actions">
-        <a class="btn btn-primary" href="https://github.com/cpstest-tech/Venturi/releases/latest/download/Tandem-x86_64.AppImage"><svg><use href="#f-download"/></svg>AppImage x86_64</a>
-        <a class="btn btn-ghost" href="https://github.com/cpstest-tech/Venturi/releases/latest/download/Tandem-aarch64.AppImage">aarch64</a>
+        <a class="btn btn-primary" href="https://github.com/cpstest-tech/tandem/releases/latest/download/Tandem-x86_64.AppImage"><svg><use href="#f-download"/></svg>AppImage x86_64</a>
+        <a class="btn btn-ghost" href="https://github.com/cpstest-tech/tandem/releases/latest/download/Tandem-aarch64.AppImage">aarch64</a>
       </div>
       <p class="fine">Needs a Vulkan driver. FFmpeg bundled.</p>
     </article>
@@ -283,31 +283,29 @@
       <div class="dl-head"><svg class="dl-os"><use href="#i-apple"/></svg><div><h3>macOS</h3><p>Apple Silicon · DMG</p></div></div>
       <p class="dl-note">Metal compositing and VideoToolbox decode &amp; export.</p>
       <div class="dl-actions">
-        <a class="btn btn-primary" href="https://github.com/cpstest-tech/Venturi/releases/latest/download/Tandem-arm64.dmg"><svg><use href="#f-download"/></svg>Download for Mac</a>
+        <a class="btn btn-primary" href="https://github.com/cpstest-tech/tandem/releases/latest/download/Tandem-arm64.dmg"><svg><use href="#f-download"/></svg>Download for Mac</a>
       </div>
-      <p class="fine">Ad-hoc signed. <a href="https://github.com/cpstest-tech/Venturi/blob/master/docs/BUILDING.md#opening-the-app-on-another-mac">First launch guide →</a></p>
+      <p class="fine">Ad-hoc signed. <a href="https://github.com/cpstest-tech/tandem/blob/master/docs/BUILDING.md#opening-the-app-on-another-mac">First launch guide →</a></p>
     </article>
 
-    <article class="dl dl-soon reveal" data-os="windows" id="dl-windows">
-      <span class="badge">Coming soon</span>
+    <article class="dl reveal" data-os="windows">
       <div class="dl-head"><svg class="dl-os win"><use href="#i-windows"/></svg><div><h3>Windows</h3><p>x64 · Installer &amp; portable zip</p></div></div>
-      <p class="dl-note">The Windows build is almost here. Join the Discord to hear the second it drops.</p>
+      <p class="dl-note">Native Windows build with NVENC export.</p>
       <div class="dl-actions">
-        <a class="btn btn-primary win-setup" aria-disabled="true" href="https://github.com/cpstest-tech/Venturi/releases/latest/download/Tandem-windows-x64-setup.exe"><svg><use href="#f-download"/></svg>Installer .exe</a>
-        <a class="btn btn-ghost win-zip" aria-disabled="true" href="https://github.com/cpstest-tech/Venturi/releases/latest/download/Tandem-windows-x64.zip">Portable .zip</a>
+        <a class="btn btn-primary" href="https://github.com/cpstest-tech/tandem/releases/latest/download/Tandem-windows-x64-setup.exe"><svg><use href="#f-download"/></svg>Installer .exe</a>
+        <a class="btn btn-ghost" href="https://github.com/cpstest-tech/tandem/releases/latest/download/Tandem-windows-x64.zip">Portable .zip</a>
       </div>
-      <p class="fine soon-only"><a href="https://discord.gg/PuqMem4AFn">Get notified on Discord →</a></p>
     </article>
   </div>
 
-  <p class="dl-more reveal"><a href="https://github.com/cpstest-tech/Venturi/releases">All releases &amp; notes</a><span>·</span><a href="https://github.com/cpstest-tech/Venturi/blob/master/docs/BUILDING.md">Build from source</a><span>·</span><a href="https://github.com/cpstest-tech/Venturi/blob/master/docs/MCP.md">MCP docs</a></p>
+  <p class="dl-more reveal"><a href="https://github.com/cpstest-tech/tandem/releases">All releases &amp; notes</a><span>·</span><a href="https://github.com/cpstest-tech/tandem/blob/master/docs/BUILDING.md">Build from source</a><span>·</span><a href="https://github.com/cpstest-tech/tandem/blob/master/docs/MCP.md">MCP docs</a></p>
 </section>
 
 <section class="discord-cta reveal">
   <div class="dc-inner">
     <svg class="dc-logo"><use href="#i-discord"/></svg>
     <h2>Join the Discord.</h2>
-    <p>Bring feedback, feature ideas and bug reports, and get early looks at the Windows build.</p>
+    <p>Bring feedback, feature ideas and bug reports, and get early looks at what ships next.</p>
     <a class="btn btn-white btn-lg" href="https://discord.gg/PuqMem4AFn"><svg><use href="#i-discord"/></svg>Join the Discord</a>
   </div>
 </section>
@@ -321,8 +319,8 @@
   </div>
   <nav class="foot-links" aria-label="Footer">
     <div><b>Product</b><a href="#features">Features</a><a href="#ai">AI</a><a href="#download">Download</a></div>
-    <div><b>Project</b><a href="https://github.com/cpstest-tech/Venturi">GitHub</a><a href="https://github.com/cpstest-tech/Venturi/blob/master/ARCHITECTURE.md">Architecture</a><a href="https://github.com/cpstest-tech/Venturi/blob/master/docs/BUILDING.md">Build</a></div>
-    <div><b>Community</b><a href="https://discord.gg/PuqMem4AFn">Discord</a><a href="https://github.com/cpstest-tech/Venturi/issues">Issues</a><a href="https://github.com/cpstest-tech/Venturi/blob/master/LICENSE">GPL-3.0 licence</a></div>
+    <div><b>Project</b><a href="https://github.com/cpstest-tech/tandem">GitHub</a><a href="https://github.com/cpstest-tech/tandem/blob/master/ARCHITECTURE.md">Architecture</a><a href="https://github.com/cpstest-tech/tandem/blob/master/docs/BUILDING.md">Build</a></div>
+    <div><b>Community</b><a href="https://discord.gg/PuqMem4AFn">Discord</a><a href="https://github.com/cpstest-tech/tandem/issues">Issues</a><a href="https://github.com/cpstest-tech/tandem/blob/master/LICENSE">GPL-3.0 licence</a></div>
   </nav>
 </footer>
 

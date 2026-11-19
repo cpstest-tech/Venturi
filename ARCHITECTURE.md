@@ -279,7 +279,7 @@ pipeline's alpha blending; the other 14 modes copy the stack composed so far
   cache, 512 MB by default). A missing block plays as silence and the
   clock keeps advancing: after a jump the audio may start a moment late,
   never out of sync.
-- **Gradually drifting audio timestamps** ([#19](https://github.com/VenturiVideo/Venturi/issues/19)):
+- **Gradually drifting audio timestamps** ([#19](https://github.com/cpstest-tech/tandem/issues/19)):
   decoding from the start counts samples until their position differs from
   timestamp placement by more than `DISCONTINUITY_SECS` (5 ms), then re-places
   the frame. A seek initially places by timestamp, so the paths can differ

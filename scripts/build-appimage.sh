@@ -109,7 +109,7 @@ if [ ! -x "$TOOL" ]; then
     chmod +x "$TOOL"
 fi
 # No FUSE in containers: appimagetool extracts itself.
-UPDATE_INFO="gh-releases-zsync|VenturiVideo|Venturi|latest|Tandem-$ARCH.AppImage.zsync"
+UPDATE_INFO="gh-releases-zsync|cpstest-tech|tandem|latest|Tandem-$ARCH.AppImage.zsync"
 (
     # appimagetool writes the .zsync sidecar in its working directory.
     cd "$(dirname "$OUT")"

@@ -1,5 +1,5 @@
 document.documentElement.classList.remove('no-js');
-const REPO = 'cpstest-tech/Venturi';
+const REPO = 'cpstest-tech/tandem';
 const RELEASES = `https://github.com/${REPO}/releases/latest/download/`;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -119,7 +119,7 @@ const heroBtn = document.getElementById('hero-download');
 const OS_UI = {
   linux: { label: 'Download for Linux', icon: '#i-linux', href: '#download' },
   mac: { label: 'Download for macOS', icon: '#i-apple', href: `${RELEASES}Tandem-arm64.dmg` },
-  windows: { label: 'Windows · coming soon', icon: '#i-windows', href: '#download' },
+  windows: { label: 'Download for Windows', icon: '#i-windows', href: `${RELEASES}Tandem-windows-x64-setup.exe` },
 };
 const setHero = (key) => {
   const ui = OS_UI[key];
@@ -133,27 +133,13 @@ if (os) {
   document.querySelector(`.dl[data-os="${os}"]`)?.classList.add('mine');
 }
 
-// Latest release: show the version and switch on Windows the moment its build is published.
+// Latest release: show the version.
 fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })
   .then((r) => (r.ok ? r.json() : Promise.reject()))
   .then((rel) => {
     const tag = rel.tag_name;
     document.querySelectorAll('[data-version]').forEach((el) => { el.textContent = tag; });
     document.querySelectorAll('[data-version-text]').forEach((el) => { el.textContent = `Tandem ${tag} is out`; });
-    const names = new Set((rel.assets || []).map((a) => a.name));
-    const card = document.getElementById('dl-windows');
-    let any = false;
-    for (const [sel, file] of [['.win-setup', 'Tandem-windows-x64-setup.exe'], ['.win-zip', 'Tandem-windows-x64.zip']]) {
-      if (names.has(file)) { card.querySelector(sel).removeAttribute('aria-disabled'); any = true; }
-    }
-    if (any) {
-      card.classList.remove('dl-soon');
-      card.classList.add('dl-ready');
-      card.querySelector('.dl-note').textContent = 'Native Windows build with NVENC export. Installer or portable zip.';
-      document.querySelector('.os-row .soon i')?.remove();
-      OS_UI.windows = { label: 'Download for Windows', icon: '#i-windows', href: `${RELEASES}Tandem-windows-x64-setup.exe` };
-      if (os === 'windows') setHero('windows');
-    }
   })
   .catch(() => {});
 
