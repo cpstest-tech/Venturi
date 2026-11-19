@@ -1,5 +1,5 @@
 document.documentElement.classList.remove('no-js');
-const REPO = 'VenturiVideo/Venturi';
+const REPO = 'cpstest-tech/Venturi';
 const RELEASES = `https://github.com/${REPO}/releases/latest/download/`;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
