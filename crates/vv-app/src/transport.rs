@@ -59,6 +59,7 @@ impl MarkRange {
 #[derive(Default)]
 pub struct TransportResponse {
     pub seek: Option<FrameIdx>,
+    pub scrub_started: bool,
     pub toggle_play: bool,
     pub fit_view: bool,
     pub toggle_fullscreen: bool,
@@ -102,6 +103,7 @@ pub fn show_transport(
     let x_of =
         |frame: FrameIdx| track.left() + track.width() * (frame as f32 / span).clamp(0.0, 1.0);
 
+    response.scrub_started = bar_resp.drag_started();
     if total > 0
         && let Some(pos) = bar_resp.interact_pointer_pos()
     {

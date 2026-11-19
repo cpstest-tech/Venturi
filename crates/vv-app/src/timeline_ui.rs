@@ -191,6 +191,9 @@ pub struct TimelineState {
     /// The playhead jumped programmatically (e.g. ripple delete): the next
     /// frame brings it into view if it left, without waiting for playback.
     pub reveal_playhead: bool,
+    /// A drag on the ruler started this frame: playback must pause, or
+    /// the scrub snippets fight the playing stream.
+    pub scrub_started: bool,
     /// Clips showing the retime bar (Ctrl+R): dragging their right edge
     /// changes the speed instead of trimming.
     pub retime_controls: BTreeSet<ClipId>,
@@ -521,6 +524,7 @@ impl Default for TimelineState {
             save_preset_requested: None,
             preset_drop: None,
             reveal_playhead: false,
+            scrub_started: false,
             retime_controls: BTreeSet::new(),
             speed_dialog_requested: None,
             silence_dialog_requested: None,
@@ -6238,6 +6242,9 @@ fn show_ruler(
             ui.close();
         }
     });
+    if ruler_resp.drag_started() {
+        state.scrub_started = true;
+    }
     // On a click what counts is where it was released: if the frame
     // arrived late, `interact_pointer_pos` is already
     // the last mouse position after the release.

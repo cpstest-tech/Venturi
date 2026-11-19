@@ -1041,6 +1041,12 @@ impl VenturiApp {
         self.last_synced_playhead = playhead;
     }
 
+    fn pause_timeline(&mut self) {
+        if self.is_timeline_playing() {
+            self.toggle_playback();
+        }
+    }
+
     fn is_timeline_playing(&self) -> bool {
         self.timeline_audio
             .as_ref()
@@ -4460,6 +4466,9 @@ impl VenturiApp {
             self.stop_browsing();
         }
 
+        if std::mem::take(&mut self.timeline_state.scrub_started) {
+            self.pause_timeline();
+        }
         if self.browsing.is_none() {
             self.ensure_active_clip_matches_playhead(user_scrubbed_playhead);
             if user_scrubbed_playhead {
@@ -4563,6 +4572,9 @@ impl VenturiApp {
 
         if transport_action.toggle_play {
             self.toggle_playback();
+        }
+        if transport_action.scrub_started && self.browsing.is_none() {
+            self.pause_timeline();
         }
         if let Some(frame) = transport_action.seek {
             if self.browsing.is_some() {
