@@ -372,18 +372,6 @@ h2 em { color: var(--violet-3); }
 .term-body .u { color: var(--pink); }
 .caret { display: inline-block; width: 8px; height: 1.1em; vertical-align: -3px; background: var(--violet); animation: blink 1s steps(1) infinite; }
 
-/* ---------- gallery ---------- */
-.tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 5px; border-radius: 999px; background: #ffffff08; border: 1px solid var(--line); margin-bottom: 22px; }
-.tabs button {
-  font: 500 .92rem var(--sans); color: var(--muted); background: none; border: 0; cursor: pointer;
-  padding: 9px 18px; border-radius: 999px; transition: color .2s, background .25s;
-}
-.tabs button:hover { color: var(--ink); }
-.tabs button[aria-selected="true"] { background: var(--ink); color: #111; }
-.gallery { position: relative; aspect-ratio: 1791 / 916; border-radius: 20px; overflow: hidden; border: 1px solid var(--line-2); box-shadow: 0 40px 100px -40px #8b5cf688; }
-.shot-big { position: absolute; inset: 0; opacity: 0; visibility: hidden; transform: scale(1.03); transition: opacity .5s, transform .7s var(--ease), visibility 0s .5s; }
-.shot-big.active { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
-
 /* ---------- download ---------- */
 .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .dl {
@@ -481,9 +469,6 @@ h2 em { color: var(--violet-3); }
   .faux-top { grid-template-columns: 1fr; }
   .faux-panel { display: none; }
   .term-body { min-height: 380px; font-size: .72rem; padding: 16px; }
-  .gallery { aspect-ratio: 4 / 3; }
-  .tabs { display: flex; border-radius: 16px; }
-  .tabs button { flex: 1 1 auto; padding: 8px 12px; }
   .dc-inner { padding: 64px 22px; }
   .foot-links { gap: 36px; }
 }

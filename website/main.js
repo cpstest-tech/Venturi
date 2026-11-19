@@ -88,18 +88,6 @@ const countIo = new IntersectionObserver((entries) => {
 }, { threshold: 0.6 });
 document.querySelectorAll('[data-count]').forEach((el) => countIo.observe(el));
 
-// Gallery tabs, auto-advancing until the user picks one.
-const tabs = [...document.querySelectorAll('.tabs button')];
-const slides = [...document.querySelectorAll('.shot-big')];
-let current = 0, autoplay = !reduceMotion;
-const show = (i) => {
-  current = i;
-  tabs.forEach((t, j) => t.setAttribute('aria-selected', String(j === i)));
-  slides.forEach((s, j) => s.classList.toggle('active', j === i));
-};
-tabs.forEach((t, i) => t.addEventListener('click', () => { autoplay = false; show(i); }));
-setInterval(() => { if (autoplay && !document.hidden) show((current + 1) % slides.length); }, 4500);
-
 // Copy install command.
 for (const btn of document.querySelectorAll('.copy')) {
   btn.addEventListener('click', async () => {
