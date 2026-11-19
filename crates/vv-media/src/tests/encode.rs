@@ -78,6 +78,52 @@ fn encodes_video_and_audio_streams_together() {
     assert!(peak > 0.1, "peak={peak}, expected a non-silent signal");
 }
 
+#[test]
+fn default_audio_export_preserves_high_frequencies_and_stereo() {
+    let dir = crate::test_support::TempDir::new("vv-media-audio-quality");
+    let path = dir.join("stereo.mp4");
+    let mut encoder = Encoder::new(
+        &path,
+        16,
+        16,
+        vv_core::Rational::new(25, 1),
+        &VideoSettings::default(),
+        Some((48_000, 2, &AudioSettings::default())),
+    )
+    .unwrap();
+    let samples: Vec<f32> = (0..48_000)
+        .flat_map(|i| {
+            [440.0, 19_000.0]
+                .map(|hz| (i as f64 * hz * std::f64::consts::TAU / 48_000.0).sin() as f32 * 0.25)
+        })
+        .collect();
+    encoder
+        .write_video_frame(&solid_i420(16, 16, [16, 128, 128]))
+        .unwrap();
+    for chunk in samples.chunks(3200) {
+        encoder.write_audio_samples(chunk).unwrap();
+    }
+    encoder.finish().unwrap();
+
+    let audio = crate::audio::decode_audio_track(&path, 0).unwrap().unwrap();
+    assert_eq!((audio.sample_rate, audio.channels), (48_000, 2));
+    let middle = &audio.samples[4800 * 2..43_200 * 2];
+    for (channel, hz) in [440.0, 19_000.0].into_iter().enumerate() {
+        let mut real = 0.0;
+        let mut imag = 0.0;
+        for (i, frame) in middle.chunks_exact(2).enumerate() {
+            let phase = i as f64 * hz * std::f64::consts::TAU / 48_000.0;
+            real += frame[channel] as f64 * phase.cos();
+            imag += frame[channel] as f64 * phase.sin();
+        }
+        let amplitude = 2.0 * real.hypot(imag) / (middle.len() / 2) as f64;
+        assert!(
+            (0.20..0.30).contains(&amplitude),
+            "channel {channel} at {hz} Hz: {amplitude}"
+        );
+    }
+}
+
 /// Every encoder combination available on this machine must produce a
 /// file with both streams.
 #[test]

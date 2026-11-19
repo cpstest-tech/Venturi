@@ -271,11 +271,13 @@ pub struct AudioSettings {
     pub fast_coder: bool,
 }
 
+pub const DEFAULT_AUDIO_BITRATE_KBPS: u32 = 320;
+
 impl Default for AudioSettings {
     fn default() -> Self {
         Self {
             codec: AudioCodec::Aac,
-            bitrate_kbps: 128,
+            bitrate_kbps: DEFAULT_AUDIO_BITRATE_KBPS,
             fast_coder: false,
         }
     }

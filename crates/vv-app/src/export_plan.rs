@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use vv_core::{ClipSource, MAX_COMPOUND_DEPTH, MediaId, Project, Rational, TimelineId, TrackKind};
 
 /// Audio bitrate the exports use, and what the size estimate counts.
-pub const AUDIO_KBPS: u32 = 192;
+pub const AUDIO_KBPS: u32 = vv_media::encode::DEFAULT_AUDIO_BITRATE_KBPS;
 const AUDIO_MBPS: f64 = AUDIO_KBPS as f64 / 1000.0;
 /// Uncompressed 16-bit stereo at 48 kHz, in Mbps.
 const PCM_MBPS: f64 = 1.536;

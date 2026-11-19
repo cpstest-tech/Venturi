@@ -213,7 +213,7 @@ fn the_estimate_is_bitrate_times_seconds_over_eight() {
         audio_file: None,
         seconds: 46.0,
     };
-    let expected = (5.8 + 0.192) * 46.0 / 8.0;
+    let expected = (5.8 + 0.320) * 46.0 / 8.0;
     assert!((estimate.megabytes() - expected).abs() < 1e-9);
     let silent = Estimate {
         video_has_audio: false,
