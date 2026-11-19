@@ -3214,6 +3214,9 @@ pub fn show_timeline(
                         && let Some(&(texture, size)) = state.thumbnails.get(&item.content_hash)
                     {
                         paint_filmstrip(&painter, clip_rect, texture, size, visual.color);
+                        if is_selected {
+                            paint_clip_box_border(&painter, clip_rect, true);
+                        }
                     }
 
                     let retime_bar_shown = state.retime_controls.contains(&visual.clip.id)
@@ -4769,22 +4772,30 @@ fn paint_clip_box(
     visual: &ClipVisual,
     is_selected: bool,
 ) {
-    let stroke = if is_selected {
-        egui::Stroke::new(2.0, crate::theme::CLIP_SELECTED)
-    } else {
-        egui::Stroke::new(1.0, egui::Color32::from_gray(15))
-    };
     let fill = if visual.muted {
         egui::Color32::from_gray(58)
     } else {
         visual.color
     };
-    let corner = clip_corner_radius(clip_rect);
-    painter.rect_filled(clip_rect, corner, fill);
+    painter.rect_filled(clip_rect, clip_corner_radius(clip_rect), fill);
+    paint_clip_box_border(painter, clip_rect, is_selected);
+}
+
+fn paint_clip_box_border(painter: &egui::Painter, clip_rect: egui::Rect, is_selected: bool) {
+    let stroke = if is_selected {
+        egui::Stroke::new(2.0, crate::theme::CLIP_SELECTED)
+    } else {
+        egui::Stroke::new(1.0, egui::Color32::from_gray(15))
+    };
     // On very narrow clips (zoomed far out) the stroke would eat all the
     // colour: only the more informative selection stroke is kept.
     if is_selected || clip_rect.width() >= MIN_WIDTH_FOR_STROKE {
-        painter.rect_stroke(clip_rect, corner, stroke, egui::StrokeKind::Inside);
+        painter.rect_stroke(
+            clip_rect,
+            clip_corner_radius(clip_rect),
+            stroke,
+            egui::StrokeKind::Inside,
+        );
     } else {
         paint_clip_separator(painter, clip_rect);
     }
