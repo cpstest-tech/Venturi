@@ -832,6 +832,9 @@ impl VenturiApp {
         let mut side_ui = ui.new_child(egui::UiBuilder::new().max_rect(side_rect));
         let category = self.show_category_sidebar(&mut side_ui);
         let mut content_ui = ui.new_child(egui::UiBuilder::new().max_rect(content_rect));
+        // The pool's background interaction spans the clip rect: inherited
+        // unclipped, it would swallow clicks on the sidebar rows.
+        content_ui.shrink_clip_rect(content_rect);
         let ui = &mut content_ui;
         match (tab, category) {
             (RibbonTab::Media, Category::Project) => self.show_media_pool(ui, preview_action),

@@ -733,3 +733,50 @@ fn an_editor_covers_the_tab_and_closing_it_goes_back() {
     assert_eq!(app.library_ribbon.editor, None);
     assert_eq!(app.library_ribbon.tab, RibbonTab::Text);
 }
+
+/// The empty pool's background used to cover the sidebar below the first
+/// rows, so Sound effects could not be opened.
+#[test]
+fn every_audio_category_can_be_opened_from_the_sidebar() {
+    let mut app = VenturiApp::default();
+    let ctx = egui::Context::default();
+    let frame = |app: &mut VenturiApp, events: Vec<egui::Event>| {
+        let mut input = egui::RawInput::default();
+        input.screen_rect = Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(900.0, 500.0),
+        ));
+        input.events = events;
+        let mut output = ctx.run_ui(input, |ui| app.show_ribbon(ui, &mut None));
+        output.textures_delta.clear();
+    };
+    let mut reached = std::collections::HashSet::new();
+    for y in (40..300).step_by(6) {
+        app.select_ribbon_tab(RibbonTab::Audio);
+        app.library_ribbon
+            .selected
+            .insert(RibbonTab::Audio, Category::Favorites);
+        frame(&mut app, Vec::new());
+        let pos = egui::pos2(40.0, y as f32);
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+        if app.library_ribbon.tab == RibbonTab::Audio {
+            reached.insert(app.library_ribbon.category());
+        }
+    }
+    for category in RibbonTab::Audio.categories() {
+        assert!(reached.contains(&category), "{category:?} unreachable");
+    }
+}
