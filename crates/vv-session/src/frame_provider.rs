@@ -1104,10 +1104,10 @@ pub fn track_layers_at(
 ) -> Result<Vec<OwnedLayer>, ExportError> {
     let track = &timeline.tracks[track_index];
     let fps = timeline.fps.as_f64();
-    if let Some((left, right, crossing)) = track.crossing_at(frame)
+    let mut layers = if let Some((left, right, crossing)) = track.crossing_at(frame)
         && (left.id == clip.id || right.id == clip.id)
     {
-        return crossing_layers(
+        crossing_layers(
             project,
             left,
             right,
@@ -1116,13 +1116,112 @@ pub fn track_layers_at(
             timeline_size,
             fps,
             provider,
-        );
-    }
-    Ok(
+        )?
+    } else {
         clip_layer(project, clip, frame, timeline_size, fps, provider)?
             .into_iter()
-            .collect(),
-    )
+            .collect()
+    };
+    if let Some(background) = canvas_layer(clip, frame, timeline_size, &layers) {
+        layers.insert(0, background);
+    }
+    Ok(layers)
+}
+
+/// The clip's `Canvas` as a full-frame layer to go under `layers`.
+fn canvas_layer(
+    clip: &Clip,
+    frame: FrameIdx,
+    timeline_size: (u32, u32),
+    layers: &[OwnedLayer],
+) -> Option<OwnedLayer> {
+    let canvas = clip.effects.canvas.as_ref()?;
+    let opacity = clip.fade_multiplier_at(frame) * clip.transition_opacity_at(frame);
+    let output = (timeline_size.0.max(1) as f32, timeline_size.1.max(1) as f32);
+    let (content, transform, filters) = match canvas {
+        vv_core::Canvas::Color(color) => {
+            (OwnedContent::Solid(*color), Transform::default(), vec![])
+        }
+        vv_core::Canvas::Image(path) => {
+            let frame = canvas_image(path)?;
+            let size = (frame.width, frame.height);
+            let transform = cover_transform(size, output, 0.0, 0.0);
+            let content = OwnedContent::Video {
+                frame,
+                source_size: size,
+                matte: None,
+            };
+            (content, transform, vec![])
+        }
+        vv_core::Canvas::Blur { radius } => {
+            let (frame, source_size, clip_transform) =
+                layers.iter().find_map(|l| match &l.content {
+                    OwnedContent::Video {
+                        frame, source_size, ..
+                    } => Some((frame.clone(), *source_size, l.transform)),
+                    _ => None,
+                })?;
+            let radius = radius * output.0.min(output.1) / 1080.0;
+            let mut transform =
+                cover_transform(source_size, output, clip_transform.rotation, radius);
+            transform.flip = clip_transform.flip;
+            let mut blur = vv_core::FilterValue::new(vv_core::FilterKind::GaussianBlur);
+            blur.radius = radius.min(vv_core::BLUR_RADIUS_MAX);
+            let content = OwnedContent::Video {
+                frame,
+                source_size,
+                matte: None,
+            };
+            (content, transform, vec![blur])
+        }
+    };
+    Some(OwnedLayer {
+        content,
+        transform,
+        opacity,
+        filters,
+        blend: vv_core::BlendMode::default(),
+        masks: Vec::new(),
+        assets: Vec::new(),
+    })
+}
+
+/// Zooms a `source` fitted into `output` until it covers it once turned by
+/// `rotation`, plus `bleed` pixels per side for a blur's soft edge.
+fn cover_transform(source: (u32, u32), output: (f32, f32), rotation: f32, bleed: f32) -> Transform {
+    let source = (source.0.max(1) as f32, source.1.max(1) as f32);
+    let scale = (output.0 / source.0).min(output.1 / source.1);
+    let (mut fitted_w, mut fitted_h) = (source.0 * scale, source.1 * scale);
+    let quarter_turns = (rotation / 90.0).round() as i32;
+    if quarter_turns.rem_euclid(2) == 1 {
+        std::mem::swap(&mut fitted_w, &mut fitted_h);
+    }
+    let zoom = ((output.0 + 2.0 * bleed) / fitted_w).max((output.1 + 2.0 * bleed) / fitted_h);
+    Transform {
+        zoom: [zoom, zoom],
+        rotation: quarter_turns as f32 * 90.0,
+        ..Transform::default()
+    }
+}
+
+/// Canvas pictures, decoded once per path; `None` for one that does not open.
+fn canvas_image(path: &std::path::Path) -> Option<Arc<FrameYuv420>> {
+    static IMAGES: std::sync::LazyLock<
+        std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, Option<Arc<FrameYuv420>>>>,
+    > = std::sync::LazyLock::new(Default::default);
+    let mut images = IMAGES.lock().unwrap_or_else(|e| e.into_inner());
+    images
+        .entry(path.to_path_buf())
+        .or_insert_with(|| {
+            let mut decoder = vv_media::decode::Decoder::open(path).ok()?;
+            decoder.next_frame().ok().flatten().map(|(_, frame)| frame)
+        })
+        .clone()
+}
+
+/// Decodes a canvas picture ahead, so the first frame showing it does not wait.
+pub fn preload_canvas_image(path: &std::path::Path) {
+    canvas_image(path);
 }
 
 #[cfg(test)]

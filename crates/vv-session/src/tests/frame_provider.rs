@@ -1311,3 +1311,50 @@ fn an_image_shows_its_one_matte_on_every_frame() {
     );
     let _ = std::fs::remove_dir_all(vv_media::matte::matte_dir(hash));
 }
+
+#[test]
+fn a_color_canvas_goes_under_its_clip() {
+    let mut clip = colored_solid(1, RED);
+    clip.effects.canvas = Some(vv_core::Canvas::Color(BLUE));
+    let timeline = Timeline {
+        name: "T".into(),
+        fps: vv_core::Rational::new(25, 1),
+        resolution: (64, 48),
+        tracks: vec![video_track(vec![clip])],
+        markers: Vec::new(),
+        master: Default::default(),
+    };
+    let layers = stack_at_0(&timeline, &mut NoMediaProvider);
+    let colors: Vec<_> = layers
+        .iter()
+        .map(|l| match l.content {
+            OwnedContent::Solid(color) => color,
+            _ => panic!("solid layers only"),
+        })
+        .collect();
+    assert_eq!(colors, [BLUE, RED]);
+}
+
+#[test]
+fn a_blur_canvas_fills_the_frame_with_the_clip_blurred() {
+    let clip_layer = video_layer(gray_frame(), 1.0);
+    let mut clip = solid_clip(1, 0, 10, [1.0, 1.0]);
+    clip.effects.canvas = Some(vv_core::Canvas::Blur { radius: 54.0 });
+    let background = canvas_layer(&clip, 0, (1920, 1080), &[clip_layer]).expect("a layer");
+    // A square fitted into 16:9 needs 16/9 to cover it, plus the blur's bleed.
+    let expected = (1920.0 + 2.0 * 54.0) / 1080.0;
+    assert!((background.transform.zoom[0] - expected).abs() < 1e-4);
+    assert_eq!(
+        background.filters[0].kind,
+        vv_core::FilterKind::GaussianBlur
+    );
+    assert_eq!(background.filters[0].radius, 54.0);
+}
+
+#[test]
+fn a_quarter_turned_clip_still_covers_the_frame() {
+    let transform = cover_transform((1920, 1080), (1080.0, 1920.0), 90.0, 0.0);
+    // Fitted unrotated (1080x607.5), then turned: 607.5 wide must reach 1080.
+    assert_eq!(transform.rotation, 90.0);
+    assert!((transform.zoom[0] - 1080.0 / 607.5).abs() < 1e-4);
+}

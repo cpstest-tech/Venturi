@@ -73,6 +73,7 @@ pub enum CommandLabel {
     Masks,
     BlendMode,
     RemoveBackground,
+    Canvas,
     Matte,
     Transition,
     MakeCompoundClip,
@@ -2087,6 +2088,23 @@ pub fn set_clip_remove_background(
         CommandLabel::RemoveBackground,
         value,
         |c| &mut c.effects.remove_background,
+    )
+}
+
+/// The background behind the clip (see `EffectStack::canvas`).
+pub fn set_clip_canvas(
+    timeline: TimelineId,
+    track_index: usize,
+    clip_id: ClipId,
+    value: Option<crate::model::Canvas>,
+) -> SetClipValue<Option<crate::model::Canvas>> {
+    SetClipValue::new(
+        timeline,
+        track_index,
+        clip_id,
+        CommandLabel::Canvas,
+        value,
+        |c| &mut c.effects.canvas,
     )
 }
 

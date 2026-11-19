@@ -765,13 +765,37 @@ props.canvas:
   en: "Canvas"
   it: "Canvas"
 
+props.canvas_none:
+  en: "None"
+  it: "Nessuno"
+
 props.canvas_blur:
-  en: "Blur background"
-  it: "Sfondo sfocato"
+  en: "Blur"
+  it: "Sfocatura"
 
 props.canvas_color:
-  en: "Background color"
-  it: "Colore di sfondo"
+  en: "Color"
+  it: "Colore"
+
+props.canvas_image:
+  en: "Image"
+  it: "Immagine"
+
+props.canvas_strength:
+  en: "Strength"
+  it: "Intensità"
+
+props.canvas_change_image:
+  en: "Change…"
+  it: "Cambia…"
+
+props.canvas_apply_all:
+  en: "Apply to all"
+  it: "Applica a tutte"
+
+props.canvas_apply_all_hint:
+  en: "Use this canvas on every clip of the track"
+  it: "Usa questo canvas su tutte le clip della traccia"
 
 props.chroma_key:
   en: "Chroma Key"

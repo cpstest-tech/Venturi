@@ -17,6 +17,7 @@ mod app_menu;
 mod auto_cut;
 mod auto_cut_ui;
 mod autosave;
+mod canvas_ui;
 mod color_window;
 mod compressor_panel;
 mod cover;

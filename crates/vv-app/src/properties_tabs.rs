@@ -190,17 +190,6 @@ pub(crate) fn stabilize_section(ui: &mut egui::Ui) {
     placeholder_checkbox_section(ui, &t!("props.stabilize"));
 }
 
-pub(crate) fn canvas_section(ui: &mut egui::Ui) {
-    ui.add_space(6.0);
-    let (open, _) = section_header(ui, &t!("props.canvas"), false);
-    if open {
-        for label in [t!("props.canvas_blur"), t!("props.canvas_color")] {
-            let mut off = false;
-            soon(ui.add_enabled(false, egui::Checkbox::new(&mut off, label)));
-        }
-    }
-}
-
 type ChromaEdit = Box<dyn Fn(&mut vv_core::ClipFilter)>;
 
 impl VenturiApp {

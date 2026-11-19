@@ -1753,7 +1753,26 @@ pub struct EffectStack {
     /// mattes are computed in the background, per media.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub remove_background: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas: Option<Canvas>,
 }
+
+/// What fills the frame behind a clip where the clip does not cover it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Canvas {
+    /// The clip itself, scaled to fill the frame and blurred by `radius`
+    /// timeline pixels.
+    Blur {
+        radius: f32,
+    },
+    Color(Rgba),
+    /// A picture file, scaled to fill the frame. A path, not a pool item:
+    /// pasted into another project it still resolves.
+    Image(std::path::PathBuf),
+}
+
+/// The Canvas panel's blur strengths, in timeline pixels at 1080p.
+pub const CANVAS_BLUR_RADII: [f32; 4] = [15.0, 35.0, 70.0, 120.0];
 
 /// `EffectStack` as saved, older files included.
 #[derive(Deserialize)]
@@ -1781,6 +1800,8 @@ struct StoredEffectStack {
     assets: Vec<AssetFx>,
     #[serde(default)]
     remove_background: bool,
+    #[serde(default)]
+    canvas: Option<Canvas>,
 }
 
 impl From<StoredEffectStack> for EffectStack {
@@ -1806,6 +1827,7 @@ impl From<StoredEffectStack> for EffectStack {
             matte: stored.matte,
             assets: stored.assets,
             remove_background: stored.remove_background,
+            canvas: stored.canvas,
         }
     }
 }
@@ -1826,6 +1848,7 @@ impl Default for EffectStack {
             matte: None,
             assets: Vec::new(),
             remove_background: false,
+            canvas: None,
         }
     }
 }

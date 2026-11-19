@@ -53,6 +53,7 @@ pub(crate) enum DialogKind {
     RecordingFolder,
     ImportProject,
     ProjectsFolder,
+    CanvasImage(Vec<(TimelineId, usize, ClipId)>),
 }
 
 pub(crate) enum DialogOutcome {
@@ -319,6 +320,9 @@ impl VenturiApp {
             return;
         };
         match (kind, outcome) {
+            (DialogKind::CanvasImage(clips), DialogOutcome::File(Some(path))) => {
+                self.set_canvas_image(clips, path);
+            }
             (DialogKind::ImportMedia, DialogOutcome::Files(Some(paths))) => {
                 self.import_media_files(paths);
             }

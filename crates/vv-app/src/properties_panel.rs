@@ -2319,7 +2319,7 @@ impl VenturiApp {
                                                 }
                                             }
                                             properties_tabs::stabilize_section(ui);
-                                            properties_tabs::canvas_section(ui);
+                                            self.show_canvas_section(ui, targets, &mut pending_effects);
                                             }
 
                                             let tl = self.timeline_id.map(|id| &self.session.project.timelines[id]);
