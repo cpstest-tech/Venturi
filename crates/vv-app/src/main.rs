@@ -65,6 +65,7 @@ mod settings;
 mod settings_dialog;
 mod silence_dialog;
 mod slip_viewer;
+mod spawn;
 mod speed_dialog;
 mod sticker_anim;
 mod stickers;

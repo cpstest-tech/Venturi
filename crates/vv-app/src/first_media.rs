@@ -155,7 +155,7 @@ pub(crate) fn rotation_fit(source: (u32, u32), canvas: (u32, u32), rotation: u16
 /// Clockwise rotation recorded in the file (display matrix or `rotate` tag),
 /// 0 if there is none or ffprobe is unavailable. The engine ignores it.
 pub(crate) fn probe_rotation(path: &Path) -> u16 {
-    let output = std::process::Command::new("ffprobe")
+    let output = crate::spawn::no_console(&mut std::process::Command::new("ffprobe"))
         .args([
             "-v",
             "error",

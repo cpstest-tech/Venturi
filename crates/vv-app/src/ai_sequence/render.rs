@@ -5,18 +5,19 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 const DRIVER: &str = r#"
-const {bundle} = require('/runtime/node_modules/@remotion/bundler');
-const {selectComposition, renderMedia} = require('/runtime/node_modules/@remotion/renderer');
+const path = require('node:path');
+const [browserExecutable, mode, runtime, work] = process.argv.slice(2);
+const {bundle} = require(path.join(runtime, 'node_modules/@remotion/bundler'));
+const {selectComposition, renderMedia} = require(path.join(runtime, 'node_modules/@remotion/renderer'));
 (async () => {
-  const serveUrl = await bundle({entryPoint:'/work/index.tsx', publicDir: null});
-  const browserExecutable = process.argv[2];
+  const serveUrl = await bundle({entryPoint:path.join(work, 'index.tsx'), publicDir: null});
   const composition = await selectComposition({serveUrl, id:'Sequence', browserExecutable, logLevel:'verbose'});
-  if (process.argv[3] === 'validate') return;
-  const transparent = process.argv[3] === 'transparent';
+  if (mode === 'validate') return;
+  const transparent = mode === 'transparent';
   await renderMedia({serveUrl, composition, browserExecutable,
     codec: transparent ? 'prores' : 'h264',
     ...(transparent ? {proResProfile:'4444', pixelFormat:'yuva444p10le', imageFormat:'png'} : {}),
-    outputLocation:transparent ? '/work/result.mov' : '/work/result.mp4', concurrency:1});
+    outputLocation:path.join(work, transparent ? 'result.mov' : 'result.mp4'), concurrency:1});
 })().catch(e => {
   const message=e.stack || String(e);
   const environment=/ENOSPC|EROFS|EACCES|ENOMEM|Failed to launch the browser|browser executable|spawn.*ENOENT/i.test(message);
@@ -50,9 +51,6 @@ pub fn run(
     validate: bool,
     cancel: &AtomicBool,
 ) -> Result<PathBuf, String> {
-    if !cfg!(target_os = "linux") {
-        return Err("Isolated Remotion rendering currently requires Linux and bubblewrap".into());
-    }
     let root = runtime
         .directory
         .canonicalize()
@@ -75,58 +73,20 @@ pub fn run(
             "Install @remotion/renderer and @remotion/bundler in the configured runtime".into(),
         );
     }
-    let mut command = Command::new("bwrap");
-    command.env_clear().args([
-        "--unshare-all",
-        "--die-with-parent",
-        "--new-session",
-        "--proc",
-        "/proc",
-        "--dev",
-        "/dev",
-        "--tmpfs",
-        "/tmp",
-    ]);
-    for path in ["/usr", "/lib", "/lib64", "/etc/fonts", "/etc/ld.so.cache"] {
-        if Path::new(path).exists() {
-            command.args(["--ro-bind", path, path]);
-        }
-    }
-    command
-        .arg("--ro-bind")
-        .arg(&root)
-        .arg("/runtime")
-        .arg("--ro-bind")
-        .arg(node)
-        .arg("/node")
-        .arg("--bind")
-        .arg(directory.canonicalize().map_err(|e| e.to_string())?)
-        .arg("/work")
-        .arg("--ro-bind")
-        .arg(root.join("node_modules"))
-        .arg("/work/node_modules")
-        .args([
-            "--chdir",
-            "/work",
-            "--setenv",
-            "HOME",
-            "/tmp",
-            "--setenv",
-            "PATH",
-            "/usr/bin:/bin",
-            "--",
-            "/node",
-            "--max-old-space-size=1024",
-            "/work/driver.cjs",
-        ])
-        .arg(Path::new("/runtime").join(relative_browser))
-        .arg(if validate {
-            "validate"
-        } else if job.request.composition.transparent {
-            "transparent"
-        } else {
-            "opaque"
-        });
+    let mode = if validate {
+        "validate"
+    } else if job.request.composition.transparent {
+        "transparent"
+    } else {
+        "opaque"
+    };
+    let work = directory.canonicalize().map_err(|e| e.to_string())?;
+    let mut command = if cfg!(target_os = "linux") {
+        sandboxed(&root, &node, &work, relative_browser, mode)
+    } else {
+        check_imports(job.source.as_deref().unwrap_or_default())?;
+        unsandboxed(&root, &node, &work, &browser, mode)
+    };
     super::process::run(
         &mut command,
         cancel,
@@ -147,10 +107,143 @@ pub fn run(
     Ok(output)
 }
 
-pub fn preflight(runtime: &Runtime, cancel: &AtomicBool) -> Result<(), String> {
-    if !cfg!(target_os = "linux") {
-        return Err("Isolated rendering currently requires Linux and bubblewrap".into());
+fn sandboxed(
+    root: &Path,
+    node: &Path,
+    work: &Path,
+    relative_browser: &Path,
+    mode: &str,
+) -> Command {
+    let mut command = Command::new("bwrap");
+    command.env_clear().args([
+        "--unshare-all",
+        "--die-with-parent",
+        "--new-session",
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--tmpfs",
+        "/tmp",
+    ]);
+    for path in ["/usr", "/lib", "/lib64", "/etc/fonts", "/etc/ld.so.cache"] {
+        if Path::new(path).exists() {
+            command.args(["--ro-bind", path, path]);
+        }
     }
+    command
+        .arg("--ro-bind")
+        .arg(root)
+        .arg("/runtime")
+        .arg("--ro-bind")
+        .arg(node)
+        .arg("/node")
+        .arg("--bind")
+        .arg(work)
+        .arg("/work")
+        .arg("--ro-bind")
+        .arg(root.join("node_modules"))
+        .arg("/work/node_modules")
+        .args([
+            "--chdir",
+            "/work",
+            "--setenv",
+            "HOME",
+            "/tmp",
+            "--setenv",
+            "PATH",
+            "/usr/bin:/bin",
+            "--",
+            "/node",
+            "--max-old-space-size=1024",
+            "/work/driver.cjs",
+        ])
+        .arg(Path::new("/runtime").join(relative_browser))
+        .args([mode, "/runtime", "/work"]);
+    command
+}
+
+// No bubblewrap outside Linux: the scene runs with the user's rights, so at
+// least webpack must not be able to bundle arbitrary local files into it.
+fn unsandboxed(root: &Path, node: &Path, work: &Path, browser: &Path, mode: &str) -> Command {
+    let home = work.join("home");
+    let _ = std::fs::create_dir_all(&home);
+    let mut command = Command::new(node);
+    command.env_clear();
+    // Windows needs these to start Chromium and resolve network names.
+    for name in ["SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "PATH", "PATHEXT"] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
+    for name in ["HOME", "USERPROFILE", "TMP", "TEMP", "TMPDIR"] {
+        command.env(name, &home);
+    }
+    command
+        .current_dir(work)
+        .arg("--max-old-space-size=1024")
+        .arg(work.join("driver.cjs"))
+        .arg(browser)
+        .arg(mode)
+        .arg(root)
+        .arg(work);
+    command
+}
+
+/// The scene may import only React and Remotion, statically.
+pub(crate) fn check_imports(source: &str) -> Result<(), String> {
+    let allowed = |module: &str| {
+        matches!(module, "react" | "remotion")
+            || module.starts_with("react/")
+            || module.starts_with("@remotion/")
+    };
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if !is_ident(bytes[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < bytes.len() && is_ident(bytes[i]) {
+            i += 1;
+        }
+        let word = &source[start..i];
+        let after = source[i..].trim_start();
+        match word {
+            "require" | "import" if after.starts_with('(') => {
+                return Err(composition_error(&format!("{word}() is not allowed")));
+            }
+            "import" | "from" => {
+                if let Some(module) = quoted(after).filter(|module| !allowed(module)) {
+                    return Err(composition_error(&format!(
+                        "import of '{module}' is not allowed: use only react and remotion"
+                    )));
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn quoted(text: &str) -> Option<&str> {
+    let quote = text
+        .chars()
+        .next()
+        .filter(|c| matches!(c, '\'' | '"' | '`'))?;
+    text[1..].split(quote).next()
+}
+
+fn is_ident(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'$'
+}
+
+fn composition_error(message: &str) -> String {
+    format!("TANDEM_COMPOSITION_ERROR: {message}")
+}
+
+pub fn preflight(runtime: &Runtime, cancel: &AtomicBool) -> Result<(), String> {
     let root = runtime
         .directory
         .canonicalize()
@@ -166,6 +259,9 @@ pub fn preflight(runtime: &Runtime, cancel: &AtomicBool) -> Result<(), String> {
         || !root.join("node_modules/@remotion/bundler").is_dir()
     {
         return Err("Configure Node, Chromium inside the runtime, and the installed Remotion packages before generating".into());
+    }
+    if !cfg!(target_os = "linux") {
+        return Ok(());
     }
     super::process::run(
         Command::new("bwrap").args([
@@ -196,3 +292,7 @@ pub fn discard_partial(directory: &Path) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/ai_sequence/render.rs"]
+mod tests;

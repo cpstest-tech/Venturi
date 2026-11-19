@@ -1,6 +1,5 @@
 use super::{Improvement, Job, Provider};
 use std::path::Path;
-use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
@@ -169,7 +168,11 @@ impl Adapter for Cli {
         directory: &Path,
         cancel: &AtomicBool,
     ) -> Result<Reply, String> {
-        let mut command = Command::new(self.0.executable().ok_or("Invalid CLI provider")?);
+        let mut command =
+            super::process::program(self.0.executable().ok_or("Invalid CLI provider")?);
+        // The Windows command line is capped at 32K characters, the prompt
+        // with the existing source is not: stdin has no limit.
+        let prompt_on_stdin = cfg!(windows);
         command.current_dir(directory);
         let schema = json_schema(schema);
         let images = super::context::image_paths(job, directory)?;
@@ -203,7 +206,12 @@ impl Adapter for Cli {
                 for image in &images {
                     command.arg("--image").arg(image);
                 }
-                command.arg("--").arg(prompt);
+                if prompt_on_stdin {
+                    command.arg("-");
+                    input = Some(prompt.as_bytes().to_vec());
+                } else {
+                    command.arg("--").arg(prompt);
+                }
             }
             Provider::Claude => {
                 command.args([
@@ -228,7 +236,9 @@ impl Adapter for Cli {
                 if let Some(session) = session {
                     command.args(["--resume", session, "--fork-session"]);
                 }
-                if images.is_empty() {
+                if images.is_empty() && prompt_on_stdin {
+                    input = Some(prompt.as_bytes().to_vec());
+                } else if images.is_empty() {
                     command.arg("--").arg(prompt);
                 } else {
                     use base64::Engine;

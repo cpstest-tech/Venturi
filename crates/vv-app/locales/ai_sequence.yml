@@ -215,8 +215,8 @@ ai_sequence.render_timeout:
   it: "Timeout del rendering locale (secondi)"
 
 ai_sequence.runtime:
-  en: "Local Remotion runtime (Linux + bubblewrap)"
-  it: "Runtime Remotion locale (Linux e bubblewrap)"
+  en: "Local Remotion runtime"
+  it: "Runtime Remotion locale"
 
 ai_sequence.free_only:
   en: "Free-only Gemini models"

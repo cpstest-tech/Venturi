@@ -1,5 +1,4 @@
 use super::{Provider, process};
-use std::process::Command;
 use std::sync::{atomic::AtomicBool, mpsc};
 use std::time::Duration;
 
@@ -15,7 +14,7 @@ impl Probe {
             for provider in Provider::ALL {
                 let status = if let Some(executable) = provider.executable() {
                     match process::run(
-                        Command::new(executable).arg("--version"),
+                        process::program(executable).arg("--version"),
                         &AtomicBool::new(false),
                         Duration::from_secs(5),
                     ) {
