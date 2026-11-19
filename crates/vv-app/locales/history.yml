@@ -164,6 +164,10 @@ history.timeline_resolution:
   en: "Change aspect ratio"
   it: "Cambia rapporto dimensioni"
 
+history.timeline_fps:
+  en: "Change frame rate"
+  it: "Cambia frequenza fotogrammi"
+
 history.set_captions:
   en: "Generate subtitles"
   it: "Genera sottotitoli"

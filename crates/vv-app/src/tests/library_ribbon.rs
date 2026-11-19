@@ -185,6 +185,27 @@ fn the_first_media_inserted_defines_resolution_and_fps() {
 }
 
 #[test]
+fn a_gaming_clip_after_a_title_sets_its_120_fps() {
+    let dir = TempDir::new("vv-ribbon-gaming");
+    let game = video(&dir, "game.mp4", "96x54", 120);
+    let mut app = VenturiApp::default();
+    app.insert_text_at_playhead(None);
+    assert_eq!(timeline_of(&app).fps, vv_core::Rational::new(25, 1));
+    let game = pooled(&mut app, &game);
+    app.insert_pool_media_at_playhead(game);
+    let timeline = timeline_of(&app);
+    assert_eq!(timeline.fps, vv_core::Rational::new(120, 1));
+    assert_eq!(timeline.resolution, (96, 54));
+    let title = timeline
+        .tracks
+        .iter()
+        .flat_map(|t| t.clips.iter())
+        .find(|c| matches!(c.source, vv_core::ClipSource::Text))
+        .expect("a text clip");
+    assert_eq!(title.timeline_len, 360, "still three seconds");
+}
+
+#[test]
 fn a_photo_as_first_media_sets_30_fps_and_lasts_five_seconds() {
     let dir = TempDir::new("vv-ribbon-photo");
     let path = picture(&dir, "photo.png", "80x60");

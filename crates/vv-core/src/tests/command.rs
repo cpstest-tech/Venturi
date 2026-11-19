@@ -397,3 +397,98 @@ fn ai_provenance_survives_relink_save_and_remove_media_undo() {
         Some("123-1-0")
     );
 }
+
+#[test]
+fn changing_the_timeline_fps_keeps_every_position_in_seconds() {
+    let (mut project, timeline) = project();
+    let media = project.media_pool.insert(MediaItem {
+        path: "game.mp4".into(),
+        meta: MediaMeta {
+            duration_frames: 1200,
+            fps: Rational::new(120, 1),
+            width: 1920,
+            height: 1080,
+            has_video: true,
+            has_audio: false,
+            sample_rate: 0,
+            channels: 0,
+            audio_streams: 0,
+            file: Default::default(),
+        },
+        content_hash: 1,
+        compound: None,
+        folder: None,
+    });
+    let from = Rational::new(25, 1);
+    let mut game = Clip::from_source_range(
+        project.alloc_clip_id(),
+        ClipSource::Media(media),
+        240,
+        720,
+        50,
+        Rational::conform_rate(from, Rational::new(120, 1)),
+    );
+    game.fade_in = 10;
+    game.effects
+        .transform
+        .track_mut(TransformParam::ZoomX)
+        .upsert(480, 2.0, Interpolation::Linear);
+    let mut title = Clip::from_source_range(
+        project.alloc_clip_id(),
+        ClipSource::Text,
+        0,
+        25,
+        150,
+        Rational::one(),
+    );
+    title
+        .effects
+        .transform
+        .track_mut(TransformParam::ZoomX)
+        .upsert(5, 2.0, Interpolation::Linear);
+    let tl = &mut project.timelines[timeline];
+    tl.tracks[0].clips = vec![game, title];
+    tl.markers.push(Marker {
+        id: MarkerId(1),
+        start: 75,
+        duration: 25,
+        note: String::new(),
+        color: Marker::default_color(),
+    });
+    project.view.covers.insert(timeline, 100);
+    let before = project.timelines[timeline].clone();
+
+    let mut history = History::default();
+    let to = Rational::new(120, 1);
+    history.do_command(&mut project, Box::new(SetTimelineFps::new(timeline, to)));
+    let tl = &project.timelines[timeline];
+    assert_eq!(tl.fps, to);
+    let (game, title) = (&tl.tracks[0].clips[0], &tl.tracks[0].clips[1]);
+    assert_eq!((game.timeline_start, game.timeline_len), (240, 480));
+    assert_eq!((game.source_in(), game.source_out()), (240, 720));
+    assert_eq!(game.fade_in, 48);
+    let media_keyframe = game
+        .effects
+        .transform
+        .track(TransformParam::ZoomX)
+        .keyframes()[0]
+        .0;
+    assert_eq!(media_keyframe, 480, "media keyframes stay in source frames");
+    assert_eq!((title.timeline_start, title.timeline_len), (720, 120));
+    let title_keyframe = title
+        .effects
+        .transform
+        .track(TransformParam::ZoomX)
+        .keyframes()[0]
+        .0;
+    assert_eq!(title_keyframe, 24);
+    assert_eq!((tl.markers[0].start, tl.markers[0].duration), (360, 120));
+    assert_eq!(project.view.covers[&timeline], 480);
+
+    history.undo(&mut project);
+    assert_eq!(
+        format!("{:?}", project.timelines[timeline]),
+        format!("{before:?}")
+    );
+    assert_eq!(project.view.covers[&timeline], 100);
+}

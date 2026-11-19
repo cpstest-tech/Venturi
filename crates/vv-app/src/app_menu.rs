@@ -1068,6 +1068,7 @@ fn command_label(label: vv_core::CommandLabel) -> std::borrow::Cow<'static, str>
         L::Title => t!("history.title"),
         L::ResetTransform => t!("history.reset_transform"),
         L::TimelineResolution => t!("history.timeline_resolution"),
+        L::TimelineFps => t!("history.timeline_fps"),
         L::SetCaptions => t!("history.set_captions"),
         L::LinkSubtitles => t!("history.link_subtitles"),
         L::SetCover => t!("history.set_cover"),

@@ -59,6 +59,7 @@ pub enum CommandLabel {
     Title,
     ResetTransform,
     TimelineResolution,
+    TimelineFps,
     SetCaptions,
     LinkSubtitles,
     SetCover,
@@ -3539,6 +3540,98 @@ impl Command for SetCover {
                 project.view.covers.remove(&self.timeline);
             }
         }
+    }
+}
+
+/// Changes the frame rate of a timeline, keeping every clip, transition,
+/// marker and cover where it was in seconds.
+#[derive(Debug)]
+pub struct SetTimelineFps {
+    pub timeline: TimelineId,
+    pub fps: Rational,
+    previous: Option<(Timeline, Option<FrameIdx>)>,
+}
+
+impl SetTimelineFps {
+    pub fn new(timeline: TimelineId, fps: Rational) -> Self {
+        Self {
+            timeline,
+            fps,
+            previous: None,
+        }
+    }
+}
+
+impl Command for SetTimelineFps {
+    fn label(&self) -> CommandLabel {
+        CommandLabel::TimelineFps
+    }
+
+    fn apply(&mut self, project: &mut Project) {
+        let (to, media_pool) = (self.fps, &project.media_pool);
+        let Some(timeline) = project.timelines.get_mut(self.timeline) else {
+            return;
+        };
+        let cover = project.view.covers.get(&self.timeline).copied();
+        self.previous = Some((timeline.clone(), cover));
+        let from = timeline.fps;
+        if from == to {
+            return;
+        }
+        timeline.fps = to;
+        let convert = |frames: FrameIdx| crate::model::convert_frames(frames, from, to);
+        for track in &mut timeline.tracks {
+            for clip in &mut track.clips {
+                let conform_rate = match clip.source {
+                    ClipSource::Media(id) => {
+                        media_pool.get(id).map_or(clip.conform_rate(), |item| {
+                            Rational::conform_rate(to, item.meta.fps)
+                        })
+                    }
+                    _ => clip.conform_rate(),
+                };
+                clip.retime(from, to, conform_rate);
+                // A generator's source frames are timeline frames.
+                if clip.is_generator() {
+                    clip.effects.rescale_keyframe_times(from, to);
+                    clip.freeze = clip.freeze.map(convert);
+                }
+                clip.fade_in = convert(clip.fade_in).min(clip.timeline_len);
+                clip.fade_out = convert(clip.fade_out).min(clip.timeline_len);
+                for transition in [
+                    &mut clip.effects.transition_in,
+                    &mut clip.effects.transition_out,
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    transition.duration = convert(transition.duration).max(1);
+                }
+            }
+            for crossing in &mut track.crossings {
+                crossing.transition.duration = convert(crossing.transition.duration).max(1);
+            }
+        }
+        for marker in &mut timeline.markers {
+            marker.start = convert(marker.start);
+            marker.duration = convert(marker.duration);
+        }
+        if let Some(frame) = cover {
+            project.view.covers.insert(self.timeline, convert(frame));
+        }
+    }
+
+    fn undo(&self, project: &mut Project) {
+        let Some((previous, cover)) = &self.previous else {
+            return;
+        };
+        if let Some(timeline) = project.timelines.get_mut(self.timeline) {
+            *timeline = previous.clone();
+        }
+        match cover {
+            Some(frame) => project.view.covers.insert(self.timeline, *frame),
+            None => project.view.covers.remove(&self.timeline),
+        };
     }
 }
 

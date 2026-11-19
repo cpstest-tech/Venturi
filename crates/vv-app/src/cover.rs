@@ -100,8 +100,7 @@ fn render(project: &Project, timeline: TimelineId, frame: FrameIdx) -> Option<Re
 }
 
 /// The app's own GPU device: a headless one takes seconds to create.
-static SHARED_GPU: OnceLock<(wgpu::Adapter, Arc<wgpu::Device>, Arc<wgpu::Queue>)> =
-    OnceLock::new();
+static SHARED_GPU: OnceLock<(wgpu::Adapter, Arc<wgpu::Device>, Arc<wgpu::Queue>)> = OnceLock::new();
 static COMPOSITOR: Mutex<Option<(ProcessingPrecision, vv_render::Compositor)>> = Mutex::new(None);
 
 fn cached_compositor(
@@ -122,7 +121,10 @@ fn cached_compositor(
 
 /// Shares the app's device with the cover renders and builds their
 /// compositor in the background, so the export window opens with a cover.
-pub(crate) fn warm_up(render_state: &eframe::egui_wgpu::RenderState, precision: ProcessingPrecision) {
+pub(crate) fn warm_up(
+    render_state: &eframe::egui_wgpu::RenderState,
+    precision: ProcessingPrecision,
+) {
     let _ = SHARED_GPU.set((
         render_state.adapter.clone(),
         Arc::new(render_state.device.clone()),

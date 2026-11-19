@@ -5,7 +5,7 @@ use std::path::Path;
 use vv_core::{MediaMeta, Rational};
 
 const MAX_LANDSCAPE: (u32, u32) = (3840, 2160);
-const STANDARD_FPS: [i32; 5] = [24, 25, 30, 50, 60];
+pub(crate) const STANDARD_FPS: [i32; 8] = [24, 25, 30, 50, 60, 120, 144, 240];
 const PHOTO_FPS: i32 = 30;
 /// Relative slack of a ratio match: 1080x1088 still counts as 1:1.
 const RATIO_TOLERANCE: f64 = 0.01;
@@ -110,7 +110,7 @@ pub(crate) fn effective_size(size: (u32, u32), rotation: u16) -> (u32, u32) {
     }
 }
 
-/// The nearest of 24/25/30/50/60; the lower one on a tie.
+/// The nearest of `STANDARD_FPS`; the lower one on a tie.
 pub(crate) fn round_fps(fps: f64) -> Rational {
     let nearest = STANDARD_FPS
         .into_iter()

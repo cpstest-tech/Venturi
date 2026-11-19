@@ -1618,7 +1618,29 @@ impl VenturiApp {
         import: Option<vv_session::JobId>,
     ) -> TimelineId {
         let format = first_media::project_format(meta, rotation);
+        if let Some(id) = self.timeline_id
+            && !self.has_video_media(id)
+        {
+            self.set_project_fps(format.fps);
+            self.set_project_resolution(format.resolution);
+        }
         self.ensure_timeline_with(format.fps, format.resolution, true, import)
+    }
+
+    /// Whether the format still waits for a first video: titles and audio
+    /// alone do not set it.
+    fn has_video_media(&self, timeline_id: TimelineId) -> bool {
+        let project = &self.session.project;
+        project.timelines[timeline_id]
+            .tracks
+            .iter()
+            .flat_map(|track| &track.clips)
+            .any(|clip| match clip.source {
+                vv_core::ClipSource::Media(id) => {
+                    project.media_pool.get(id).is_some_and(|m| m.meta.has_video)
+                }
+                _ => false,
+            })
     }
 
     /// Clockwise turn recorded in the media's file, probed once per path.
@@ -2906,6 +2928,38 @@ impl VenturiApp {
         let original = self.original_resolution(timeline_id);
         let resolution = ratio.resolution(current, original);
         if resolution != current {
+            self.session
+                .apply(Box::new(vv_core::SetTimelineResolution::new(
+                    timeline_id,
+                    resolution,
+                )));
+        }
+    }
+
+    /// One undo step that keeps every clip where it is in seconds.
+    pub(crate) fn set_project_fps(&mut self, fps: vv_core::Rational) {
+        let Some(timeline_id) = self.timeline_id else {
+            return;
+        };
+        let from = self.session.project.timelines[timeline_id].fps;
+        if from == fps {
+            return;
+        }
+        self.session
+            .apply(Box::new(vv_core::SetTimelineFps::new(timeline_id, fps)));
+        let convert = |frame| vv_core::convert_frames(frame, from, fps);
+        self.timeline_state.playhead = convert(self.timeline_state.playhead);
+        let marks = &mut self.timeline_state.export_marks;
+        marks.mark_in = marks.mark_in.map(convert);
+        marks.mark_out = marks.mark_out.map(convert);
+        self.ensure_active_clip_matches_playhead(true);
+    }
+
+    pub(crate) fn set_project_resolution(&mut self, resolution: (u32, u32)) {
+        let Some(timeline_id) = self.timeline_id else {
+            return;
+        };
+        if self.session.project.timelines[timeline_id].resolution != resolution {
             self.session
                 .apply(Box::new(vv_core::SetTimelineResolution::new(
                     timeline_id,

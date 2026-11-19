@@ -4,7 +4,18 @@ use super::*;
 use crate::first_media::Ratio;
 
 const LABEL_WIDTH: f32 = 130.0;
-const FPS_CHOICES: [i32; 5] = [24, 25, 30, 50, 60];
+const SHORT_SIDES: [(u32, &str); 4] = [(720, "720p"), (1080, "1080p"), (1440, "2K"), (2160, "4K")];
+
+/// `size` scaled to `short` on its shorter side, aspect kept, sides even.
+pub(crate) fn with_short_side(size: (u32, u32), short: u32) -> (u32, u32) {
+    let current = size.0.min(size.1).max(1);
+    let scale = |v: u32| {
+        (((u64::from(v) * u64::from(short) + u64::from(current) / 2) / u64::from(current)) as u32
+            & !1)
+            .max(2)
+    };
+    (scale(size.0), scale(size.1))
+}
 
 impl VenturiApp {
     pub(crate) fn show_project_details(&mut self, ui: &mut egui::Ui, timeline_id: TimelineId) {
@@ -58,6 +69,11 @@ impl VenturiApp {
             t!("details.frame_rate").into_owned(),
             format!("{:.2} fps", fps.as_f64()),
         );
+        row(
+            ui,
+            t!("details.color_space").into_owned(),
+            "Rec.709".to_owned(),
+        );
 
         if self.details_editing {
             ui.add_space(theme::SPACE_3);
@@ -77,21 +93,31 @@ impl VenturiApp {
                 }
             });
             ui.add_space(theme::SPACE_2);
-            ui.label(t!("details.frame_rate"));
+            ui.label(t!("details.resolution"));
             ui.horizontal_wrapped(|ui| {
-                for choice in FPS_CHOICES {
-                    let selected = (fps.as_f64() - f64::from(choice)).abs() < 1e-6;
-                    ui.add_enabled(
-                        false,
-                        egui::Button::selectable(selected, choice.to_string()),
-                    )
-                    .on_disabled_hover_text(t!("common.coming_soon"));
+                for (short, label) in SHORT_SIDES {
+                    let selected = resolution.0.min(resolution.1) == short;
+                    if ui.add(egui::Button::selectable(selected, label)).clicked() {
+                        self.set_project_resolution(with_short_side(resolution, short));
+                    }
                 }
             });
             ui.add_space(theme::SPACE_2);
-            ui.label(t!("details.color_space"));
-            ui.add_enabled(false, egui::Button::selectable(true, "Rec.709"))
-                .on_disabled_hover_text(t!("common.coming_soon"));
+            ui.label(t!("details.frame_rate"));
+            ui.horizontal_wrapped(|ui| {
+                for choice in first_media::STANDARD_FPS {
+                    let choice = vv_core::Rational::new(choice, 1);
+                    if ui
+                        .add(egui::Button::selectable(
+                            fps == choice,
+                            choice.num.to_string(),
+                        ))
+                        .clicked()
+                    {
+                        self.set_project_fps(choice);
+                    }
+                }
+            });
         }
 
         ui.add_space(theme::SPACE_3);
@@ -107,3 +133,7 @@ impl VenturiApp {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "tests/project_details.rs"]
+mod tests;
