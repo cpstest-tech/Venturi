@@ -61,6 +61,8 @@ cp "$CRT"/*.dll "$STAGE/"
 OBJDUMP="$(command -v objdump || true)"
 if [ -n "$OBJDUMP" ]; then
     for dll in $("$OBJDUMP" -p "$STAGE/tandem.exe" | sed -n 's/^\s*DLL Name: //p' | tr -d '\r'); do
+        # API sets are resolved by the loader, not files on disk.
+        case "${dll,,}" in api-ms-win-*|ext-ms-*) continue ;; esac
         if [ ! -e "$STAGE/$dll" ] && [ ! -e "/c/Windows/System32/$dll" ]; then
             echo "tandem.exe imports $dll, which is neither bundled nor part of Windows" >&2
             exit 1
