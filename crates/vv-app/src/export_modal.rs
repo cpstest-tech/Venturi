@@ -9,7 +9,7 @@ use vv_media::{HwDevice, VideoBitrate, VideoCodec, VideoSettings};
 use vv_session::export::{ExportError, ExportProgress, ExportSettings};
 
 use super::*;
-use crate::cover::{CoverRender, paint_fitted};
+use crate::cover::{CoverRender, paint_fitted, paint_skeleton};
 use crate::export_plan::{
     AUDIO_KBPS, AudioFormat, BitrateChoice, CaptionFormat, CodecChoice, Container, Estimate,
     FpsChoice, ResolutionChoice,
@@ -341,7 +341,10 @@ impl ExportModal {
             egui::vec2(LEFT_WIDTH, BODY_HEIGHT * 0.6),
             egui::Sense::hover(),
         );
-        paint_fitted(ui, rect, self.cover.texture());
+        match self.cover.texture() {
+            Some(texture) => paint_fitted(ui, rect, Some(texture)),
+            None => paint_skeleton(ui, rect),
+        }
         let button = egui::Button::new(
             egui::RichText::new(t!("export.edit_cover"))
                 .size(theme::FONT_BODY)

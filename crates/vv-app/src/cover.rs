@@ -1,9 +1,9 @@
 //! The cover of a timeline: a frame rendered the way the export renders it,
 //! on a worker thread, and the picker that chooses it.
 
-use std::sync::mpsc;
+use std::sync::{Arc, Mutex, OnceLock, mpsc};
 
-use vv_core::{FrameIdx, Project, TimelineId};
+use vv_core::{FrameIdx, ProcessingPrecision, Project, TimelineId};
 
 use super::*;
 
@@ -82,13 +82,14 @@ fn render(project: &Project, timeline: TimelineId, frame: FrameIdx) -> Option<Re
     let size = project.timelines.get(timeline)?.resolution;
     let width = PREVIEW_WIDTH.min(size.0.max(2));
     let height = ((u64::from(width) * u64::from(size.1)) / u64::from(size.0.max(1))).max(2) as u32;
-    let compositor = vv_render::Compositor::new_headless_with_precision(project.precision);
+    let mut cached = COMPOSITOR.lock().unwrap_or_else(|e| e.into_inner());
+    let compositor = cached_compositor(&mut cached, project.precision);
     let rgba = vv_session::export::render_frame_rgba(
         project,
         timeline,
         frame,
         (width, height),
-        &compositor,
+        compositor,
     )
     .ok()?;
     Some(Rendered {
@@ -96,6 +97,50 @@ fn render(project: &Project, timeline: TimelineId, frame: FrameIdx) -> Option<Re
         height,
         rgba,
     })
+}
+
+/// The app's own GPU device: a headless one takes seconds to create.
+static SHARED_GPU: OnceLock<(wgpu::Adapter, Arc<wgpu::Device>, Arc<wgpu::Queue>)> =
+    OnceLock::new();
+static COMPOSITOR: Mutex<Option<(ProcessingPrecision, vv_render::Compositor)>> = Mutex::new(None);
+
+fn cached_compositor(
+    cached: &mut Option<(ProcessingPrecision, vv_render::Compositor)>,
+    precision: ProcessingPrecision,
+) -> &vv_render::Compositor {
+    if cached.as_ref().is_none_or(|(p, _)| *p != precision) {
+        let compositor = match SHARED_GPU.get() {
+            Some((adapter, device, queue)) => {
+                vv_render::Compositor::new(adapter, device.clone(), queue.clone(), precision)
+            }
+            None => vv_render::Compositor::new_headless_with_precision(precision),
+        };
+        *cached = Some((precision, compositor));
+    }
+    &cached.as_ref().expect("set above").1
+}
+
+/// Shares the app's device with the cover renders and builds their
+/// compositor in the background, so the export window opens with a cover.
+pub(crate) fn warm_up(render_state: &eframe::egui_wgpu::RenderState, precision: ProcessingPrecision) {
+    let _ = SHARED_GPU.set((
+        render_state.adapter.clone(),
+        Arc::new(render_state.device.clone()),
+        Arc::new(render_state.queue.clone()),
+    ));
+    std::thread::spawn(move || {
+        let mut cached = COMPOSITOR.lock().unwrap_or_else(|e| e.into_inner());
+        cached_compositor(&mut cached, precision);
+    });
+}
+
+/// Pulsing placeholder while a picture is on its way.
+pub(crate) fn paint_skeleton(ui: &egui::Ui, rect: egui::Rect) {
+    let time = ui.input(|i| i.time);
+    let t = (0.5 + 0.5 * (time * 3.0).sin()) as f32;
+    let color = theme::BG_INSET.lerp_to_gamma(theme::BG_RAISED, t);
+    ui.painter().rect_filled(rect, theme::RADIUS_PANEL, color);
+    ui.ctx().request_repaint();
 }
 
 /// Draws `texture` fitted into `rect` over a black card.
@@ -169,7 +214,10 @@ impl VenturiApp {
             ui.add_space(theme::SPACE_2);
             let preview = egui::vec2(ui.available_width(), 260.0);
             let (rect, _) = ui.allocate_exact_size(preview, egui::Sense::hover());
-            paint_fitted(ui, rect, picker.render.texture());
+            match picker.render.texture() {
+                Some(texture) => paint_fitted(ui, rect, Some(texture)),
+                None => paint_skeleton(ui, rect),
+            }
             if picker.render.is_rendering() {
                 ui.put(
                     egui::Rect::from_center_size(rect.center(), egui::vec2(24.0, 24.0)),

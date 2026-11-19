@@ -5284,6 +5284,7 @@ fn main() -> eframe::Result<()> {
                     std::sync::Arc::new(render_state.queue.clone()),
                     app.session.project.precision,
                 );
+                cover::warm_up(&render_state, app.session.project.precision);
                 app.egui_render_state = Some(render_state);
             }
             #[cfg(target_os = "linux")]
