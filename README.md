@@ -47,6 +47,10 @@ have AI make slop for you.
   everywhere, and property presets (a 2x punch-in with its easing, a drop
   shadow, a voice level) applied with a drag or a shortcut, timed from the
   start or the end of any clip.
+- **Web downloader.** Paste a YouTube, TikTok, Instagram or Spotify link:
+  music, sound effects or video land in the library or the project in the
+  background, at the quality you pick, even just a section of a long video
+  ([docs/DOWNLOADER.md](docs/DOWNLOADER.md)).
 - **Audio, finished in place.** A mixer with per-track and master gain,
   balance, meters and an effect chain: 6-band equalizer and 3-band
   multiband compressor over the live spectrum, normalization (sample

@@ -284,6 +284,12 @@ impl RibbonState {
         })
     }
 
+    pub(crate) fn show(&mut self, tab: RibbonTab, category: Category) {
+        self.tab = tab;
+        self.selected.insert(tab, category);
+        self.editor = None;
+    }
+
     /// The template of the text drag that just landed, if any.
     fn take_dragged_template(&mut self) -> Option<String> {
         self.dragged_template.take()
@@ -836,6 +842,9 @@ impl VenturiApp {
         // unclipped, it would swallow clicks on the sidebar rows.
         content_ui.shrink_clip_rect(content_rect);
         let ui = &mut content_ui;
+        if let Some(destination) = tab.download_destination(category) {
+            self.show_download_bar(ui, destination);
+        }
         match (tab, category) {
             (RibbonTab::Media, Category::Project) => self.show_media_pool(ui, preview_action),
             (RibbonTab::Media, _) => self.show_media_favorites(ui, preview_action),

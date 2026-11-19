@@ -752,6 +752,7 @@ pub struct Settings {
     pub ai_model: String,
     pub ai_provider_models: BTreeMap<String, String>,
     pub ai_runtime: crate::ai_sequence::Runtime,
+    pub download: crate::downloader::Prefs,
     pub ai_allow_api: bool,
     pub ai_free_only: bool,
     pub ai_free_key_identity: Option<String>,
@@ -867,6 +868,7 @@ impl Default for Settings {
             ai_model: "gemini-4-hydrogen".into(),
             ai_provider_models: BTreeMap::new(),
             ai_runtime: Default::default(),
+            download: Default::default(),
             ai_allow_api: false,
             ai_free_only: true,
             ai_free_key_identity: None,
@@ -935,6 +937,8 @@ struct SettingsFile {
     ai_model: Option<String>,
     ai_provider_models: Option<BTreeMap<String, String>>,
     ai_runtime: Option<crate::ai_sequence::Runtime>,
+    #[serde(default)]
+    download: Option<crate::downloader::Prefs>,
     ai_allow_api: Option<bool>,
     ai_free_only: Option<bool>,
     ai_free_key_identity: Option<String>,
@@ -1140,6 +1144,7 @@ impl Settings {
         settings.ai_provider_models = file.ai_provider_models.unwrap_or_default();
         settings.ai_model = file.ai_model.unwrap_or_else(|| "gemini-4-hydrogen".into());
         settings.ai_runtime = file.ai_runtime.unwrap_or_default();
+        settings.download = file.download.unwrap_or_default();
         settings.ai_allow_api = file.ai_allow_api.unwrap_or(false);
         settings.ai_free_only = file.ai_free_only.unwrap_or(true);
         settings.ai_free_key_identity = file.ai_free_key_identity;
@@ -1266,6 +1271,7 @@ impl Settings {
             ai_model: Some(self.ai_model.clone()),
             ai_provider_models: Some(self.ai_provider_models.clone()),
             ai_runtime: Some(self.ai_runtime.clone()),
+            download: Some(self.download.clone()),
             ai_allow_api: Some(self.ai_allow_api),
             ai_free_only: Some(self.ai_free_only),
             ai_free_key_identity: self.ai_free_key_identity.clone(),

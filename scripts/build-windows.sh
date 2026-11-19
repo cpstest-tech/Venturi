@@ -42,8 +42,9 @@ rm -rf "$OUT_DIR"
 mkdir -p "$STAGE"
 cp "$TARGET_DIR/release/tandem.exe" "$STAGE/"
 cp "$(cygpath -u "$FFMPEG_DIR")"/bin/*.dll "$STAGE/"
-# Reads rotation and bitrate metadata; found next to tandem.exe.
-cp "$(cygpath -u "$FFMPEG_DIR")"/bin/ffprobe.exe "$STAGE/"
+# Reads rotation and bitrate metadata; found next to tandem.exe. Both are
+# also used by the web downloader (yt-dlp).
+cp "$(cygpath -u "$FFMPEG_DIR")"/bin/ffprobe.exe "$(cygpath -u "$FFMPEG_DIR")"/bin/ffmpeg.exe "$STAGE/"
 cp LICENSE "$STAGE/LICENSE.txt"
 
 # whisper's Vulkan backend links the loader: without it next to the exe,

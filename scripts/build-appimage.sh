@@ -45,6 +45,7 @@ cargo build -p vv-app --release
 rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib"
 cp "$TARGET_DIR/release/tandem" "$APPDIR/usr/bin/"
+cp "$FFMPEG_PREFIX/bin/ffmpeg" "$FFMPEG_PREFIX/bin/ffprobe" "$APPDIR/usr/bin/"
 cp -a "$FFMPEG_PREFIX"/lib/*.so.* "$APPDIR/usr/lib/"
 cp packaging/appimage/tandem.desktop "$APPDIR/"
 mkdir -p "$APPDIR/usr/share/applications"
@@ -72,7 +73,9 @@ ln -s usr/bin/tandem "$APPDIR/AppRun"
 # binary without an rpath. patchelf acts on the copied file, regardless of
 # the cache. --force-rpath => DT_RPATH (not RUNPATH), so it applies to
 # indirect dependencies too, e.g. libavcodec -> libx264.
-patchelf --force-rpath --set-rpath '$ORIGIN/../lib' "$APPDIR/usr/bin/tandem"
+for bin in tandem ffmpeg ffprobe; do
+    patchelf --force-rpath --set-rpath '$ORIGIN/../lib' "$APPDIR/usr/bin/$bin"
+done
 
 # Honest bundle check: the build machine has system ffmpeg, so `ldd` would
 # resolve the libav from there, masking a broken bundle (missing rpath or
@@ -81,7 +84,7 @@ patchelf --force-rpath --set-rpath '$ORIGIN/../lib' "$APPDIR/usr/bin/tandem"
 # inside the AppDir.
 # The codec libraries are needed by libavcodec, not by vv-app: its
 # dependencies are checked too.
-for so in $(patchelf --print-needed "$APPDIR/usr/bin/tandem" "$APPDIR"/usr/lib/libavcodec.so.*); do
+for so in $(patchelf --print-needed "$APPDIR"/usr/bin/* "$APPDIR"/usr/lib/libavcodec.so.*); do
     case "$so" in
         libav*|libsw*|libpostproc*|libx264*|libmp3lame*|libopus*|libvorbis*|libogg*)
             if [ ! -e "$APPDIR/usr/lib/$so" ]; then
@@ -94,7 +97,7 @@ done
 # The GPU drivers belong to the system: FFmpeg must load them with dlopen,
 # or the AppImage would not start where they are missing. libvulkan is the
 # generic loader that whisper links; the drivers behind it stay on the system.
-for so in $(patchelf --print-needed "$APPDIR/usr/bin/tandem" "$APPDIR"/usr/lib/*.so.*); do
+for so in $(patchelf --print-needed "$APPDIR"/usr/bin/* "$APPDIR"/usr/lib/*.so.*); do
     case "$so" in
         libva*|libcuda*|libnvcuvid*|libdrm*)
             echo "GPU driver library linked instead of loaded at run time: $so" >&2

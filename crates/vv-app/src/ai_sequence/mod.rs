@@ -5,7 +5,7 @@ pub(crate) mod availability;
 pub(crate) mod context;
 pub(crate) mod insertion;
 pub(crate) mod portable;
-mod process;
+pub(crate) mod process;
 mod provider;
 mod queue;
 mod render;

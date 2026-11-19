@@ -246,11 +246,11 @@ mod tests;
 /// Windows' counterpart of the process group: closing the job kills every
 /// process the child started.
 #[cfg(windows)]
-struct ProcessTree(Option<windows_sys::Win32::Foundation::HANDLE>);
+pub(crate) struct ProcessTree(Option<windows_sys::Win32::Foundation::HANDLE>);
 
 #[cfg(windows)]
 impl ProcessTree {
-    fn new(child: &std::process::Child) -> Self {
+    pub(crate) fn new(child: &std::process::Child) -> Self {
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::Foundation::CloseHandle;
         use windows_sys::Win32::System::JobObjects::{

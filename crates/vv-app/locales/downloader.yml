@@ -1,0 +1,173 @@
+_version: 2
+
+downloader.title:
+  en: "Download from the web"
+  it: "Scarica dal web"
+
+downloader.bar_hint:
+  en: "Paste a YouTube, TikTok, Instagram or Spotify link…"
+  it: "Incolla un link YouTube, TikTok, Instagram o Spotify…"
+
+downloader.get:
+  en: "Download…"
+  it: "Scarica…"
+
+downloader.get_hint:
+  en: "Choose quality and section, then download in the background"
+  it: "Scegli qualità e sezione, poi scarica in background"
+
+downloader.not_a_link:
+  en: "That is not a link"
+  it: "Non è un link"
+
+downloader.to_project:
+  en: "Project media"
+  it: "Media del progetto"
+
+downloader.format_original:
+  en: "Original (no conversion)"
+  it: "Originale (nessuna conversione)"
+
+downloader.cancel:
+  en: "Cancel the download"
+  it: "Annulla il download"
+
+downloader.dismiss:
+  en: "Dismiss"
+  it: "Chiudi"
+
+downloader.retry:
+  en: "Retry"
+  it: "Riprova"
+
+downloader.waiting:
+  en: "waiting…"
+  it: "in coda…"
+
+downloader.preparing:
+  en: "preparing…"
+  it: "preparazione…"
+
+downloader.processing:
+  en: "converting…"
+  it: "conversione…"
+
+downloader.active:
+  en: "Downloading %{count}"
+  it: "Download in corso: %{count}"
+
+downloader.failed:
+  en: "Download of \"%{title}\" failed: %{error}"
+  it: "Download di \"%{title}\" non riuscito: %{error}"
+
+downloader.done_title:
+  en: "Download complete"
+  it: "Download completato"
+
+downloader.done:
+  en: "\"%{title}\" added to %{place}"
+  it: "\"%{title}\" aggiunto a %{place}"
+
+downloader.done_elsewhere:
+  en: "\"%{title}\" downloaded to %{folder} (the project changed meanwhile)"
+  it: "\"%{title}\" scaricato in %{folder} (nel frattempo il progetto è cambiato)"
+
+downloader.download:
+  en: "Download"
+  it: "Scarica"
+
+downloader.download_n:
+  en: "Download %{count} tracks"
+  it: "Scarica %{count} brani"
+
+downloader.close:
+  en: "Close"
+  it: "Chiudi"
+
+downloader.rights_hint:
+  en: "Only download what you have the rights to use."
+  it: "Scarica solo ciò che hai il diritto di usare."
+
+downloader.probing:
+  en: "Reading the link…"
+  it: "Lettura del link…"
+
+downloader.items:
+  en: "%{count} videos"
+  it: "%{count} video"
+
+downloader.tracks:
+  en: "%{count} tracks"
+  it: "%{count} brani"
+
+downloader.spotify_hint:
+  en: "Spotify streams are protected: each track is matched and downloaded from YouTube."
+  it: "Gli stream Spotify sono protetti: ogni brano viene cercato e scaricato da YouTube."
+
+downloader.save_to:
+  en: "Save to"
+  it: "Salva in"
+
+downloader.kind:
+  en: "Download"
+  it: "Scarica"
+
+downloader.audio:
+  en: "Audio only"
+  it: "Solo audio"
+
+downloader.video:
+  en: "Video"
+  it: "Video"
+
+downloader.audio_format:
+  en: "Audio format"
+  it: "Formato audio"
+
+downloader.resolution:
+  en: "Max resolution"
+  it: "Risoluzione max"
+
+downloader.h264_hint:
+  en: "Prefer H.264: the smoothest to edit. Off allows VP9, which goes up to 4K on YouTube."
+  it: "Preferisci H.264: il più fluido in montaggio. Disattivato consente VP9, che su YouTube arriva al 4K."
+
+downloader.cookies:
+  en: "Cookies from"
+  it: "Cookie da"
+
+downloader.cookies_none:
+  en: "None"
+  it: "Nessuno"
+
+downloader.cookies_hint:
+  en: "For posts that need a login: yt-dlp reads the session of this browser"
+  it: "Per i post che richiedono il login: yt-dlp legge la sessione di questo browser"
+
+downloader.only_section:
+  en: "Only a section"
+  it: "Solo una parte"
+
+downloader.from:
+  en: "From"
+  it: "Da"
+
+downloader.to:
+  en: "to"
+  it: "a"
+
+downloader.length:
+  en: "length %{length}"
+  it: "durata %{length}"
+
+downloader.chapter:
+  en: "Chapter…"
+  it: "Capitolo…"
+
+downloader.heatmap_hint:
+  en: "The curve is YouTube's \"most replayed\": peaks are the moments people seek to."
+  it: "La curva è il \"più riprodotto\" di YouTube: i picchi sono i momenti più rivisti."
+
+downloader.started:
+  en: "%{count} download(s) started in the background"
+  it: "%{count} download avviati in background"

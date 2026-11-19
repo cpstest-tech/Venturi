@@ -24,11 +24,11 @@ AUDIO_CODECS="lame-$LAME_VERSION ogg-$OGG_VERSION vorbis-$VORBIS_VERSION opus-$O
 
 OS="$(uname -s)"
 if [ "$OS" = Darwin ]; then
-    WANT="$FFMPEG_TAG videotoolbox $X264_BRANCH $RUBBERBAND_TAG $AUDIO_CODECS ${MACOSX_DEPLOYMENT_TARGET:-}"
+    WANT="$FFMPEG_TAG videotoolbox $X264_BRANCH $RUBBERBAND_TAG $AUDIO_CODECS cli ${MACOSX_DEPLOYMENT_TARGET:-}"
     JOBS="$(sysctl -n hw.ncpu)"
     HW_FLAGS=(--enable-videotoolbox)
 else
-    WANT="$FFMPEG_TAG $NV_HEADERS_TAG nvdec vulkan $X264_BRANCH $RUBBERBAND_TAG $AUDIO_CODECS"
+    WANT="$FFMPEG_TAG $NV_HEADERS_TAG nvdec vulkan $X264_BRANCH $RUBBERBAND_TAG $AUDIO_CODECS cli"
     JOBS="$(nproc)"
     # No VA-API: libva would be linked, not loaded with dlopen like CUDA and
     # Vulkan, and the AppImage would not start on a system without it.
@@ -123,8 +123,9 @@ git clone --depth 1 --branch "$FFMPEG_TAG" \
     # --disable-autodetect: no dependencies picked up at random from the build
     # machine; the ones we need are enabled explicitly.
     # LAME has no pkg-config file: its headers and library are found by path.
+    # The ffmpeg and ffprobe programs are shipped for the web downloader (yt-dlp).
     ./configure --prefix="$PREFIX" --enable-shared --disable-static \
-        --enable-gpl --disable-autodetect --disable-programs --disable-doc \
+        --enable-gpl --disable-autodetect --disable-programs --enable-ffmpeg --enable-ffprobe --disable-doc \
         --extra-cflags="-I$PREFIX/include" --extra-ldflags="-L$PREFIX/lib" \
         --enable-libx264 --enable-librubberband --enable-zlib \
         --enable-libmp3lame --enable-libopus --enable-libvorbis "${HW_FLAGS[@]}"

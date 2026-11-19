@@ -21,6 +21,8 @@ mod canvas_ui;
 mod color_window;
 mod compressor_panel;
 mod cover;
+mod downloader;
+mod downloader_ui;
 mod eq_panel;
 mod export_dialog;
 mod export_modal;
@@ -513,6 +515,7 @@ struct VenturiApp {
     stickers: stickers_ui::StickerState,
     fx: fx_library::FxState,
     toast: Option<(String, std::time::Instant)>,
+    downloads: downloader_ui::DownloadState,
     /// Per file, see `first_media::probe_rotation`.
     media_rotation: HashMap<PathBuf, u16>,
     preset_dialog: Option<presets::PresetDialog>,
@@ -694,6 +697,7 @@ impl Default for VenturiApp {
             stickers: Default::default(),
             fx: Default::default(),
             toast: None,
+            downloads: Default::default(),
             media_rotation: Default::default(),
             preset_dialog: None,
             clipboard_image_rx: None,
@@ -3445,6 +3449,9 @@ impl VenturiApp {
                     self.publish_clipboard(ui.ctx());
                     self.delete_selected();
                 }
+                egui::Event::Paste(text)
+                    if !ui.ctx().egui_wants_keyboard_input()
+                        && self.paste_download_link(ui.ctx(), text) => {}
                 egui::Event::Paste(text) if text.is_empty() => {
                     self.request_clipboard_image(ui.ctx())
                 }
@@ -4405,6 +4412,7 @@ impl VenturiApp {
                     ui.separator();
                     ui.colored_label(theme::ERROR, err);
                 }
+                self.show_download_indicator(ui);
                 if let Some((done, total)) = self.import_progress() {
                     ui.separator();
                     ui.add(
@@ -4427,6 +4435,8 @@ impl VenturiApp {
         self.poll_subtitles(ui.ctx());
         self.poll_ai_clips(ui.ctx());
         self.show_recovery_notice(ui.ctx());
+        self.poll_downloads(ui.ctx());
+        self.show_download_dialog(ui.ctx());
         self.show_toast(ui.ctx());
         self.show_settings_dialog(ui.ctx());
         self.show_about_dialog(ui.ctx());

@@ -36,6 +36,7 @@ cargo build -p vv-app --release
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resources"
 cp "$TARGET_DIR/release/tandem" "$APP/Contents/MacOS/"
+cp "$FFMPEG_PREFIX/bin/ffmpeg" "$FFMPEG_PREFIX/bin/ffprobe" "$APP/Contents/MacOS/"
 cp media/icons/macos/tandem.icns "$APP/Contents/Resources/tandem.icns"
 
 cat > "$APP/Contents/Info.plist" <<EOF
@@ -79,12 +80,14 @@ for lib in "$APP"/Contents/Frameworks/*.dylib; do
     install_name_tool -id "@rpath/$(basename "$lib")" "$lib"
     relink "$lib"
 done
-relink "$APP/Contents/MacOS/tandem"
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/tandem"
+for bin in tandem ffmpeg ffprobe; do
+    relink "$APP/Contents/MacOS/$bin"
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/$bin"
+done
 
 # Every required @rpath library must be in the bundle and nothing may link
 # an absolute path outside the system, which the user's machine lacks.
-for file in "$APP"/Contents/MacOS/tandem "$APP"/Contents/Frameworks/*.dylib; do
+for file in "$APP"/Contents/MacOS/* "$APP"/Contents/Frameworks/*.dylib; do
     for dep in $(otool -L "$file" | awk 'NR > 1 { print $1 }'); do
         case "$dep" in
             /usr/lib/*|/System/*) ;;
@@ -103,6 +106,7 @@ done
 # install_name_tool invalidates the signatures, and arm64 refuses to run
 # unsigned code: ad-hoc re-sign, libraries first.
 codesign --force --sign - "$APP"/Contents/Frameworks/*.dylib
+codesign --force --sign - "$APP"/Contents/MacOS/ffmpeg "$APP"/Contents/MacOS/ffprobe
 codesign --force --sign - "$APP"
 
 rm -f "$DMG"
