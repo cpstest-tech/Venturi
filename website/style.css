@@ -162,7 +162,6 @@ h1 em.strike::after {
 .os-row li { display: flex; align-items: center; gap: 8px; }
 .os-row svg { width: 20px; height: 20px; }
 .os-row .soon i { font: 500 .66rem/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--violet); background: #a78bfa1f; padding: 4px 6px; border-radius: 5px; font-style: normal; }
-.os-tux { filter: drop-shadow(0 0 1px #ffffff90); }
 
 /* hero stage */
 .hero-stage { position: relative; perspective: 1600px; }

@@ -22,14 +22,9 @@
 <body>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-linux" viewBox="0 0 64 64">
-    <ellipse cx="32" cy="38" rx="17" ry="22" fill="#14141a"/>
-    <ellipse cx="32" cy="43" rx="11" ry="15" fill="#f4f1ea"/>
-    <ellipse cx="32" cy="18" rx="12" ry="13" fill="#14141a"/>
-    <ellipse cx="27.5" cy="16" rx="3.4" ry="4.2" fill="#fff"/><ellipse cx="36.5" cy="16" rx="3.4" ry="4.2" fill="#fff"/>
-    <circle cx="28.3" cy="16.8" r="1.7" fill="#14141a"/><circle cx="35.7" cy="16.8" r="1.7" fill="#14141a"/>
-    <path d="M25.5 23.5c2.5-2.6 10.5-2.6 13 0-1.8 3.4-11.2 3.4-13 0z" fill="#f6b21b"/>
-    <ellipse cx="22" cy="58" rx="9" ry="4.2" fill="#f6b21b"/><ellipse cx="42" cy="58" rx="9" ry="4.2" fill="#f6b21b"/>
+  <symbol id="i-linux" viewBox="0 0 24 24">
+    <mask id="tux-cut"><rect width="24" height="24" fill="#fff"/><ellipse cx="12" cy="15.9" rx="3.3" ry="4.6" fill="#000"/><ellipse cx="10.5" cy="6.4" rx="1.05" ry="1.45" fill="#000"/><ellipse cx="13.5" cy="6.4" rx="1.05" ry="1.45" fill="#000"/><path d="M10.6 9.1h2.8L12 10.6z" fill="#000"/></mask>
+    <g fill="currentColor"><g mask="url(#tux-cut)"><ellipse cx="12" cy="6.8" rx="4.8" ry="5.4"/><ellipse cx="12" cy="14.6" rx="7.4" ry="8.1"/></g><ellipse cx="8.3" cy="21.9" rx="3.3" ry="1.6"/><ellipse cx="15.7" cy="21.9" rx="3.3" ry="1.6"/></g>
   </symbol>
   <symbol id="i-apple" viewBox="0 0 24 24"><path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></symbol>
   <symbol id="i-windows" viewBox="0 0 24 24"><path fill="currentColor" d="M0 3.4 9.8 2v9.5H0zM11 1.8 24 0v11.4H11zM0 12.6h9.8V22L0 20.6zm11 0h13V24l-13-1.8z"/></symbol>
@@ -93,7 +88,7 @@
       <a class="btn btn-ghost btn-lg" href="https://discord.gg/PuqMem4AFn"><svg><use href="#i-discord"/></svg><span>Join the Discord</span></a>
     </div>
     <ul class="os-row reveal" aria-label="Supported platforms">
-      <li><svg class="os-tux"><use href="#i-linux"/></svg>Linux</li>
+      <li><svg><use href="#i-linux"/></svg>Linux</li>
       <li><svg><use href="#i-apple"/></svg>macOS</li>
       <li class="soon"><svg><use href="#i-windows"/></svg>Windows <i>soon</i></li>
     </ul>
@@ -274,7 +269,7 @@
 
   <div class="dl-grid">
     <article class="dl reveal" data-os="linux">
-      <div class="dl-head"><svg class="dl-os os-tux"><use href="#i-linux"/></svg><div><h3>Linux</h3><p>x86_64 · aarch64 · AppImage</p></div></div>
+      <div class="dl-head"><svg class="dl-os"><use href="#i-linux"/></svg><div><h3>Linux</h3><p>x86_64 · aarch64 · AppImage</p></div></div>
       <p class="dl-note">One-line installer, no sudo. Adds Tandem to your app menu.</p>
       <div class="code">
         <code>curl -fL https://github.com/cpstest-tech/Venturi/releases/latest/download/install.sh -o install.sh &amp;&amp; bash install.sh</code>
