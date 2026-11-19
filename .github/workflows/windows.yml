@@ -1,0 +1,59 @@
+name: Windows
+
+# Called by Release; can also be run by hand to get the files as artifacts.
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches: [windows-build]
+
+jobs:
+  build:
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: bash
+    env:
+      LIBCLANG_PATH: C:\Program Files\LLVM\bin
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # whisper-rs builds ggml's Vulkan backend: headers, loader and glslc.
+      - uses: jakoch/install-vulkan-sdk-action@v1.8.1
+        with:
+          vulkan_version: latest
+          install_runtime: true
+          cache: true
+          stripdown: true
+
+      - name: Install Inno Setup
+        run: |
+          command -v iscc || choco install innosetup -y --no-progress
+          echo "C:\Program Files (x86)\Inno Setup 6" >> "$GITHUB_PATH"
+
+      - name: Cache key
+        id: cache-key
+        run: echo "hash=$(grep -v '^version = ' Cargo.toml | cat - .cargo/config.toml | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ steps.cache-key.outputs.hash }}
+
+      # After rust-cache, whose cleanup would otherwise empty it first.
+      - uses: actions/cache@v6
+        with:
+          path: target/ffmpeg-windows
+          key: ffmpeg-windows-${{ hashFiles('scripts/build-windows.sh') }}
+
+      - name: Build
+        run: scripts/build-windows.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Tandem-windows-x64
+          path: |
+            target/windows/Tandem-windows-x64.zip
+            target/windows/Tandem-windows-x64-setup.exe
+          if-no-files-found: error

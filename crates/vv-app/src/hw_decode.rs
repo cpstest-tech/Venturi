@@ -232,6 +232,11 @@ fn created(mode: HwDecodeMode) -> Vec<HwDevice> {
 /// Default budget for the HW surfaces: an eighth of the physical memory,
 /// which on Apple Silicon is also the GPU's.
 pub fn default_budget_bytes() -> usize {
+    physical_memory().map_or(1_000_000_000, |bytes| bytes / 8)
+}
+
+#[cfg(unix)]
+fn physical_memory() -> Option<usize> {
     // SAFETY: plain queries, -1 on failure.
     let (pages, page_size) = unsafe {
         (
@@ -239,10 +244,21 @@ pub fn default_budget_bytes() -> usize {
             libc::sysconf(libc::_SC_PAGESIZE),
         )
     };
-    if pages <= 0 || page_size <= 0 {
-        return 1_000_000_000;
-    }
-    pages as usize * page_size as usize / 8
+    (pages > 0 && page_size > 0).then(|| pages as usize * page_size as usize)
+}
+
+#[cfg(windows)]
+fn physical_memory() -> Option<usize> {
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    // SAFETY: plain data; dwLength must be set before the call.
+    let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+    status.dwLength = size_of::<MEMORYSTATUSEX>() as u32;
+    (unsafe { GlobalMemoryStatusEx(&mut status) } != 0).then_some(status.ullTotalPhys as usize)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn physical_memory() -> Option<usize> {
+    None
 }
 
 #[cfg(test)]

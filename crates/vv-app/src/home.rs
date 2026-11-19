@@ -880,7 +880,24 @@ fn local_time(secs: i64) -> (i64, u32, u32, u32, u32) {
     )
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn local_time(secs: i64) -> (i64, u32, u32, u32, u32) {
+    let time = secs as libc::time_t;
+    // SAFETY: `tm` is plain data, `localtime_s` only writes into it.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_s(&mut tm, &time) } != 0 {
+        return utc_time(secs);
+    }
+    (
+        i64::from(tm.tm_year) + 1900,
+        (tm.tm_mon + 1) as u32,
+        tm.tm_mday as u32,
+        tm.tm_hour as u32,
+        tm.tm_min as u32,
+    )
+}
+
+#[cfg(not(any(unix, windows)))]
 fn local_time(secs: i64) -> (i64, u32, u32, u32, u32) {
     utc_time(secs)
 }
