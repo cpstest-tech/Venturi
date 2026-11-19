@@ -56,8 +56,11 @@ jobs:
           path: C:\t\ffmpeg-windows
           key: ffmpeg-windows-${{ hashFiles('scripts/build-windows.sh') }}
 
+      # Git's coreutils `link` would shadow MSVC's link.exe on PATH.
       - name: Build
-        run: scripts/build-windows.sh
+        run: |
+          rm -f /usr/bin/link.exe
+          scripts/build-windows.sh
 
       - uses: actions/upload-artifact@v7
         with:
