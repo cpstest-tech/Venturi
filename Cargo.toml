@@ -22,7 +22,7 @@ smithay-clipboard = { path = "vendor/smithay-clipboard" }
 
 [workspace.package]
 edition = "2024"
-version = "0.10.2"
+version = "0.10.3"
 license = "GPL-3.0-or-later"
 
 [workspace.lints.clippy]
