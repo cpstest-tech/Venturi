@@ -765,6 +765,8 @@ pub struct Settings {
     /// Preview from the all-intra proxy once ready: smooth scrubbing on
     /// long-GOP sources. Export always uses the originals.
     pub proxy_enabled: bool,
+    /// With `proxy_enabled` off, proxies only for `heavy_to_decode` media.
+    pub proxy_auto: bool,
     pub proxy_quality: ProxyQuality,
     pub preview_resolution: PreviewResolution,
     /// Seconds buffered ahead of/behind the playhead.
@@ -878,6 +880,7 @@ impl Default for Settings {
             kinetic_scroll: true,
             kinetic_scroll_media_pool: true,
             proxy_enabled: false,
+            proxy_auto: true,
             proxy_quality: ProxyQuality::default(),
             preview_resolution: PreviewResolution::default(),
             lookahead_secs: crate::render_ahead::DEFAULT_LOOKAHEAD_SECS,
@@ -912,7 +915,12 @@ impl Default for Settings {
 impl Settings {
     /// Quality of the proxies to use, `None` if they are off.
     pub fn proxy(&self) -> Option<ProxyQuality> {
-        self.proxy_enabled.then_some(self.proxy_quality)
+        (self.proxy_enabled || self.proxy_auto).then_some(self.proxy_quality)
+    }
+
+    /// Whether `meta`'s media gets a proxy generated.
+    pub fn wants_proxy(&self, meta: &vv_core::MediaMeta) -> bool {
+        self.proxy_enabled || (self.proxy_auto && heavy_to_decode(meta))
     }
 
     pub fn hw_decode_budget_bytes(&self) -> usize {
@@ -959,6 +967,8 @@ struct SettingsFile {
     /// proxies were on by default, it does not reflect a user choice.
     #[serde(default)]
     use_proxies: Option<bool>,
+    #[serde(default)]
+    auto_proxies: Option<bool>,
     #[serde(default)]
     proxy_quality: Option<String>,
     #[serde(default)]
@@ -1160,6 +1170,7 @@ impl Settings {
         settings.kinetic_scroll = file.kinetic_scroll.unwrap_or(true);
         settings.kinetic_scroll_media_pool = file.kinetic_scroll_media_pool.unwrap_or(true);
         settings.proxy_enabled = file.use_proxies.unwrap_or(settings.proxy_enabled);
+        settings.proxy_auto = file.auto_proxies.unwrap_or(settings.proxy_auto);
         settings.proxy_quality = file
             .proxy_quality
             .as_deref()
@@ -1293,6 +1304,7 @@ impl Settings {
             kinetic_scroll: Some(self.kinetic_scroll),
             kinetic_scroll_media_pool: Some(self.kinetic_scroll_media_pool),
             use_proxies: Some(self.proxy_enabled),
+            auto_proxies: Some(self.proxy_auto),
             proxy_quality: Some(self.proxy_quality.id().to_owned()),
             preview_resolution: Some(self.preview_resolution.id().to_owned()),
             lookahead_secs: Some(self.lookahead_secs),
@@ -1419,4 +1431,12 @@ impl Settings {
             ApiAccess::Disabled
         }
     }
+}
+
+/// Media whose software decode cannot keep up with scrubbing on an ordinary
+/// laptop: HEVC/AV1, or more pixels per second than 1080p30.
+pub fn heavy_to_decode(meta: &vv_core::MediaMeta) -> bool {
+    let codec = meta.file.video_codec.as_deref().unwrap_or_default();
+    let pixel_rate = f64::from(meta.width) * f64::from(meta.height) * meta.fps.as_f64();
+    matches!(codec, "hevc" | "av1") || pixel_rate > 1920.0 * 1088.0 * 30.0
 }

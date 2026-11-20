@@ -4947,3 +4947,14 @@ fn decode_sizes_divide_the_shown_size_and_leave_a_native_one_alone() {
     };
     assert_eq!(native.max_size(media, &item), None);
 }
+
+#[test]
+fn uncovered_cuts_the_holes_out_of_the_range() {
+    assert_eq!(uncovered(0..100, vec![]), vec![(0, 100)]);
+    assert_eq!(
+        uncovered(0..100, vec![40..60, 10..20]),
+        vec![(0, 10), (20, 40), (60, 100)]
+    );
+    assert_eq!(uncovered(0..100, vec![-5..50, 30..120]), vec![]);
+    assert_eq!(uncovered(10..20, vec![0..5, 25..30]), vec![(10, 20)]);
+}

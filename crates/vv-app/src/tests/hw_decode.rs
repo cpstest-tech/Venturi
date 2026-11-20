@@ -91,6 +91,7 @@ fn modes_round_trip_through_their_ids() {
         HwDecodeMode::Auto,
         HwDecodeMode::Off,
         HwDecodeMode::Nvdec,
+        HwDecodeMode::Vaapi,
         HwDecodeMode::Vulkan,
     ] {
         assert_eq!(HwDecodeMode::from_id(mode.id()), Some(mode));
@@ -104,5 +105,31 @@ fn device_labels_name_the_backend_and_the_gpu() {
     assert_eq!(
         device_label(&vulkan(&intel())),
         "Vulkan, Intel(R) UHD Graphics 620"
+    );
+}
+
+#[test]
+fn vaapi_comes_before_vulkan_on_intel_and_amd() {
+    let gpus = [nvidia(), intel()];
+    let devices = with_vaapi(
+        HwDecodeMode::Auto,
+        resolve(HwDecodeMode::Auto, &gpus, false),
+        &gpus,
+    );
+    assert_eq!(devices, [HwDevice::Vaapi, vulkan(&intel())]);
+    let only_nvidia = [nvidia()];
+    let devices = with_vaapi(
+        HwDecodeMode::Auto,
+        resolve(HwDecodeMode::Auto, &only_nvidia, false),
+        &only_nvidia,
+    );
+    assert_eq!(devices, [HwDevice::Cuda, vulkan(&nvidia())]);
+    assert_eq!(
+        with_vaapi(HwDecodeMode::Vulkan, vec![vulkan(&intel())], &[intel()]),
+        [vulkan(&intel())]
+    );
+    assert_eq!(
+        resolve(HwDecodeMode::Vaapi, &[intel()], false),
+        [HwDevice::Vaapi]
     );
 }

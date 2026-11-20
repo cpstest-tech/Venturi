@@ -636,3 +636,81 @@ fn strips_walk_the_track_mixes_in_order_then_the_master() {
     assert_eq!(gains, [0.0, 1.0, 2.0]);
     assert_eq!(tl.master.gain_db, 2.0);
 }
+
+fn opaque_meta(width: u32, height: u32) -> MediaMeta {
+    MediaMeta {
+        duration_frames: 100,
+        fps: Rational::new(30, 1),
+        width,
+        height,
+        has_video: true,
+        has_audio: true,
+        sample_rate: 48000,
+        channels: 2,
+        audio_streams: 1,
+        file: Default::default(),
+    }
+}
+
+fn covering_clip(transform: Transform) -> Clip {
+    let mut clip = Clip::from_source_range(
+        ClipId(1),
+        ClipSource::Media(<MediaId as Id>::from_raw(1)),
+        0,
+        100,
+        0,
+        Rational::one(),
+    );
+    clip.effects.transform = TransformTracks::constant(transform);
+    clip
+}
+
+#[test]
+fn covers_canvas_when_the_aspect_matches() {
+    let clip = covering_clip(Transform::default());
+    assert!(clip.covers_canvas(&opaque_meta(1080, 1920), (1080, 1920)));
+    assert!(clip.covers_canvas(&opaque_meta(540, 960), (1080, 1920)));
+    assert!(!clip.covers_canvas(&opaque_meta(1920, 1080), (1080, 1920)));
+}
+
+#[test]
+fn covers_canvas_with_a_turn_and_the_zoom_filling_it() {
+    let fill = 1920.0 / 1080.0;
+    let turned = |zoom: f32| {
+        covering_clip(Transform {
+            rotation: 90.0,
+            zoom: [zoom; 2],
+            ..Default::default()
+        })
+    };
+    let landscape = opaque_meta(1920, 1080);
+    assert!(turned(fill).covers_canvas(&landscape, (1080, 1920)));
+    assert!(!turned(1.0).covers_canvas(&landscape, (1080, 1920)));
+}
+
+#[test]
+fn covers_canvas_not_when_anything_lets_the_bottom_through() {
+    let meta = opaque_meta(1920, 1080);
+    let half = covering_clip(Transform {
+        opacity: 50.0,
+        ..Default::default()
+    });
+    assert!(!half.covers_canvas(&meta, (1920, 1080)));
+    let moved = covering_clip(Transform {
+        position: [10.0, 0.0],
+        ..Default::default()
+    });
+    assert!(!moved.covers_canvas(&meta, (1920, 1080)));
+    let zoomed_and_moved = covering_clip(Transform {
+        position: [10.0, 0.0],
+        zoom: [1.1, 1.1],
+        ..Default::default()
+    });
+    assert!(zoomed_and_moved.covers_canvas(&meta, (1920, 1080)));
+    let mut faded = covering_clip(Transform::default());
+    faded.fade_in = 10;
+    assert!(!faded.covers_canvas(&meta, (1920, 1080)));
+    let mut blended = covering_clip(Transform::default());
+    blended.effects.blend_mode = BlendMode::Multiply;
+    assert!(!blended.covers_canvas(&meta, (1920, 1080)));
+}

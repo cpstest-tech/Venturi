@@ -11,6 +11,7 @@ pub enum HwDecodeMode {
     Auto,
     Off,
     Nvdec,
+    Vaapi,
     Vulkan,
 }
 
@@ -20,6 +21,14 @@ impl HwDecodeMode {
     pub fn available() -> &'static [Self] {
         if cfg!(target_os = "macos") {
             &[Self::Auto, Self::Off]
+        } else if cfg!(target_os = "linux") {
+            &[
+                Self::Auto,
+                Self::Off,
+                Self::Nvdec,
+                Self::Vaapi,
+                Self::Vulkan,
+            ]
         } else {
             &[Self::Auto, Self::Off, Self::Nvdec, Self::Vulkan]
         }
@@ -30,14 +39,21 @@ impl HwDecodeMode {
             Self::Auto => "auto",
             Self::Off => "off",
             Self::Nvdec => "nvdec",
+            Self::Vaapi => "vaapi",
             Self::Vulkan => "vulkan",
         }
     }
 
     pub fn from_id(id: &str) -> Option<Self> {
-        [Self::Auto, Self::Off, Self::Nvdec, Self::Vulkan]
-            .into_iter()
-            .find(|mode| mode.id() == id)
+        [
+            Self::Auto,
+            Self::Off,
+            Self::Nvdec,
+            Self::Vaapi,
+            Self::Vulkan,
+        ]
+        .into_iter()
+        .find(|mode| mode.id() == id)
     }
 }
 
@@ -88,6 +104,7 @@ pub fn resolve(mode: HwDecodeMode, gpus: &[wgpu::AdapterInfo], macos: bool) -> V
     match mode {
         HwDecodeMode::Off => Vec::new(),
         HwDecodeMode::Nvdec => vec![HwDevice::Cuda],
+        HwDecodeMode::Vaapi => vec![HwDevice::Vaapi],
         HwDecodeMode::Vulkan => of_type(wgpu::DeviceType::DiscreteGpu)
             .or(real.first())
             .map(vulkan_on)
@@ -109,6 +126,39 @@ pub fn resolve(mode: HwDecodeMode, gpus: &[wgpu::AdapterInfo], macos: bool) -> V
     }
 }
 
+/// Linux: VA-API ahead of Vulkan video in `Auto`, which Mesa's ANV still
+/// hides behind a flag on most Intel GPUs.
+pub fn with_vaapi(
+    mode: HwDecodeMode,
+    mut devices: Vec<HwDevice>,
+    gpus: &[wgpu::AdapterInfo],
+) -> Vec<HwDevice> {
+    let mesa_gpu = gpus.iter().any(|gpu| {
+        gpu.vendor != NVIDIA_VENDOR_ID
+            && matches!(
+                gpu.device_type,
+                wgpu::DeviceType::IntegratedGpu | wgpu::DeviceType::DiscreteGpu
+            )
+    });
+    if mode == HwDecodeMode::Auto && mesa_gpu {
+        let at = devices
+            .iter()
+            .position(|device| matches!(device, HwDevice::Vulkan(_)))
+            .unwrap_or(devices.len());
+        devices.insert(at, HwDevice::Vaapi);
+    }
+    devices
+}
+
+fn platform_resolve(mode: HwDecodeMode, gpus: &[wgpu::AdapterInfo]) -> Vec<HwDevice> {
+    let devices = resolve(mode, gpus, cfg!(target_os = "macos"));
+    if cfg!(target_os = "linux") {
+        with_vaapi(mode, devices, gpus)
+    } else {
+        devices
+    }
+}
+
 static GPUS: OnceLock<Vec<wgpu::AdapterInfo>> = OnceLock::new();
 
 fn gpus() -> &'static [wgpu::AdapterInfo] {
@@ -125,12 +175,11 @@ fn gpus() -> &'static [wgpu::AdapterInfo] {
 /// setting's first. Starts checking them in the background, so the ones that
 /// do not open turn `known_unavailable` while the window is up.
 pub fn export_choices() -> Vec<HwDevice> {
-    let macos = cfg!(target_os = "macos");
     let has_nvidia = gpus().iter().any(|gpu| gpu.vendor == NVIDIA_VENDOR_ID);
     let mut choices = devices();
     let candidates = [HwDecodeMode::Auto, HwDecodeMode::Vulkan]
         .into_iter()
-        .flat_map(|mode| resolve(mode, gpus(), macos))
+        .flat_map(|mode| platform_resolve(mode, gpus()))
         .chain(has_nvidia.then_some(HwDevice::Cuda));
     for device in candidates {
         if !choices.contains(&device) {
@@ -153,7 +202,7 @@ pub fn auto_device() -> Option<Option<HwDevice>> {
     let macos = cfg!(target_os = "macos");
     let gpus = if macos { &[][..] } else { GPUS.get()? };
     Some(
-        resolve(HwDecodeMode::Auto, gpus, macos)
+        platform_resolve(HwDecodeMode::Auto, gpus)
             .into_iter()
             .find(|device| !vv_media::hw::known_unavailable(device)),
     )
@@ -163,6 +212,7 @@ pub fn device_label(device: &HwDevice) -> String {
     match device {
         HwDevice::VideoToolbox => "VideoToolbox".into(),
         HwDevice::Cuda => "NVDEC".into(),
+        HwDevice::Vaapi => "VA-API".into(),
         HwDevice::Vulkan(Some(gpu)) => format!("Vulkan, {gpu}"),
         HwDevice::Vulkan(None) => "Vulkan".into(),
     }
@@ -211,7 +261,7 @@ pub fn fallback() -> Option<Fallback> {
 }
 
 fn created(mode: HwDecodeMode) -> Vec<HwDevice> {
-    let resolved = resolve(mode, gpus(), cfg!(target_os = "macos"));
+    let resolved = platform_resolve(mode, gpus());
     let devices: Vec<HwDevice> = resolved
         .iter()
         .filter(|device| vv_media::hw::available(device))

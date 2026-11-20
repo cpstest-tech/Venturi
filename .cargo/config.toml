@@ -2,3 +2,6 @@
 # The graphics tests (compositor/render) share headless GPU resources
 # (lavapipe): run in parallel they SIGSEGV intermittently.
 RUST_TEST_THREADS = "1"
+# whisper-rs builds ggml for the build machine's CPU otherwise: AVX-512 from
+# the CI runners crashes (SIGILL) on CPUs without it.
+GGML_NATIVE = "OFF"

@@ -2257,6 +2257,79 @@ impl Clip {
         self.timeline_start + self.timeline_len
     }
 
+    /// Whether the clip paints every pixel of a `canvas`-sized timeline
+    /// opaque for its whole length, `media` being its source and known to
+    /// have no alpha. Conservative: any effect that could let through what
+    /// is below answers `false`.
+    pub fn covers_canvas(&self, media: &MediaMeta, canvas: (u32, u32)) -> bool {
+        let fx = &self.effects;
+        let anim = &fx.animations;
+        let plain = !self.disabled
+            && matches!(self.source, ClipSource::Media(_))
+            && media.has_video
+            && !media.is_image()
+            && media.width > 0
+            && media.height > 0
+            && self.fade_in <= 0
+            && self.fade_out <= 0
+            && fx.transition_in.is_none()
+            && fx.transition_out.is_none()
+            && fx.blend_mode == BlendMode::Normal
+            && fx.masks.iter().all(|m| !m.is_active())
+            && fx.matte.is_none()
+            && fx.assets.is_empty()
+            && !fx.remove_background
+            && fx.title.is_none()
+            && fx.filters.iter().all(|f| !f.enabled)
+            && anim.in_asset.is_none()
+            && anim.out_asset.is_none()
+            && anim.combo_asset.is_none()
+            && anim.entrance.is_none()
+            && anim.exit.is_none()
+            && !anim.pulse
+            && fx.transform.is_constant();
+        if !plain {
+            return false;
+        }
+        let t = fx.transform.value_at(self.timeline_start);
+        if t.opacity < 100.0 || t.crop != [0.0; 4] || t.crop_softness != 0.0 {
+            return false;
+        }
+        let (w, h) = (canvas.0 as f64, canvas.1 as f64);
+        let source_aspect = media.width as f64 / media.height as f64;
+        let (fit_w, fit_h) = if source_aspect > w / h {
+            (w, w / source_aspect)
+        } else {
+            (h * source_aspect, h)
+        };
+        let [zx, zy] = t.zoom.map(f64::from);
+        let [ax, ay] = t.anchor.map(f64::from);
+        // Ranges relative to the pivot, then where the pivot lands.
+        let mut x = (zx * (-fit_w / 2.0 - ax), zx * (fit_w / 2.0 - ax));
+        let mut y = (zy * (-fit_h / 2.0 - ay), zy * (fit_h / 2.0 - ay));
+        let rotation = f64::from(t.rotation).rem_euclid(360.0);
+        if rotation == 180.0 {
+            x = (-x.1, -x.0);
+            y = (-y.1, -y.0);
+        } else if rotation == 90.0 || rotation == 270.0 {
+            // The direction of the turn and the order of zoom and rotation
+            // only stop mattering when both are symmetric.
+            if t.anchor != [0.0; 2] || zx != zy {
+                return false;
+            }
+            std::mem::swap(&mut x, &mut y);
+        } else if rotation != 0.0 {
+            return false;
+        }
+        let cx = f64::from(t.position[0]) + ax;
+        let cy = f64::from(t.position[1]) + ay;
+        const EPS: f64 = 1e-3;
+        cx + x.0 <= -w / 2.0 + EPS
+            && cx + x.1 >= w / 2.0 - EPS
+            && cy + y.0 <= -h / 2.0 + EPS
+            && cy + y.1 >= h / 2.0 - EPS
+    }
+
     /// `frame` (of the timeline) falls inside the clip.
     pub fn contains(&self, frame: FrameIdx) -> bool {
         frame >= self.timeline_start && frame < self.timeline_end()

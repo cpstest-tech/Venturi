@@ -111,6 +111,12 @@ settings.proxy_quality_high_hint:
 settings.proxy_quality_note:
   en: "Changing quality generates new proxies in the background; the ones already generated for other qualities stay on disk."
   it: "Cambiando qualità vengono generati nuovi proxy in background; quelli già generati per altre qualità restano su disco."
+settings.proxy_auto:
+  en: "Proxies for heavy media only"
+  it: "Proxy solo per i media pesanti"
+settings.proxy_auto_hint:
+  en: "Generates proxies automatically for HEVC/AV1 and for media above 1080p30 (e.g. 1080p60 phone videos), which a CPU struggles to decode while scrubbing. Export always uses the originals."
+  it: "Genera automaticamente i proxy per HEVC/AV1 e per i media sopra 1080p30 (ad es. i video del telefono a 1080p60), che la CPU fatica a decodificare durante lo scrub. L'export usa sempre gli originali."
 settings.hw_decode:
   en: "Hardware decoding"
   it: "Decodifica hardware"
@@ -129,6 +135,12 @@ settings.hw_decode_off:
 settings.hw_decode_nvdec:
   en: "NVIDIA (NVDEC)"
   it: "NVIDIA (NVDEC)"
+settings.hw_decode_vaapi:
+  en: "VA-API"
+  it: "VA-API"
+settings.hw_decode_vaapi_hint:
+  en: "Intel and AMD GPUs on Linux, through the system's VA-API driver (intel-media-driver, Mesa)."
+  it: "GPU Intel e AMD su Linux, tramite il driver VA-API del sistema (intel-media-driver, Mesa)."
 settings.hw_decode_vulkan:
   en: "Vulkan video"
   it: "Vulkan video"

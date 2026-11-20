@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl git make nasm pkg-config \
         gcc g++ clang libclang-dev \
         zlib1g-dev libwayland-dev libxkbcommon-dev libx11-dev \
-        libvulkan-dev glslc spirv-headers libasound2-dev meson ninja-build cmake \
+        libvulkan-dev glslc spirv-headers libasound2-dev meson ninja-build cmake libdrm-dev \
         patchelf file desktop-file-utils zsync \
     && rm -rf /var/lib/apt/lists/*
 

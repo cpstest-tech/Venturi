@@ -13,6 +13,9 @@ use std::time::{Duration, Instant};
 pub enum HwDevice {
     VideoToolbox,
     Cuda,
+    /// Linux, the default DRM render node: Intel and AMD through Mesa or
+    /// intel-media-driver.
+    Vaapi,
     /// `None`: the driver's first device; else the GPU whose name contains
     /// the string (FFmpeg matches it against `deviceName`).
     Vulkan(Option<String>),
@@ -23,6 +26,7 @@ impl HwDevice {
         match self {
             Self::VideoToolbox => ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
             Self::Cuda => ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_CUDA,
+            Self::Vaapi => ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI,
             Self::Vulkan(_) => ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VULKAN,
         }
     }

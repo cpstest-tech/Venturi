@@ -1,0 +1,26 @@
+#!/bin/sh
+# libva must be at least as new as both the VA-API driver (or the driver
+# does not load) and the one FFmpeg was built against: the system copy when
+# it is, the bundled one otherwise.
+HERE="$(dirname "$(readlink -f "$0")")"
+
+# libva.so.2.2400.0 -> 2400
+libva_version() {
+    file="$(readlink -f "$1" 2>/dev/null)" || return
+    version="${file##*/libva.so.2.}"
+    echo "${version%%.*}"
+}
+
+system="$({ /sbin/ldconfig -p || ldconfig -p; } 2>/dev/null \
+    | grep 'libc6,' | sed -n 's/^[[:space:]]*libva\.so\.2 .*=> //p' | head -n 1)"
+system_version="$(libva_version "$system")"
+bundled_version="$(libva_version "$HERE/usr/lib/libva/libva.so.2")"
+case "$system_version" in
+    '' | *[!0-9]*) use_bundled=1 ;;
+    *) [ "$system_version" -lt "${bundled_version:-0}" ] && use_bundled=1 ;;
+esac
+if [ -n "${use_bundled:-}" ]; then
+    LD_LIBRARY_PATH="$HERE/usr/lib/libva${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export LD_LIBRARY_PATH
+fi
+exec "$HERE/usr/bin/tandem" "$@"

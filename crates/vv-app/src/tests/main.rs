@@ -3845,6 +3845,7 @@ fn proxy_timeline_ranges_covers_the_whole_clip_once_the_proxy_is_ready() {
     );
 
     app.settings.proxy_enabled = false;
+    app.settings.proxy_auto = false;
     assert!(
         app.proxy_timeline_ranges().is_empty(),
         "with the toggle off it must report nothing, even with the proxy ready"
@@ -4131,6 +4132,7 @@ fn disabling_proxies_stops_generation_and_enabling_requeues_the_pool() {
 
     let mut app = VenturiApp::default();
     app.settings.proxy_enabled = false;
+    app.settings.proxy_auto = false;
     app.import_media_files(vec![path]);
     app.wait_for_import();
     assert!(
