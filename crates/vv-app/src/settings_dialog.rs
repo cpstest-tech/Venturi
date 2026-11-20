@@ -435,6 +435,9 @@ fn general_section(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
             t!("settings.kinetic_scroll_media_pool"),
         )
         .changed();
+    changed |= ui
+        .checkbox(&mut settings.check_updates, t!("update.check_at_startup"))
+        .changed();
     changed
 }
 

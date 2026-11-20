@@ -86,6 +86,8 @@ mod timeline_bar;
 mod timeline_commands;
 mod timeline_ui;
 mod transport;
+mod updater;
+mod updater_ui;
 mod viewer_overlay;
 mod viewer_waveform;
 mod viewer_zoom;
@@ -590,6 +592,7 @@ struct VenturiApp {
     settings_path: Option<PathBuf>,
     settings_dialog: Option<settings_dialog::SettingsDialog>,
     about_open: bool,
+    updater: updater_ui::State,
     project_settings_open: bool,
     /// Serving MCP to agents (see `mcp_host`); follows the setting.
     mcp: Option<mcp_host::McpHost>,
@@ -743,6 +746,7 @@ impl Default for VenturiApp {
             settings_path: None,
             settings_dialog: None,
             about_open: false,
+            updater: Default::default(),
             project_settings_open: false,
             mcp: None,
             seen_epoch: 0,
@@ -4302,6 +4306,7 @@ impl eframe::App for VenturiApp {
     // bundle that is still loading.
     fn on_exit(&mut self) {
         self.abandon_plugin_scan();
+        self.run_pending_relaunch();
     }
 }
 
@@ -4348,6 +4353,7 @@ impl VenturiApp {
         self.poll_pending_dialog(&ui.ctx().clone());
         self.poll_project_loading(&ui.ctx().clone());
         self.poll_ai_sequences(ui.ctx());
+        self.show_update_dialog(ui.ctx());
         if self.screen == Screen::Home {
             self.auto_cut.modal = None;
             self.home_ui(ui);
@@ -5397,6 +5403,9 @@ fn main() -> eframe::Result<()> {
                 app.start_on_home_or_recover();
             }
             app.apply_mcp_setting(&cc.egui_ctx);
+            if app.settings.check_updates && !cfg!(debug_assertions) {
+                app.start_update_check(&cc.egui_ctx, false);
+            }
             Ok(Box::new(app))
         }),
     )

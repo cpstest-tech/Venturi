@@ -1,0 +1,89 @@
+_version: 2
+
+update.available_title:
+  en: "Update available"
+  it: "Aggiornamento disponibile"
+
+update.available:
+  en: "Tandem %{version} is available (you have %{current}). Do you want to update?"
+  it: "È disponibile Tandem %{version} (hai la %{current}). Vuoi aggiornare?"
+
+update.release_notes:
+  en: "What's new"
+  it: "Novità"
+
+update.manual_hint:
+  en: "This installation cannot update itself: Yes opens the download page."
+  it: "Questa installazione non può aggiornarsi da sola: Sì apre la pagina di download."
+
+update.yes:
+  en: "Yes"
+  it: "Sì"
+
+update.not_now:
+  en: "Not now"
+  it: "Non ora"
+
+update.ignore:
+  en: "Ignore this release"
+  it: "Ignora questa release"
+
+update.downloading:
+  en: "Downloading Tandem %{version}…"
+  it: "Download di Tandem %{version}…"
+
+update.ready_title:
+  en: "Update ready"
+  it: "Aggiornamento pronto"
+
+update.ready_restart:
+  en: "The new version is installed. Restart Tandem to use it."
+  it: "La nuova versione è installata. Riavvia Tandem per usarla."
+
+update.ready_installer:
+  en: "The installer is ready. Restart now to install it, or it will run when you close Tandem."
+  it: "L'installer è pronto. Riavvia ora per installarlo, oppure partirà alla chiusura di Tandem."
+
+update.ready_dmg:
+  en: "The disk image is open: drag Tandem into Applications, replacing the old one, then restart Tandem."
+  it: "L'immagine disco è aperta: trascina Tandem in Applicazioni sostituendo quello vecchio, poi riavvia Tandem."
+
+update.restart_now:
+  en: "Restart now"
+  it: "Riavvia ora"
+
+update.later:
+  en: "Later"
+  it: "Più tardi"
+
+update.failed_title:
+  en: "Update failed"
+  it: "Aggiornamento non riuscito"
+
+update.failed:
+  en: "The update could not be installed: %{error}"
+  it: "Non è stato possibile installare l'aggiornamento: %{error}"
+
+update.check_failed:
+  en: "Could not check for updates: %{error}"
+  it: "Impossibile cercare aggiornamenti: %{error}"
+
+update.open_page:
+  en: "Open download page"
+  it: "Apri la pagina di download"
+
+update.up_to_date:
+  en: "Tandem %{version} is the latest version."
+  it: "Tandem %{version} è l'ultima versione."
+
+update.ok:
+  en: "OK"
+  it: "OK"
+
+update.check_menu:
+  en: "Check for updates…"
+  it: "Cerca aggiornamenti…"
+
+update.check_at_startup:
+  en: "Check for updates at startup"
+  it: "Cerca aggiornamenti all'avvio"

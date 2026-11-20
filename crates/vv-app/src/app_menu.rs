@@ -844,6 +844,10 @@ impl VenturiApp {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(DISCORD_INVITE));
                         ui.close();
                     }
+                    if ui.button(t!("update.check_menu")).clicked() {
+                        self.start_update_check(ui.ctx(), true);
+                        ui.close();
+                    }
                     ui.separator();
                     if ui.button(t!("menu.about")).clicked() {
                         self.about_open = true;

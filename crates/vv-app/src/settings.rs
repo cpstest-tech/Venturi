@@ -820,6 +820,9 @@ pub struct Settings {
     pub favorites: Vec<String>,
     /// Text styles saved by the user from the text properties.
     pub text_templates: Vec<crate::library_ribbon::TextTemplate>,
+    pub check_updates: bool,
+    /// Tag the user chose to skip in the update prompt.
+    pub ignored_update: Option<String>,
 }
 
 /// Largest size the editor composes at, as a fraction of the timeline's
@@ -908,6 +911,8 @@ impl Default for Settings {
             open_project: None,
             favorites: Vec::new(),
             text_templates: Vec::new(),
+            check_updates: true,
+            ignored_update: None,
         }
     }
 }
@@ -1028,6 +1033,10 @@ struct SettingsFile {
     /// Read one by one: an unreadable template must not lose the settings.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     text_templates: Vec<serde_json::Value>,
+    #[serde(default)]
+    check_updates: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ignored_update: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -1229,6 +1238,8 @@ impl Settings {
             .into_iter()
             .filter_map(|template| serde_json::from_value(template).ok())
             .collect();
+        settings.check_updates = file.check_updates.unwrap_or(true);
+        settings.ignored_update = file.ignored_update;
         let defaults = PanelLayout::default();
         settings.panels = PanelLayout {
             media_pool_open: file
@@ -1346,6 +1357,8 @@ impl Settings {
                 .iter()
                 .filter_map(|template| serde_json::to_value(template).ok())
                 .collect(),
+            check_updates: Some(self.check_updates),
+            ignored_update: self.ignored_update.clone(),
         };
         let text = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
         if let Some(dir) = path.parent() {

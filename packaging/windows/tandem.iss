@@ -47,4 +47,5 @@ Root: HKA; Subkey: "Software\Classes\Tandem.Project\DefaultIcon"; ValueType: str
 Root: HKA; Subkey: "Software\Classes\Tandem.Project\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\tandem.exe"" ""%1"""
 
 [Run]
-Filename: "{app}\tandem.exe"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; Not skipifsilent: Tandem's updater runs this setup with /SILENT and expects the app back.
+Filename: "{app}\tandem.exe"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall

@@ -705,7 +705,14 @@ impl VenturiApp {
                 }
             }
             UnsavedChoice::Discard => self.run_project_switch(switch),
-            UnsavedChoice::Cancel => {}
+            UnsavedChoice::Cancel => {
+                // The installer still runs at the next exit, as the dialog said.
+                if switch == ProjectSwitch::Quit
+                    && matches!(self.updater.relaunch, Some(updater::Relaunch::App(_)))
+                {
+                    self.updater.relaunch = None;
+                }
+            }
         }
     }
 
