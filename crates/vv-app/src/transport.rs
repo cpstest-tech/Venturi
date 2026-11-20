@@ -67,8 +67,8 @@ pub struct TransportResponse {
     pub toggle_fullscreen: bool,
     pub ratio: Option<crate::first_media::Ratio>,
     pub quality: Option<crate::settings::PreviewResolution>,
-    pub toggle_safe_zones: bool,
-    pub safe_zone_platform: Option<String>,
+    /// `Some(None)` switches the safe zones off.
+    pub safe_zones: Option<Option<String>>,
 }
 
 /// Current values shown checked in the Player's menus.
@@ -76,8 +76,9 @@ pub struct TransportResponse {
 pub struct PlayerOptions {
     pub ratio: crate::first_media::Ratio,
     pub quality: crate::settings::PreviewResolution,
-    pub safe_zones: bool,
-    /// The chosen one first.
+    /// Index into `safe_zone_platforms` when the overlay is on.
+    pub safe_zones: Option<usize>,
+    /// (id, name)
     pub safe_zone_platforms: Vec<(String, String)>,
 }
 
@@ -241,21 +242,19 @@ enum Icon {
 }
 
 fn icon_button(ui: &mut egui::Ui, icon: Icon, hint: String) -> egui::Response {
-    toggle_icon_button(ui, icon, hint, false)
-}
-
-fn toggle_icon_button(ui: &mut egui::Ui, icon: Icon, hint: String, on: bool) -> egui::Response {
     let size = crate::theme::ICON_SIZE + 8.0;
     let (rect, response) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::click());
-    let color = if on {
-        crate::theme::ACCENT
-    } else if response.hovered() {
+    let color = if response.hovered() {
         egui::Color32::WHITE
     } else {
         crate::theme::TEXT_SECONDARY
     };
+    paint_icon(ui.painter(), rect, icon, color);
+    response.on_hover_text(hint)
+}
+
+fn paint_icon(painter: &egui::Painter, rect: egui::Rect, icon: Icon, color: egui::Color32) {
     let stroke = egui::Stroke::new(crate::theme::ICON_STROKE, color);
-    let painter = ui.painter();
     let half = crate::theme::ICON_SIZE / 2.0 - 1.0;
     let arm = 4.5;
     let c = rect.center();
@@ -280,7 +279,6 @@ fn toggle_icon_button(ui: &mut egui::Ui, icon: Icon, hint: String, on: bool) -> 
             }
         }
     }
-    response.on_hover_text(hint)
 }
 
 fn outlined_menu(ui: &mut egui::Ui, label: String, add_contents: impl FnOnce(&mut egui::Ui)) {
@@ -418,26 +416,89 @@ fn show_control_bar(
             }
         }
     });
-    if let Some((_, current)) = options.safe_zone_platforms.first() {
-        outlined_menu(ui, current.clone(), |ui| {
-            for (i, (id, name)) in options.safe_zone_platforms.iter().enumerate() {
-                if ui.add(egui::Button::selectable(i == 0, name)).clicked() {
-                    response.safe_zone_platform = Some(id.clone());
-                    ui.close();
-                }
+    safe_zones_menu(ui, &options, response);
+}
+
+/// One button: its face shows the chosen platform while the overlay is on,
+/// the menu switches platform or turns it off.
+fn safe_zones_menu(ui: &mut egui::Ui, options: &PlayerOptions, response: &mut TransportResponse) {
+    let chosen = options
+        .safe_zones
+        .and_then(|i| options.safe_zone_platforms.get(i));
+    let size = crate::theme::ICON_SIZE + 8.0;
+    let (rect, button) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::click());
+    let color = if chosen.is_some() {
+        crate::theme::ACCENT
+    } else if button.hovered() {
+        egui::Color32::WHITE
+    } else {
+        crate::theme::TEXT_SECONDARY
+    };
+    match chosen {
+        Some((id, _)) if crate::safe_zones::paint_icon(ui.painter(), rect.center(), id, color) => {}
+        _ => paint_icon(ui.painter(), rect, Icon::SafeZones, color),
+    }
+    let button = button.on_hover_text(t!("player.safe_zones"));
+    egui::Popup::menu(&button).show(|ui| {
+        if menu_row(
+            ui,
+            chosen.is_none(),
+            &t!("player.safe_zones_off"),
+            |p, c, color| {
+                paint_icon(
+                    p,
+                    egui::Rect::from_center_size(c, egui::Vec2::splat(size)),
+                    Icon::SafeZones,
+                    color,
+                );
+            },
+        )
+        .clicked()
+        {
+            response.safe_zones = Some(None);
+        }
+        for (i, (id, name)) in options.safe_zone_platforms.iter().enumerate() {
+            let row = menu_row(ui, options.safe_zones == Some(i), name, |p, c, color| {
+                crate::safe_zones::paint_icon(p, c, id, color);
+            });
+            if row.clicked() {
+                response.safe_zones = Some(Some(id.clone()));
             }
-        });
+        }
+    });
+}
+
+fn menu_row(
+    ui: &mut egui::Ui,
+    selected: bool,
+    label: &str,
+    icon: impl FnOnce(&egui::Painter, egui::Pos2, egui::Color32),
+) -> egui::Response {
+    let height = crate::theme::CONTROL_HEIGHT;
+    let (rect, row) = ui.allocate_exact_size(egui::vec2(170.0, height), egui::Sense::click());
+    let visuals = ui.style().interact_selectable(&row, selected);
+    if selected || row.hovered() {
+        ui.painter()
+            .rect_filled(rect, crate::theme::RADIUS_CONTROL, visuals.weak_bg_fill);
     }
-    if toggle_icon_button(
-        ui,
-        Icon::SafeZones,
-        t!("player.safe_zones").into_owned(),
-        options.safe_zones,
-    )
-    .clicked()
-    {
-        response.toggle_safe_zones = true;
-    }
+    let color = if selected {
+        crate::theme::ACCENT
+    } else {
+        visuals.text_color()
+    };
+    icon(
+        ui.painter(),
+        rect.left_center() + egui::vec2(14.0, 0.0),
+        color,
+    );
+    ui.painter().text(
+        rect.left_center() + egui::vec2(30.0, 0.0),
+        egui::Align2::LEFT_CENTER,
+        label,
+        egui::FontId::proportional(crate::theme::FONT_BODY),
+        visuals.text_color(),
+    );
+    row
 }
 
 #[cfg(test)]

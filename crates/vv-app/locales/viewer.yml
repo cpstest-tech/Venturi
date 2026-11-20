@@ -126,8 +126,11 @@ player.quality_full:
   it: Piena
 
 player.safe_zones:
-  en: "Social safe zones: show or hide the areas covered by the app's interface (never exported)"
-  it: "Safe zone social: mostra o nascondi le aree coperte dall'interfaccia dell'app (mai esportate)"
+  en: "Social safe zones: preview the app's interface over the video (never exported)"
+  it: "Safe zone social: anteprima dell'interfaccia dell'app sopra il video (mai esportata)"
+player.safe_zones_off:
+  en: "Off"
+  it: "Spente"
 player.safe_zone_warning:
   en: "Text in a covered area"
   it: "Testo in una zona coperta"

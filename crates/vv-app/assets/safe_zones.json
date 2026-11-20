@@ -1,35 +1,34 @@
 {
-  "version": 1,
-  "note": "Areas covered by each app's interface, in percent of a 9:16 frame from the top-left corner. Copy this file next to settings.json to override it.",
+  "version": 2,
+  "note": "Areas covered by each app's interface, in percent of a 9:16 frame from the top-left corner. kind: tabs, header, top_icons, side_buttons (count), caption (button = Subscribe), progress. Copy this file next to settings.json to override it.",
   "platforms": [
     {
       "id": "tiktok",
       "name": "TikTok",
       "zones": [
-        { "label": { "it": "Barra in alto", "en": "Top bar" }, "x": 0, "y": 0, "w": 100, "h": 8 },
-        { "label": { "it": "Pulsanti laterali", "en": "Side buttons" }, "x": 87, "y": 35, "w": 13, "h": 48 },
-        { "label": { "it": "Username e didascalia", "en": "Username and caption" }, "x": 0, "y": 71, "w": 80, "h": 17 },
-        { "label": { "it": "Barra in basso", "en": "Bottom bar" }, "x": 0, "y": 88, "w": 100, "h": 12 }
+        { "kind": "tabs", "x": 0, "y": 0, "w": 100, "h": 6 },
+        { "kind": "side_buttons", "count": 6, "x": 88.5, "y": 50, "w": 11.5, "h": 38 },
+        { "kind": "caption", "x": 3, "y": 83, "w": 80, "h": 13 },
+        { "kind": "progress", "x": 0, "y": 98.5, "w": 100, "h": 1.5 }
       ]
     },
     {
       "id": "reels",
       "name": "Instagram Reels",
       "zones": [
-        { "label": { "it": "Intestazione", "en": "Header" }, "x": 0, "y": 0, "w": 100, "h": 10 },
-        { "label": { "it": "Pulsanti laterali", "en": "Side buttons" }, "x": 86, "y": 48, "w": 14, "h": 38 },
-        { "label": { "it": "Username e didascalia", "en": "Username and caption" }, "x": 0, "y": 74, "w": 80, "h": 14 },
-        { "label": { "it": "Barra in basso", "en": "Bottom bar" }, "x": 0, "y": 88, "w": 100, "h": 12 }
+        { "kind": "header", "x": 0, "y": 0, "w": 100, "h": 7 },
+        { "kind": "side_buttons", "count": 5, "x": 91, "y": 56, "w": 9, "h": 36 },
+        { "kind": "caption", "x": 3, "y": 84, "w": 80, "h": 12 }
       ]
     },
     {
       "id": "shorts",
       "name": "YouTube Shorts",
       "zones": [
-        { "label": { "it": "Barra in alto", "en": "Top bar" }, "x": 0, "y": 0, "w": 100, "h": 8 },
-        { "label": { "it": "Pulsanti laterali", "en": "Side buttons" }, "x": 84, "y": 42, "w": 16, "h": 44 },
-        { "label": { "it": "Titolo, canale e Iscriviti", "en": "Title, channel and Subscribe" }, "x": 0, "y": 72, "w": 78, "h": 14 },
-        { "label": { "it": "Barra in basso", "en": "Bottom bar" }, "x": 0, "y": 86, "w": 100, "h": 14 }
+        { "kind": "top_icons", "x": 0, "y": 0, "w": 100, "h": 6 },
+        { "kind": "side_buttons", "count": 6, "x": 88, "y": 48, "w": 12, "h": 42 },
+        { "kind": "caption", "button": true, "x": 3, "y": 82, "w": 80, "h": 13 },
+        { "kind": "progress", "x": 0, "y": 98.5, "w": 100, "h": 1.5 }
       ]
     }
   ]

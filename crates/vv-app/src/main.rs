@@ -2920,14 +2920,15 @@ impl VenturiApp {
             first_media::Ratio::of(self.session.project.timelines[id].resolution)
         });
         let platforms = &self.safe_zone_platforms.0;
-        let chosen = safe_zones::platform(platforms, &self.settings.shorts.safe_zone_platform);
+        let shorts = &self.settings.shorts;
+        let chosen = safe_zones::platform(platforms, &shorts.safe_zone_platform)
+            .and_then(|chosen| platforms.iter().position(|p| p == chosen));
         transport::PlayerOptions {
             ratio,
             quality: self.settings.preview_resolution,
-            safe_zones: self.settings.shorts.safe_zones,
-            safe_zone_platforms: chosen
-                .into_iter()
-                .chain(platforms.iter().filter(|p| Some(*p) != chosen))
+            safe_zones: chosen.filter(|_| shorts.safe_zones),
+            safe_zone_platforms: platforms
+                .iter()
                 .map(|p| (p.id.clone(), p.name.clone()))
                 .collect(),
         }
@@ -4676,15 +4677,12 @@ impl VenturiApp {
         if let Some(ratio) = transport_action.ratio {
             self.set_project_ratio(ratio);
         }
-        if transport_action.toggle_safe_zones {
-            self.settings.shorts.safe_zones = !self.settings.shorts.safe_zones;
-            if self.settings.shorts.safe_zones {
+        if let Some(choice) = transport_action.safe_zones {
+            self.settings.shorts.safe_zones = choice.is_some();
+            if let Some(id) = choice {
+                self.settings.shorts.safe_zone_platform = id;
                 self.safe_zone_platforms = safe_zones::load();
             }
-        }
-        if let Some(id) = transport_action.safe_zone_platform {
-            self.settings.shorts.safe_zone_platform = id;
-            self.settings.shorts.safe_zones = true;
         }
 
         let pointer_down = ui.input(|i| i.pointer.any_down());
