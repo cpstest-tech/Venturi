@@ -86,7 +86,7 @@ done
 # dependencies are checked too.
 for so in $(patchelf --print-needed "$APPDIR"/usr/bin/* "$APPDIR"/usr/lib/libavcodec.so.*); do
     case "$so" in
-        libav*|libsw*|libpostproc*|libx264*|libmp3lame*|libopus*|libvorbis*|libogg*)
+        libav*|libsw*|libpostproc*|libx264*|libmp3lame*|libopus*|libvorbis*|libogg*|libva*)
             if [ ! -e "$APPDIR/usr/lib/$so" ]; then
                 echo "required library missing from the bundle: $so" >&2
                 exit 1
@@ -96,10 +96,11 @@ done
 
 # The GPU drivers belong to the system: FFmpeg must load them with dlopen,
 # or the AppImage would not start where they are missing. libvulkan is the
-# generic loader that whisper links; the drivers behind it stay on the system.
+# generic loader that whisper links, libva the bundled one that loads the
+# VA-API drivers; libdrm, which libva-drm links, is on every desktop with Mesa.
 for so in $(patchelf --print-needed "$APPDIR"/usr/bin/* "$APPDIR"/usr/lib/*.so.*); do
     case "$so" in
-        libva*|libcuda*|libnvcuvid*|libdrm*)
+        libcuda*|libnvcuvid*)
             echo "GPU driver library linked instead of loaded at run time: $so" >&2
             exit 1 ;;
     esac

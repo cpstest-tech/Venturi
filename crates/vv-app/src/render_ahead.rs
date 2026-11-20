@@ -392,9 +392,10 @@ impl RenderAhead {
 impl Drop for RenderAhead {
     fn drop(&mut self) {
         let _ = self.tx.send(Command::Stop);
-        if let Some(h) = self.handle.take() {
-            let _ = h.join();
-        }
+        // Abandons the decode in progress; not joined, because dropping a
+        // buffer on the UI thread (switching preview) would wait for it.
+        self.shared.target.jumps.fetch_add(1, Ordering::Relaxed);
+        drop(self.handle.take());
     }
 }
 
@@ -730,30 +731,104 @@ fn clipped_media_segments(
     if depth >= vv_core::MAX_COMPOUND_DEPTH {
         return real;
     }
+    let covers = covering_ranges(project, timeline, from_frame, end_frame);
     for (track_index, clip) in timeline.visible_video_clips() {
         let ClipSource::Media(media_id) = &clip.source else {
             continue;
         };
-        let segment_start = clip.timeline_start.max(from_frame);
-        let segment_end = clip.timeline_end().min(end_frame);
-        if segment_end <= segment_start {
-            continue;
+        let clip_start = clip.timeline_start.max(from_frame);
+        let clip_end = clip.timeline_end().min(end_frame);
+        let hidden: Vec<_> = covers
+            .iter()
+            .filter(|(track, _)| *track > track_index)
+            .map(|(_, range)| range.clone())
+            .collect();
+        for (segment_start, segment_end) in uncovered(clip_start..clip_end, hidden) {
+            // clip→source-frame mapping shared with the export
+            // (`vv_core::Clip::picture_frame_at`, see the docs there for the
+            // reason — plans/REFACTOR_PIPELINE.md B1).
+            let source_start = clip.picture_frame_at(segment_start);
+            let source_end = clip.picture_frame_at(segment_end - 1);
+            let segment = WantedRange {
+                media_id: *media_id,
+                source_start,
+                source_end,
+                timeline_start: segment_start,
+                rate: clip.rate(),
+            };
+            push_or_recurse(project, track_index, segment, depth, &mut real);
         }
-        // clip→source-frame mapping shared with the export
-        // (`vv_core::Clip::picture_frame_at`, see the docs there for the
-        // reason — plans/REFACTOR_PIPELINE.md B1).
-        let source_start = clip.picture_frame_at(segment_start);
-        let source_end = clip.picture_frame_at(segment_end - 1);
-        let segment = WantedRange {
-            media_id: *media_id,
-            source_start,
-            source_end,
-            timeline_start: segment_start,
-            rate: clip.rate(),
-        };
-        push_or_recurse(project, track_index, segment, depth, &mut real);
     }
     real
+}
+
+/// Where a clip hides the whole canvas, with its track: nothing below it
+/// shows there, so nothing below needs decoding. Crossing windows are left
+/// out, the clip dissolves into its neighbour in them.
+fn covering_ranges(
+    project: &Project,
+    timeline: &Timeline,
+    from_frame: FrameIdx,
+    end_frame: FrameIdx,
+) -> Vec<(usize, std::ops::Range<FrameIdx>)> {
+    let mut covers = Vec::new();
+    for (track_index, track) in timeline.visible_video_tracks() {
+        for clip in &track.clips {
+            let start = clip.timeline_start.max(from_frame);
+            let end = clip.timeline_end().min(end_frame);
+            if end <= start {
+                continue;
+            }
+            let ClipSource::Media(media_id) = clip.source else {
+                continue;
+            };
+            let Some(item) = project.media_pool.get(media_id) else {
+                continue;
+            };
+            if item.compound.is_some()
+                || !clip.covers_canvas(&item.meta, timeline.resolution)
+                || !vv_media::is_opaque_video(&item.path)
+            {
+                continue;
+            }
+            let crossings = track
+                .crossings
+                .iter()
+                .filter(|c| c.left_clip == clip.id || c.right_clip == clip.id)
+                .filter_map(|c| Some(c.window(track.clip(c.left_clip)?, track.clip(c.right_clip)?)))
+                .collect();
+            covers.extend(
+                uncovered(start..end, crossings)
+                    .into_iter()
+                    .map(|(s, e)| (track_index, s..e)),
+            );
+        }
+    }
+    covers
+}
+
+/// `range` minus `holes`, as `(start, end)` pieces in order.
+fn uncovered(
+    range: std::ops::Range<FrameIdx>,
+    mut holes: Vec<std::ops::Range<FrameIdx>>,
+) -> Vec<(FrameIdx, FrameIdx)> {
+    holes.sort_by_key(|hole| hole.start);
+    let mut pieces = Vec::new();
+    let mut at = range.start;
+    for hole in holes {
+        if hole.start > at {
+            pieces.push((at, hole.start.min(range.end)));
+        }
+        at = at.max(hole.end);
+        if at >= range.end {
+            break;
+        }
+    }
+    if at < range.end {
+        pieces.push((at, range.end));
+    }
+    pieces.retain(|(s, e)| e > s);
+    pieces
 }
 
 /// Adds `segment` to the media to decode, or — if `segment.media_id` is

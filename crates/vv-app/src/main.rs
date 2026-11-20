@@ -1444,7 +1444,7 @@ impl VenturiApp {
         let Some(timeline_id) = self.timeline_id else {
             return Vec::new();
         };
-        if !self.settings.proxy_enabled {
+        if self.settings.proxy().is_none() {
             return Vec::new();
         }
         let Some(proxy_worker) = &self.proxy_worker else {

@@ -80,6 +80,7 @@ fn save_then_load_keeps_custom_shortcuts_and_defaults_for_the_rest() {
     settings.keymap.remove(Action::ZoomIn, 1);
     settings.language = Language::Italian;
     settings.proxy_enabled = true;
+    settings.proxy_auto = false;
     settings.proxy_quality = ProxyQuality::High;
     settings.preview_resolution = PreviewResolution::Quarter;
     settings.lookahead_secs = 7.5;
@@ -111,6 +112,7 @@ fn save_then_load_keeps_custom_shortcuts_and_defaults_for_the_rest() {
         Keymap::default().shortcuts(Action::Undo)
     );
     assert!(!loaded.proxy_enabled);
+    assert!(loaded.proxy_auto, "heavy media get proxies by default");
     assert_eq!(loaded.proxy_quality, ProxyQuality::default());
     assert_eq!(loaded.preview_resolution, PreviewResolution::Full);
     assert_eq!(
@@ -705,4 +707,33 @@ fn each_ai_provider_keeps_its_own_model_and_cli_defaults_do_not_receive_a_gemini
     settings.ai_provider = Provider::Gemini;
     settings.remember_ai_model_on_provider_change(Provider::Codex);
     assert_eq!(settings.ai_model, "gemini-4-hydrogen");
+}
+
+#[test]
+fn only_heavy_media_get_proxies_automatically() {
+    let meta = |codec: &str, width, height, fps| vv_core::MediaMeta {
+        duration_frames: 100,
+        fps: vv_core::Rational::new(fps, 1),
+        width,
+        height,
+        has_video: true,
+        has_audio: true,
+        sample_rate: 48000,
+        channels: 2,
+        audio_streams: 1,
+        file: vv_core::MediaFileInfo {
+            video_codec: Some(codec.into()),
+            ..Default::default()
+        },
+    };
+    let settings = Settings::default();
+    assert!(settings.wants_proxy(&meta("hevc", 1920, 1080, 30)));
+    assert!(settings.wants_proxy(&meta("h264", 1920, 1080, 60)));
+    assert!(settings.wants_proxy(&meta("h264", 3840, 2160, 30)));
+    assert!(!settings.wants_proxy(&meta("h264", 1920, 1080, 30)));
+    let off = Settings {
+        proxy_auto: false,
+        ..Settings::default()
+    };
+    assert!(!off.wants_proxy(&meta("hevc", 1920, 1080, 60)));
 }

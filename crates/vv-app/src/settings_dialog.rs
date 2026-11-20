@@ -648,6 +648,10 @@ fn hw_decode_settings(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
             }
             HwDecodeMode::Off => (t!("settings.hw_decode_off"), None),
             HwDecodeMode::Nvdec => (t!("settings.hw_decode_nvdec"), None),
+            HwDecodeMode::Vaapi => (
+                t!("settings.hw_decode_vaapi"),
+                Some(t!("settings.hw_decode_vaapi_hint")),
+            ),
             HwDecodeMode::Vulkan => (
                 t!("settings.hw_decode_vulkan"),
                 Some(t!("settings.hw_decode_vulkan_hint")),
@@ -804,7 +808,13 @@ fn playback_section(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
         .checkbox(&mut settings.proxy_enabled, t!("menu.use_proxy"))
         .on_hover_text(t!("menu.use_proxy_hint"))
         .changed();
-    ui.add_enabled_ui(settings.proxy_enabled, |ui| {
+    ui.add_enabled_ui(!settings.proxy_enabled, |ui| {
+        changed |= ui
+            .checkbox(&mut settings.proxy_auto, t!("settings.proxy_auto"))
+            .on_hover_text(t!("settings.proxy_auto_hint"))
+            .changed();
+    });
+    ui.add_enabled_ui(settings.proxy().is_some(), |ui| {
         ui.label(t!("settings.proxy_quality"));
         for quality in ProxyQuality::ALL {
             let (label, hint) = match quality {

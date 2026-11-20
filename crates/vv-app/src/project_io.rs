@@ -222,7 +222,7 @@ impl VenturiApp {
         // An image has nothing to gain from a proxy, and its duration is
         // the `IMAGE_DURATION_FRAMES` sentinel.
         // A proxy has no alpha channel: stickers keep their transparency.
-        if self.settings.proxy_enabled
+        if self.settings.wants_proxy(&item.meta)
             && item.meta.has_video
             && !item.meta.is_image()
             && !vv_media::has_alpha(&item.path)
@@ -1242,7 +1242,10 @@ impl VenturiApp {
             .media_pool
             .iter()
             .filter(|(_, item)| {
-                item.compound.is_none() && item.meta.has_video && !item.meta.is_image()
+                item.compound.is_none()
+                    && item.meta.has_video
+                    && !item.meta.is_image()
+                    && self.settings.wants_proxy(&item.meta)
             })
             .map(|(_, item)| {
                 (

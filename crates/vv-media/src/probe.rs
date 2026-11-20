@@ -385,6 +385,24 @@ pub fn has_alpha(path: &Path) -> bool {
         .is_some_and(|decoder| crate::decode::format_has_alpha(decoder.format()))
 }
 
+/// A video file that opens and has no alpha, remembered per path: asked on
+/// every render-ahead cycle. A file that does not open is not cached.
+pub fn is_opaque_video(path: &Path) -> bool {
+    static KNOWN: std::sync::LazyLock<
+        std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, bool>>,
+    > = std::sync::LazyLock::new(Default::default);
+    if let Some(&known) = KNOWN.lock().unwrap().get(path) {
+        return known;
+    }
+    ensure_init();
+    let Ok(input) = ffmpeg::format::input(&path) else {
+        return false;
+    };
+    let opaque = video_stream(&input).is_some() && !has_alpha(path);
+    KNOWN.lock().unwrap().insert(path.to_path_buf(), opaque);
+    opaque
+}
+
 pub fn probe_media(path: &Path) -> Result<MediaMeta, crate::MediaError> {
     if is_image_path(path) {
         probe_image(path)

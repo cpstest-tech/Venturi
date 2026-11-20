@@ -1,8 +1,8 @@
 #!/bin/bash
 # Builds FFmpeg from source (shared libraries) with libx264, librubberband,
 # zlib, the encoders of the voiceover takes (libmp3lame, libopus, libvorbis)
-# and the platform hardware encoder and decoders (NVENC, NVDEC and Vulkan
-# video on Linux, VideoToolbox on macOS) into a local prefix. Used by build-appimage.sh and build-macos.sh.
+# and the platform hardware encoder and decoders (NVENC, NVDEC, VA-API and
+# Vulkan video on Linux, VideoToolbox on macOS) into a local prefix. Used by build-appimage.sh and build-macos.sh.
 #
 # Usage: scripts/build-ffmpeg.sh <prefix>
 set -euo pipefail
@@ -20,6 +20,7 @@ LAME_VERSION="3.100"
 OGG_VERSION="1.3.5"
 VORBIS_VERSION="1.3.7"
 OPUS_VERSION="1.5.2"
+LIBVA_TAG="2.22.0"
 AUDIO_CODECS="lame-$LAME_VERSION ogg-$OGG_VERSION vorbis-$VORBIS_VERSION opus-$OPUS_VERSION"
 
 OS="$(uname -s)"
@@ -28,11 +29,11 @@ if [ "$OS" = Darwin ]; then
     JOBS="$(sysctl -n hw.ncpu)"
     HW_FLAGS=(--enable-videotoolbox)
 else
-    WANT="$FFMPEG_TAG $NV_HEADERS_TAG nvdec vulkan $X264_BRANCH $RUBBERBAND_TAG $AUDIO_CODECS cli"
+    WANT="$FFMPEG_TAG $NV_HEADERS_TAG nvdec vaapi-$LIBVA_TAG vulkan $X264_BRANCH $RUBBERBAND_TAG $AUDIO_CODECS cli"
     JOBS="$(nproc)"
-    # No VA-API: libva would be linked, not loaded with dlopen like CUDA and
-    # Vulkan, and the AppImage would not start on a system without it.
-    HW_FLAGS=(--enable-ffnvcodec --enable-nvenc --enable-cuda --enable-nvdec --enable-vulkan)
+    # libva is linked, not loaded with dlopen like CUDA and Vulkan: it is
+    # built here and bundled, the drivers it loads stay the system's.
+    HW_FLAGS=(--enable-ffnvcodec --enable-nvenc --enable-cuda --enable-nvdec --enable-vaapi --enable-vulkan)
 fi
 
 STAMP="$PREFIX/.build-stamp"
@@ -49,6 +50,18 @@ if [ "$OS" != Darwin ]; then
     git clone --depth 1 --branch "$NV_HEADERS_TAG" \
         https://github.com/FFmpeg/nv-codec-headers.git "$SRC/nv-codec-headers"
     make -C "$SRC/nv-codec-headers" PREFIX="$PREFIX" install
+
+    # The bundled libva must find the drivers wherever the distro keeps
+    # them: it splits the search path on ':'.
+    git clone --depth 1 --branch "$LIBVA_TAG" \
+        https://github.com/intel/libva.git "$SRC/libva"
+    (
+        cd "$SRC/libva"
+        meson setup build --prefix="$PREFIX" --libdir=lib --buildtype=release \
+            -Ddriverdir=/usr/lib/x86_64-linux-gnu/dri:/usr/lib/aarch64-linux-gnu/dri:/usr/lib64/dri:/usr/lib/dri \
+            -Dwith_x11=no -Dwith_glx=no -Dwith_wayland=no
+        meson install -C build
+    )
 fi
 
 git clone --depth 1 --branch "$X264_BRANCH" \
