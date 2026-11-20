@@ -1,0 +1,104 @@
+_version: 2
+
+auto_zoom.title:
+  en: "Auto zoom"
+  it: "Zoom automatici"
+auto_zoom.sub_tab:
+  en: "Auto zoom"
+  it: "Zoom auto"
+auto_zoom.button_hint:
+  en: "Punch-in zooms on the emphasised words of the selected clip"
+  it: "Punch-in sulle parole enfatizzate della clip selezionata"
+auto_zoom.hint:
+  en: "Zooms on loud words, sentence starts and words after a pause. The result is ordinary keyframes: edit them freely, undo with Ctrl+Z."
+  it: "Zoom su parole a volume alto, inizi di frase e parole dopo una pausa. Il risultato sono normali keyframe: modificali liberamente, annulla con Ctrl+Z."
+auto_zoom.select_video:
+  en: "Select a video clip with audio."
+  it: "Seleziona una clip video con audio."
+auto_zoom.looking_up:
+  en: "Looking for the transcript…"
+  it: "Ricerca della trascrizione…"
+auto_zoom.no_transcript:
+  en: "This clip has no transcript yet. Generate it with the speech engine (it stays on this device)."
+  it: "Questa clip non ha ancora una trascrizione. Generala con il motore vocale (resta su questo dispositivo)."
+auto_zoom.transcribe:
+  en: "Generate transcript"
+  it: "Genera trascrizione"
+auto_zoom.model_missing:
+  en: "No speech model installed: install one from the Subtitles tab, then come back here."
+  it: "Nessun modello vocale installato: installane uno dalla scheda Sottotitoli, poi torna qui."
+auto_zoom.no_audio:
+  en: "The clip's source has no readable audio stream."
+  it: "La sorgente della clip non ha una traccia audio leggibile."
+auto_zoom.offline:
+  en: "The source file is offline. Relink it first."
+  it: "Il file sorgente non è disponibile. Ricollegalo prima."
+auto_zoom.unsupported:
+  en: "Freeze frames, disabled and compound clips cannot be analysed."
+  it: "Fermi immagine, clip disattivate e clip composte non possono essere analizzate."
+auto_zoom.no_words:
+  en: "No emphasised words found with these settings: try a higher frequency or a shorter minimum gap."
+  it: "Nessuna parola enfatizzata con queste impostazioni: prova una frequenza più alta o una distanza minima più breve."
+auto_zoom.cancelled:
+  en: "Cancelled."
+  it: "Annullato."
+auto_zoom.error:
+  en: "Analysis failed: %{detail}"
+  it: "Analisi non riuscita: %{detail}"
+auto_zoom.cancel:
+  en: "Cancel"
+  it: "Annulla"
+auto_zoom.intensity:
+  en: "Intensity %"
+  it: "Intensità %"
+auto_zoom.speed:
+  en: "Easing"
+  it: "Easing"
+auto_zoom.speed_slow:
+  en: "Slow"
+  it: "Lento"
+auto_zoom.speed_normal:
+  en: "Normal"
+  it: "Normale"
+auto_zoom.speed_fast:
+  en: "Fast"
+  it: "Rapido"
+auto_zoom.frequency:
+  en: "Frequency"
+  it: "Frequenza"
+auto_zoom.frequency_low:
+  en: "Low"
+  it: "Bassa"
+auto_zoom.frequency_medium:
+  en: "Medium"
+  it: "Media"
+auto_zoom.frequency_high:
+  en: "High"
+  it: "Alta"
+auto_zoom.min_gap:
+  en: "Minimum gap (s)"
+  it: "Distanza minima (s)"
+auto_zoom.alternate:
+  en: "Alternate zoom levels"
+  it: "Alterna i livelli di zoom"
+auto_zoom.shift:
+  en: "Slightly shift the centre"
+  it: "Sposta leggermente il centro"
+auto_zoom.preview:
+  en: "Preview"
+  it: "Anteprima"
+auto_zoom.preview_count:
+  en: "Preview: %{count} zooms. Change the settings to update it."
+  it: "Anteprima: %{count} zoom. Cambia i parametri per aggiornarla."
+auto_zoom.apply:
+  en: "Apply"
+  it: "Applica"
+auto_zoom.discard:
+  en: "Discard"
+  it: "Annulla"
+auto_zoom.remove:
+  en: "Remove auto zooms"
+  it: "Rimuovi zoom automatici"
+auto_zoom.remove_hint:
+  en: "Removes only the generated keyframes; hand-made or retouched ones stay."
+  it: "Rimuove solo i keyframe generati; quelli fatti o ritoccati a mano restano."

@@ -1,5 +1,7 @@
 pub mod auto_cut;
 pub mod auto_cut_edit;
+pub mod auto_zoom;
+pub mod beat_sync;
 pub mod captions;
 pub mod clip_anim;
 pub mod clipboard;

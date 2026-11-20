@@ -90,6 +90,7 @@ pub(crate) fn add_marker_at_playhead(
         duration: 0,
         note: String::new(),
         color: Marker::default_color(),
+        beat: false,
     };
     history.do_command(
         project,

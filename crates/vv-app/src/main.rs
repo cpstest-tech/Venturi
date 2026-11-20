@@ -16,7 +16,9 @@ mod ai_sequence_ui;
 mod app_menu;
 mod auto_cut;
 mod auto_cut_ui;
+mod auto_zoom;
 mod autosave;
+mod beat_sync;
 mod canvas_ui;
 mod color_window;
 mod compressor_panel;
@@ -64,6 +66,7 @@ mod properties_tabs;
 mod proxy_worker;
 mod render_ahead;
 mod ribbon_editors;
+mod safe_zones;
 mod settings;
 mod settings_dialog;
 mod silence_dialog;
@@ -617,6 +620,10 @@ struct VenturiApp {
     export_modal: Option<export_modal::ExportModal>,
     subtitles: subtitles::SubtitleState,
     auto_cut: auto_cut::State,
+    auto_zoom: auto_zoom::State,
+    beat: beat_sync::State,
+    /// Read at startup and each time the overlay is switched on.
+    safe_zone_platforms: (Vec<safe_zones::Platform>, Option<String>),
     ai_clips: ai_clips::State,
     ai_sequences: ai_sequence_ui::State,
     cover_picker: Option<cover::CoverPicker>,
@@ -765,6 +772,9 @@ impl Default for VenturiApp {
             export_modal: None,
             subtitles: subtitles::SubtitleState::default(),
             auto_cut: auto_cut::State::default(),
+            auto_zoom: auto_zoom::State::default(),
+            beat: beat_sync::State::default(),
+            safe_zone_platforms: safe_zones::load(),
             ai_clips: ai_clips::State::default(),
             ai_sequences: ai_sequence_ui::State::default(),
             cover_picker: None,
@@ -2909,9 +2919,17 @@ impl VenturiApp {
         let ratio = self.timeline_id.map_or(first_media::Ratio::Original, |id| {
             first_media::Ratio::of(self.session.project.timelines[id].resolution)
         });
+        let platforms = &self.safe_zone_platforms.0;
+        let chosen = safe_zones::platform(platforms, &self.settings.shorts.safe_zone_platform);
         transport::PlayerOptions {
             ratio,
             quality: self.settings.preview_resolution,
+            safe_zones: self.settings.shorts.safe_zones,
+            safe_zone_platforms: chosen
+                .into_iter()
+                .chain(platforms.iter().filter(|p| Some(*p) != chosen))
+                .map(|p| (p.id.clone(), p.name.clone()))
+                .collect(),
         }
     }
 
@@ -4462,6 +4480,7 @@ impl VenturiApp {
         self.poll_downloads(ui.ctx());
         self.show_download_dialog(ui.ctx());
         self.show_toast(ui.ctx());
+        self.show_beat_window(ui.ctx());
         self.show_settings_dialog(ui.ctx());
         self.show_about_dialog(ui.ctx());
         self.show_project_settings(ui.ctx());
@@ -4656,6 +4675,16 @@ impl VenturiApp {
         }
         if let Some(ratio) = transport_action.ratio {
             self.set_project_ratio(ratio);
+        }
+        if transport_action.toggle_safe_zones {
+            self.settings.shorts.safe_zones = !self.settings.shorts.safe_zones;
+            if self.settings.shorts.safe_zones {
+                self.safe_zone_platforms = safe_zones::load();
+            }
+        }
+        if let Some(id) = transport_action.safe_zone_platform {
+            self.settings.shorts.safe_zone_platform = id;
+            self.settings.shorts.safe_zones = true;
         }
 
         let pointer_down = ui.input(|i| i.pointer.any_down());
@@ -5140,6 +5169,7 @@ impl VenturiApp {
         let area = viewer_area.unwrap_or(rect);
         let ui = &mut self.viewer_zoom.tools_ui(ui, area);
         if viewer_area.is_some() {
+            self.paint_safe_zones(ui, rect, area);
             self.show_viewer_overlay(ui, rect, area, video_targets, overlay_effects);
         }
 
@@ -5498,6 +5528,60 @@ mod export_tests;
 /// The drawn part of a title, as `viewer_overlay::show` takes it: the union
 /// of its layers (text, outline, shadow, background), from the same cached
 /// raster the viewer shows.
+impl VenturiApp {
+    fn paint_safe_zones(&self, ui: &egui::Ui, rect: egui::Rect, area: egui::Rect) {
+        if !self.settings.shorts.safe_zones
+            || self.browsing.is_some()
+            || !matches!(self.last_viewer_frame_kind, Some(ViewerFrameKind::Video))
+        {
+            return;
+        }
+        let Some(timeline_id) = self.timeline_id else {
+            return;
+        };
+        let (platforms, file_error) = &self.safe_zone_platforms;
+        let Some(platform) =
+            safe_zones::platform(platforms, &self.settings.shorts.safe_zone_platform)
+        else {
+            return;
+        };
+        let tl = &self.session.project.timelines[timeline_id];
+        let size = tl.resolution;
+        let playhead = self.timeline_state.playhead;
+        // Laying out every title costs a render: only while paused.
+        let texts: Vec<[f32; 4]> = if self.is_timeline_playing() {
+            Vec::new()
+        } else {
+            tl.tracks
+                .iter()
+                .filter(|t| t.kind == vv_core::TrackKind::Video && !t.muted)
+                .flat_map(|t| &t.clips)
+                .filter(|c| !c.disabled && c.contains(playhead))
+                .filter_map(|c| {
+                    let title = c.effects.title.as_ref()?;
+                    let content = title_content_box(title, size)?;
+                    let transform = c.effects.transform.value_at(c.source_frame_at(playhead));
+                    let [l, r, b, t] =
+                        viewer_overlay::content_frame_bounds(size, content, &transform);
+                    let (w, h) = (size.0 as f32, size.1 as f32);
+                    Some([l / w + 0.5, 0.5 - t / h, r / w + 0.5, 0.5 - b / h])
+                })
+                .collect()
+        };
+        let painter = ui.painter_at(rect.intersect(area));
+        safe_zones::paint(&painter, rect, platform, &texts);
+        if let Some(error) = file_error {
+            painter.text(
+                rect.left_bottom() + egui::vec2(4.0, -4.0),
+                egui::Align2::LEFT_BOTTOM,
+                t!("player.safe_zone_file_error", error = error),
+                egui::FontId::proportional(theme::FONT_SMALL),
+                theme::WARNING,
+            );
+        }
+    }
+}
+
 fn title_content_box(title: &vv_core::TitleParams, timeline_size: (u32, u32)) -> Option<[f32; 4]> {
     let render = vv_render::text::render_title(title, timeline_size, timeline_size);
     let (half_w, half_h) = (timeline_size.0 as f32 / 2.0, timeline_size.1 as f32 / 2.0);

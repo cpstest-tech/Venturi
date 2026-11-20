@@ -559,6 +559,7 @@ fn marker(id: u64, start: FrameIdx, duration: FrameIdx) -> vv_core::Marker {
         duration,
         note: String::new(),
         color: vv_core::Marker::default_color(),
+        beat: false,
     }
 }
 

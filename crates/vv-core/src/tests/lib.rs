@@ -2259,6 +2259,7 @@ fn marker(id: u64, start: FrameIdx, duration: FrameIdx) -> Marker {
         duration,
         note: String::new(),
         color: Marker::default_color(),
+        beat: false,
     }
 }
 

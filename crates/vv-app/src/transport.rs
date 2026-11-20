@@ -67,13 +67,18 @@ pub struct TransportResponse {
     pub toggle_fullscreen: bool,
     pub ratio: Option<crate::first_media::Ratio>,
     pub quality: Option<crate::settings::PreviewResolution>,
+    pub toggle_safe_zones: bool,
+    pub safe_zone_platform: Option<String>,
 }
 
 /// Current values shown checked in the Player's menus.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct PlayerOptions {
     pub ratio: crate::first_media::Ratio,
     pub quality: crate::settings::PreviewResolution,
+    pub safe_zones: bool,
+    /// The chosen one first.
+    pub safe_zone_platforms: Vec<(String, String)>,
 }
 
 const BAR_HEIGHT: f32 = 30.0;
@@ -236,9 +241,15 @@ enum Icon {
 }
 
 fn icon_button(ui: &mut egui::Ui, icon: Icon, hint: String) -> egui::Response {
+    toggle_icon_button(ui, icon, hint, false)
+}
+
+fn toggle_icon_button(ui: &mut egui::Ui, icon: Icon, hint: String, on: bool) -> egui::Response {
     let size = crate::theme::ICON_SIZE + 8.0;
     let (rect, response) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::click());
-    let color = if response.hovered() {
+    let color = if on {
+        crate::theme::ACCENT
+    } else if response.hovered() {
         egui::Color32::WHITE
     } else {
         crate::theme::TEXT_SECONDARY
@@ -407,11 +418,26 @@ fn show_control_bar(
             }
         }
     });
-    ui.add_enabled_ui(false, |ui| {
-        icon_button(ui, Icon::SafeZones, t!("player.safe_zones").into_owned())
-    })
-    .inner
-    .on_disabled_hover_text(t!("common.coming_soon"));
+    if let Some((_, current)) = options.safe_zone_platforms.first() {
+        outlined_menu(ui, current.clone(), |ui| {
+            for (i, (id, name)) in options.safe_zone_platforms.iter().enumerate() {
+                if ui.add(egui::Button::selectable(i == 0, name)).clicked() {
+                    response.safe_zone_platform = Some(id.clone());
+                    ui.close();
+                }
+            }
+        });
+    }
+    if toggle_icon_button(
+        ui,
+        Icon::SafeZones,
+        t!("player.safe_zones").into_owned(),
+        options.safe_zones,
+    )
+    .clicked()
+    {
+        response.toggle_safe_zones = true;
+    }
 }
 
 #[cfg(test)]

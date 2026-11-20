@@ -140,6 +140,22 @@ pub(crate) fn show_bar(
         {
             state.commands.push(TimelineCommand::AutoCut);
         }
+        if has_selection
+            && ui
+                .add_enabled(can_auto_cut, egui::Button::new(t!("auto_zoom.title")))
+                .on_hover_text(t!("auto_zoom.button_hint"))
+                .on_disabled_hover_text(t!("auto_zoom.select_video"))
+                .clicked()
+        {
+            state.commands.push(TimelineCommand::AutoZoom);
+        }
+        if ui
+            .button(t!("beat.button"))
+            .on_hover_text(t!("beat.button_hint"))
+            .clicked()
+        {
+            state.commands.push(TimelineCommand::BeatSync);
+        }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;

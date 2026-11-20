@@ -7,6 +7,7 @@ fn marker(start: FrameIdx, duration: FrameIdx) -> Marker {
         duration,
         note: String::new(),
         color: Marker::default_color(),
+        beat: false,
     }
 }
 

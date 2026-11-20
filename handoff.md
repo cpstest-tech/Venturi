@@ -879,3 +879,141 @@ network service. Speech models must already be installed through Subtitles.
 **Not compiled, built, run or tested**, as requested. Unit tests were written
 in the existing separate test files. Architecture, decisions, limits and manual
 verification steps: `docs/AUTO_CUT.md`.
+
+## Short-form round 1 — auto zoom, beat sync, safe zones
+
+Compiled, `cargo clippy --workspace --all-targets -D warnings` clean, `cargo test
+--workspace` passes (new: 11 auto-zoom, 8 beat-sync, 4 beat-detection, 5 safe-zone
+tests). Not tried by hand: all GUI behaviour (checklist below). No LLM, no
+network, **no new dependency**: beat detection is our own Rust (see below);
+transcription is the existing Whisper engine.
+
+### 1. Auto zoom
+
+- **Where**: «Zoom automatici» button in the timeline bar (next to Taglio
+  automatico) opens Properties → Video → **Zoom auto** (new sub-tab).
+- **Data**: the Automatic cut source cache (`auto_cut::load_source`: SHA-256 of
+  the file, Whisper words, 10 ms energy, disk cache in the library's
+  `auto-cut/`). Opening the tab only *looks the cache up* (`transcribe: false`);
+  without a transcript it shows «Genera trascrizione», which runs the existing
+  engine with progress and Cancel. Source selection (linked audio first) and the
+  clip-local mapping were moved into `speech_source` / `clip_local`, now shared
+  with Automatic cut.
+- **Heuristic** (`vv-core/src/auto_zoom.rs`, pure): per word, a score from its
+  peak dB above the median of the words within ±4 s (+6 dB = full), sentence
+  start (first word, pause ≥ 0.6 s or `.!?` before) and the pause before it.
+  Frequency sets the score threshold; the greedy pick (best score first) keeps
+  the minimum gap. A zoom holds until the phrase ends (pause ≥ 0.35 s), between
+  0.6 and 2.5 s.
+- **Output**: ZoomX/ZoomY keyframes (and PositionX/Y with «Sposta il centro»):
+  rest → peak with Cubic Out (fast in), hold, then Cubic In-Out back to rest
+  (smooth out). Zooms too close to return to rest go straight from one level to
+  the next. Values multiply the clip's own zoom, so a rotated or scaled clip
+  keeps it. The generated keys are listed in `Clip::auto_keyframes`
+  (serde default, skipped when empty, **no format bump**: an older app reads
+  the file and just treats them as hand-made).
+- **Parameters** (saved in `settings.json` → `shorts.auto_zoom`): intensity
+  105–125 %, easing Lento/Normale/Rapido (in 0.25/0.15/0.08 s, out
+  0.7/0.45/0.3 s), frequency Bassa/Media/Alta (default gap 4/2.5/1.5 s),
+  minimum gap 0.5–10 s, alternate levels (every other zoom at 55 % of the
+  intensity), centre shift (±40 % of the margin the zoom frees, fixed
+  4-step pattern).
+- **Preview**: «Anteprima» applies the keyframes as a real history step; while
+  it is pending, changing a parameter undoes it and applies the new one (on
+  slider release). «Applica» keeps it, «Annulla» undoes it. Any other edit
+  makes it final.
+- **Remove**: «Rimuovi zoom automatici» removes only the keys still equal to
+  what was generated: hand-made keys and generated keys the user moved or
+  changed stay. One undo step.
+
+### 2. Beat sync
+
+- **Library choice**: librosa is Python and aubio is a C library (bindgen + C
+  toolchain on every platform). `vv-audio/src/beat.rs` implements the same
+  method as `librosa.beat_track` in ~300 lines of Rust, reusing the radix-2 FFT
+  of `spectrum.rs` (made `pub(crate)`): 40-band log spectral flux (22.05 kHz,
+  2048/512), tempo by autocorrelation weighted by a log-normal prior at
+  120 BPM (50–220 BPM), beats by dynamic programming (Ellis 2007, tightness
+  100), weak edge beats trimmed. Streamed: memory does not grow with the song.
+- **Errors**: shorter than 5 s, silent, no clear rhythm (autocorrelation peak
+  < 0.12 of lag 0, or < 4 beats), missing file (offline), no audio stream,
+  freeze/disabled/compound clips. Unstable BPM (12 s windows deviating > 4 %
+  on average) and a weak rhythm (clarity < 0.25) are warnings: the beats are
+  placed anyway.
+- **UI**: «Beat» button in the timeline bar toggles a small floating window
+  (simplest choice: the Properties panel has no Audio tab for photos, and the
+  same controls serve a music clip and a video selection). Analysis of the
+  selected clip (an audio-track clip first) runs on a worker with progress
+  and Cancel; results are cached per source for the session.
+- **Markers**: ordinary timeline markers with `Marker::beat = true` (serde
+  default, cyan), one undo step (`beat_sync::SetMarkers`). They move, get
+  edited and get deleted like any marker. Re-analysing replaces the beat
+  markers over that clip only; user markers stay. «Rimuovi i marker dei beat».
+- **Snap**: «Snap ai beat» (saved, `shorts.beat_snap`) adds or removes beat
+  markers from the existing snap targets (`snap_extra` in `timeline_ui.rs`):
+  moves, trims, Blade cuts and drops snap to them when Snapping is on. The
+  ruler playhead still snaps to clip edges only.
+- **Tagli sui beat** (`beat_sync::cuts_on_beats`): the selected video-track
+  clips/photos, in timeline order, go one after the other on the track of the
+  first, from the first beat at or after it, each lasting 1/2/4 beats
+  (`shorts.beat_every`). A video shorter than its slot keeps its length (gap
+  left). Linked audio follows. Past the last beat marker the median beat
+  period is extrapolated. What is underneath is overwritten
+  (`make_room_for_ranges`). Same preview → Applica/Annulla pattern, one undo
+  step. Refused with a message: no clips, < 2 beat markers, no beat after the
+  first clip, locked track.
+
+### 3. Safe zones
+
+- **Config**: `crates/vv-app/assets/safe_zones.json` (embedded, version 1):
+  per platform `id`, `name`, `zones[]` with `label` {it, en} and `x, y, w, h`
+  in percent from the top-left of a 9:16 frame. A `safe_zones.json` next to
+  `settings.json` (`~/.config/tandem/`) overrides it; it is re-read every time
+  the overlay is switched on. An unreadable override falls back to the
+  bundled file and says why at the bottom of the player.
+- **Player**: the safe-zones icon is now a toggle (cyan when on) with a
+  platform menu next to it (TikTok, Instagram Reels, YouTube Shorts). Both are
+  saved (`shorts.safe_zones`, `shorts.safe_zone_platform`).
+- Painted with the UI painter over the viewer rect (`paint_safe_zones` in
+  `main.rs`), so it cannot reach the export or the decoder. Not shown in the
+  full-screen viewer or while browsing a pool item.
+- **Warning**: while paused, each visible text clip under the playhead
+  (subtitles included) whose drawn box enters a zone gets a yellow outline and
+  «Testo in una zona coperta».
+- **The zone values are estimates** from the commonly published 1080×1920
+  guides, not measured on the apps: check them on a device and edit the JSON.
+
+### Known limits
+
+- Auto zoom works on one clip at a time (the first selected); on a clip with
+  speed ≠ 1 the times follow the speed; a zoom whose span already holds a
+  hand-made zoom/position key is skipped (so manual work is never
+  overwritten). A generated key added between two hand-made keys changes the
+  shape of that segment if it was not linear.
+- The beat analysis decodes the whole media file even if the clip uses part
+  of it; beats are placed only inside the clip. No downbeat/bar detection.
+- Tagli sui beat does not run the Magnet afterwards and does not reorder:
+  clips keep their timeline order.
+- Safe zones are drawn for any ratio, but the values only make sense on 9:16.
+- The beat window and the auto-zoom tab look up the source file every frame
+  while open (two `stat` calls, no read).
+
+### Manual test checklist
+
+1. Auto zoom: select a talking-head clip with no transcript → Zoom auto →
+   «Genera trascrizione» → cancel halfway, retry, let it finish. Anteprima,
+   move each parameter, Applica; play it back; Ctrl+Z / Ctrl+Y.
+2. Add a hand-made zoom key, regenerate, then «Rimuovi zoom automatici»: the
+   hand key stays. Retouch one generated key: it stays too.
+3. Missing model (rename `models/`), offline file, photo, disabled clip: each
+   shows its message.
+4. Beat: select a music clip → Rileva i beat; check BPM on 3–4 known songs
+   (electronic, acoustic, rubato), a speech-only file (no rhythm), a 3 s file.
+5. Drag and delete a beat marker; Snap ai beat on/off while moving a clip and
+   cutting with Blade; undo the analysis in one step.
+6. Select 6 photos + 2 videos → Tagli sui beat every 1/2/4 → Anteprima,
+   Annulla, Anteprima, Applica, Ctrl+Z.
+7. Safe zones: toggle, switch platform, restart the app (state kept), put a
+   subtitle at the bottom (warning), export and check the file has no overlay.
+   Copy the JSON next to `settings.json`, change a value, toggle off/on.
+8. Playback performance with the auto-zoom tab and the beat window open.

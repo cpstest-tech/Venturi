@@ -454,6 +454,7 @@ fn changing_the_timeline_fps_keeps_every_position_in_seconds() {
         duration: 25,
         note: String::new(),
         color: Marker::default_color(),
+        beat: false,
     });
     project.view.covers.insert(timeline, 100);
     let before = project.timelines[timeline].clone();

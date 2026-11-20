@@ -126,8 +126,14 @@ player.quality_full:
   it: Piena
 
 player.safe_zones:
-  en: Social safe zones
-  it: Zone sicure social
+  en: "Social safe zones: show or hide the areas covered by the app's interface (never exported)"
+  it: "Safe zone social: mostra o nascondi le aree coperte dall'interfaccia dell'app (mai esportate)"
+player.safe_zone_warning:
+  en: "Text in a covered area"
+  it: "Testo in una zona coperta"
+player.safe_zone_file_error:
+  en: "safe_zones.json ignored: %{error}"
+  it: "safe_zones.json ignorato: %{error}"
 
 player.fit_view:
   en: Fit to view

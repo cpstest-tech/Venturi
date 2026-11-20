@@ -823,6 +823,32 @@ pub struct Settings {
     pub check_updates: bool,
     /// Tag the user chose to skip in the update prompt.
     pub ignored_update: Option<String>,
+    pub shorts: ShortsPrefs,
+}
+
+/// Automatic zooms, beat sync and safe zones, remembered between sessions.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShortsPrefs {
+    pub auto_zoom: vv_core::auto_zoom::Config,
+    pub beat_snap: bool,
+    /// Beats per clip of «Tagli sui beat»: 1, 2 or 4.
+    pub beat_every: u8,
+    pub safe_zones: bool,
+    /// Id of a platform in `safe_zones.json`.
+    pub safe_zone_platform: String,
+}
+
+impl Default for ShortsPrefs {
+    fn default() -> Self {
+        Self {
+            auto_zoom: Default::default(),
+            beat_snap: true,
+            beat_every: 1,
+            safe_zones: false,
+            safe_zone_platform: "tiktok".into(),
+        }
+    }
 }
 
 /// Largest size the editor composes at, as a fraction of the timeline's
@@ -913,6 +939,7 @@ impl Default for Settings {
             text_templates: Vec::new(),
             check_updates: true,
             ignored_update: None,
+            shorts: ShortsPrefs::default(),
         }
     }
 }
@@ -1037,6 +1064,8 @@ struct SettingsFile {
     check_updates: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ignored_update: Option<String>,
+    #[serde(default)]
+    shorts: ShortsPrefs,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -1240,6 +1269,7 @@ impl Settings {
             .collect();
         settings.check_updates = file.check_updates.unwrap_or(true);
         settings.ignored_update = file.ignored_update;
+        settings.shorts = file.shorts;
         let defaults = PanelLayout::default();
         settings.panels = PanelLayout {
             media_pool_open: file
@@ -1359,6 +1389,7 @@ impl Settings {
                 .collect(),
             check_updates: Some(self.check_updates),
             ignored_update: self.ignored_update.clone(),
+            shorts: self.shorts.clone(),
         };
         let text = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
         if let Some(dir) = path.parent() {

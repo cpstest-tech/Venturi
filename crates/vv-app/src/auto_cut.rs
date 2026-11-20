@@ -17,7 +17,7 @@ const OVERLAP_SECONDS: usize = 2;
 const RATE: usize = vv_transcribe::SAMPLE_RATE as usize;
 const ENERGY_SAMPLES: usize = RATE / 100;
 
-type SourceKey = (PathBuf, u64, usize, Option<&'static str>);
+pub(crate) type SourceKey = (PathBuf, u64, usize, Option<&'static str>);
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Cached {
@@ -44,6 +44,17 @@ pub(crate) struct SourceJob {
     pub cancel: Arc<AtomicBool>,
     pub progress: Arc<Progress>,
     rx: mpsc::Receiver<Result<Arc<Cached>, String>>,
+}
+
+impl SourceJob {
+    /// `None` while the worker runs.
+    pub fn poll(&self) -> Option<Result<Arc<Cached>, String>> {
+        match self.rx.try_recv() {
+            Ok(result) => Some(result),
+            Err(mpsc::TryRecvError::Disconnected) => Some(Err("worker_stopped".into())),
+            Err(mpsc::TryRecvError::Empty) => None,
+        }
+    }
 }
 
 pub(crate) struct Analysis {
@@ -153,33 +164,7 @@ impl Modal {
                         return;
                     }
                     let duration = clip.timeline_len as f64 / fps;
-                    let words: Vec<_> = source
-                        .words
-                        .iter()
-                        .filter_map(|w| {
-                            let start = ((w.start - media_start) / speed).max(0.0);
-                            let end = ((w.end - media_start) / speed).min(duration);
-                            (end > start).then(|| Word {
-                                text: w.text.clone(),
-                                start,
-                                end,
-                                confidence: w.confidence,
-                            })
-                        })
-                        .collect();
-                    let step = source.energy.step / speed;
-                    let count = (duration / step).ceil() as usize;
-                    let energy = Energy {
-                        step,
-                        db: (0..count)
-                            .map(|i| {
-                                let at = ((media_start + i as f64 * step * speed)
-                                    / source.energy.step)
-                                    .floor() as usize;
-                                source.energy.db.get(at).copied().unwrap_or(-120.0)
-                            })
-                            .collect(),
-                    };
+                    let (words, energy) = clip_local(&source, media_start, speed, duration);
                     let Some(segments) =
                         auto_cut::analyze_cancellable(&words, &energy, duration, &config, &|| {
                             worker_cancel.load(Ordering::Relaxed)
@@ -242,55 +227,27 @@ impl VenturiApp {
         };
         let clip = tl.clip(target.0, target.1).unwrap().clone();
         let fps = tl.fps.as_f64();
-        let audio = tl
-            .tracks
-            .iter()
-            .filter(|t| t.kind == TrackKind::Audio)
-            .flat_map(|t| &t.clips)
-            .find(|c| {
-                (c.id == clip.id || clip.linked_group.is_some_and(|g| c.linked_group == Some(g)))
-                    && c.timeline_start <= clip.timeline_start
-                    && c.timeline_end() >= clip.timeline_end()
-                    && matches!(c.source, ClipSource::Media(_))
-            });
-        let analysis_clip = audio.unwrap_or(&clip);
-        let ClipSource::Media(media) = analysis_clip.source else {
+        let Some(spec) = self.speech_source(timeline, &clip) else {
             return;
         };
-        let Some(item) = self.session.project.media_pool.get(media) else {
-            return;
-        };
-        let stream = analysis_clip.audio_stream_index;
-        let media_start = analysis_clip.media_secs_at(clip.timeline_start, fps);
-        let media_speed = analysis_clip.speed().as_f64();
-        let path = item.path.clone();
-        let duration = item.meta.duration_frames as f64 / item.meta.fps.as_f64();
-        let unsupported = item.compound.is_some()
-            || clip.freeze.is_some()
-            || clip.disabled
-            || !item.meta.has_audio;
         let locked = tl.tracks.iter().any(|t| {
             t.locked
                 && t.clips.iter().any(|c| {
                     c.id == clip.id || clip.linked_group.is_some_and(|g| c.linked_group == Some(g))
                 })
         });
-        let fingerprint = source_stamp(&path).ok();
         let language = self.subtitles.language;
-        let key = fingerprint.map(|hash| (path.clone(), hash, stream, language));
-        let source = key
-            .as_ref()
-            .and_then(|key| self.auto_cut.cache.get(key))
-            .cloned();
-        let error = if locked {
-            Some("locked")
-        } else if unsupported {
-            Some("unsupported")
-        } else if fingerprint.is_none() {
-            Some("offline")
-        } else {
-            None
-        };
+        let source = self.cached_speech(&spec);
+        let error = if locked { Some("locked") } else { spec.error };
+        let SpeechSource {
+            path,
+            stream,
+            duration,
+            media_start,
+            media_speed,
+            key,
+            ..
+        } = spec;
         let mut modal = Modal {
             timeline,
             target,
@@ -314,7 +271,14 @@ impl VenturiApp {
             preview: true,
         };
         if error.is_none() && modal.source.is_none() {
-            modal.job = Some(start_source(path, stream, duration, language, ctx.clone()));
+            modal.job = Some(start_source(
+                path,
+                stream,
+                duration,
+                language,
+                true,
+                ctx.clone(),
+            ));
         } else if error.is_none() && modal.source.is_some() {
             modal.request_analysis();
         }
@@ -331,12 +295,116 @@ impl VenturiApp {
 
     pub(crate) fn cache_auto_cut_source(&mut self, modal: &Modal) {
         if let (Some(key), Some(source)) = (&modal.key, &modal.source) {
-            if self.auto_cut.cache.len() >= 4 && !self.auto_cut.cache.contains_key(key) {
-                self.auto_cut.cache.clear();
-            }
-            self.auto_cut.cache.insert(key.clone(), source.clone());
+            self.remember_speech(key, source);
         }
     }
+
+    pub(crate) fn remember_speech(&mut self, key: &SourceKey, source: &Arc<Cached>) {
+        if self.auto_cut.cache.len() >= 4 && !self.auto_cut.cache.contains_key(key) {
+            self.auto_cut.cache.clear();
+        }
+        self.auto_cut.cache.insert(key.clone(), source.clone());
+    }
+
+    pub(crate) fn cached_speech(&self, spec: &SpeechSource) -> Option<Arc<Cached>> {
+        spec.key
+            .as_ref()
+            .and_then(|key| self.auto_cut.cache.get(key))
+            .cloned()
+    }
+
+    /// Where the speech of `clip` comes from: its linked audio covering it if
+    /// there is one, else its own audio.
+    pub(crate) fn speech_source(&self, timeline: TimelineId, clip: &Clip) -> Option<SpeechSource> {
+        let tl = &self.session.project.timelines[timeline];
+        let fps = tl.fps.as_f64();
+        let audio = tl
+            .tracks
+            .iter()
+            .filter(|t| t.kind == TrackKind::Audio)
+            .flat_map(|t| &t.clips)
+            .find(|c| {
+                (c.id == clip.id || clip.linked_group.is_some_and(|g| c.linked_group == Some(g)))
+                    && c.timeline_start <= clip.timeline_start
+                    && c.timeline_end() >= clip.timeline_end()
+                    && matches!(c.source, ClipSource::Media(_))
+            });
+        let analysis_clip = audio.unwrap_or(clip);
+        let ClipSource::Media(media) = analysis_clip.source else {
+            return None;
+        };
+        let item = self.session.project.media_pool.get(media)?;
+        let stream = analysis_clip.audio_stream_index;
+        let path = item.path.clone();
+        let unsupported = item.compound.is_some()
+            || clip.freeze.is_some()
+            || clip.disabled
+            || !item.meta.has_audio;
+        let fingerprint = source_stamp(&path).ok();
+        let language = self.subtitles.language;
+        Some(SpeechSource {
+            key: fingerprint.map(|hash| (path.clone(), hash, stream, language)),
+            error: if unsupported {
+                Some("unsupported")
+            } else if fingerprint.is_none() {
+                Some("offline")
+            } else {
+                None
+            },
+            media_start: analysis_clip.media_secs_at(clip.timeline_start, fps),
+            media_speed: analysis_clip.speed().as_f64(),
+            duration: item.meta.duration_frames as f64 / item.meta.fps.as_f64(),
+            stream,
+            path,
+        })
+    }
+}
+
+pub(crate) struct SpeechSource {
+    pub path: PathBuf,
+    pub stream: usize,
+    /// Of the whole media, in seconds.
+    pub duration: f64,
+    pub media_start: f64,
+    pub media_speed: f64,
+    pub key: Option<SourceKey>,
+    pub error: Option<&'static str>,
+}
+
+/// Words and energy of the source re-expressed in seconds from the clip start.
+pub(crate) fn clip_local(
+    source: &Cached,
+    media_start: f64,
+    speed: f64,
+    duration: f64,
+) -> (Vec<Word>, Energy) {
+    let words = source
+        .words
+        .iter()
+        .filter_map(|w| {
+            let start = ((w.start - media_start) / speed).max(0.0);
+            let end = ((w.end - media_start) / speed).min(duration);
+            (end > start).then(|| Word {
+                text: w.text.clone(),
+                start,
+                end,
+                confidence: w.confidence,
+            })
+        })
+        .collect();
+    let step = source.energy.step / speed;
+    let count = (duration / step).ceil() as usize;
+    let energy = Energy {
+        step,
+        db: (0..count)
+            .map(|i| {
+                let at =
+                    ((media_start + i as f64 * step * speed) / source.energy.step).floor() as usize;
+                source.energy.db.get(at).copied().unwrap_or(-120.0)
+            })
+            .collect(),
+    };
+    (words, energy)
 }
 
 fn cancelled(cancel: &AtomicBool) -> Result<(), String> {
@@ -379,11 +447,13 @@ fn source_stamp(path: &Path) -> std::io::Result<u64> {
     Ok(vv_media::content_fingerprint(path)? ^ stamp)
 }
 
-fn start_source(
+/// `transcribe: false` only reads the disk cache and fails with `no_transcript`.
+pub(crate) fn start_source(
     path: PathBuf,
     stream: usize,
     duration: f64,
     language: Option<&'static str>,
+    transcribe: bool,
     ctx: egui::Context,
 ) -> SourceJob {
     let cancel = Arc::new(AtomicBool::new(false));
@@ -393,8 +463,10 @@ fn start_source(
         let cancel = cancel.clone();
         let progress = progress.clone();
         move || {
-            let result =
-                load_source(&path, stream, duration, language, &progress, &cancel).map(Arc::new);
+            let result = load_source(
+                &path, stream, duration, language, transcribe, &progress, &cancel,
+            )
+            .map(Arc::new);
             let _ = tx.send(result);
             ctx.request_repaint();
         }
@@ -438,6 +510,7 @@ fn load_source(
     stream: usize,
     duration: f64,
     language: Option<&str>,
+    transcribe: bool,
     progress: &Arc<Progress>,
     cancel: &Arc<AtomicBool>,
 ) -> Result<Cached, String> {
@@ -471,6 +544,9 @@ fn load_source(
         && cache.duration.is_finite()
     {
         return Ok(cache);
+    }
+    if !transcribe {
+        return Err("no_transcript".into());
     }
     progress.stage.store(1, Ordering::Relaxed);
     progress.done.store(0, Ordering::Relaxed);

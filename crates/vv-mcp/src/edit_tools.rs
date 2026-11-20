@@ -1551,6 +1551,7 @@ pub(crate) fn add_marker(session: &mut Session, args: AddMarkerArgs) -> ToolResu
         duration,
         note: args.note.unwrap_or_default(),
         color: args.color.map_or_else(Marker::default_color, palette),
+        beat: false,
     };
     one_step(session, timeline, None, |s| {
         let value = marker_json(&marker);

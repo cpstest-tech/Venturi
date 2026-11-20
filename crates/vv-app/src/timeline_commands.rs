@@ -35,6 +35,11 @@ impl VenturiApp {
     pub(crate) fn run_timeline_command(&mut self, ctx: &egui::Context, command: TimelineCommand) {
         match command {
             TimelineCommand::AutoCut => self.open_auto_cut(ctx),
+            TimelineCommand::AutoZoom => {
+                self.clip_tab = properties_tabs::ClipTab::Video;
+                properties_tabs::select_video_sub_tab(ctx, properties_tabs::VideoSubTab::AutoZoom);
+            }
+            TimelineCommand::BeatSync => self.beat.open = !self.beat.open,
             TimelineCommand::Undo => self.undo(),
             TimelineCommand::Redo => self.redo(),
             TimelineCommand::SplitAtPlayhead => self.split_at_playhead(),

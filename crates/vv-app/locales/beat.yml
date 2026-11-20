@@ -1,0 +1,110 @@
+_version: 2
+
+beat.button:
+  en: "Beat"
+  it: "Beat"
+beat.button_hint:
+  en: "Beat sync: tempo analysis, beat markers and cuts on the beat"
+  it: "Beat sync: analisi del tempo, marker dei beat e tagli sui beat"
+beat.title:
+  en: "Beat sync"
+  it: "Beat sync"
+beat.no_timeline:
+  en: "Open a timeline first."
+  it: "Apri prima una timeline."
+beat.analysis:
+  en: "Analysis"
+  it: "Analisi"
+beat.select_music:
+  en: "Select the music clip to analyse."
+  it: "Seleziona la clip musicale da analizzare."
+beat.analyse:
+  en: "Detect beats"
+  it: "Rileva i beat"
+beat.analysing:
+  en: "Analysing the audio…"
+  it: "Analisi dell'audio…"
+beat.cancel:
+  en: "Cancel"
+  it: "Annulla"
+beat.result:
+  en: "%{bpm} BPM · %{count} beats"
+  it: "%{bpm} BPM · %{count} beat"
+beat.unstable:
+  en: "The tempo changes along the track: check the markers by ear."
+  it: "Il tempo cambia lungo la traccia: controlla i marker a orecchio."
+beat.weak:
+  en: "The rhythm is not very clear: some markers may be off."
+  it: "Il ritmo non è molto chiaro: alcuni marker potrebbero essere fuori tempo."
+beat.too_short:
+  en: "The audio is too short to find a tempo (at least 5 s)."
+  it: "L'audio è troppo corto per trovare un tempo (almeno 5 s)."
+beat.silent:
+  en: "The audio is silent."
+  it: "L'audio è muto."
+beat.no_rhythm:
+  en: "No clear rhythm found in this track."
+  it: "Nessun ritmo chiaro trovato in questa traccia."
+beat.no_audio:
+  en: "The clip's source has no readable audio stream."
+  it: "La sorgente della clip non ha una traccia audio leggibile."
+beat.offline:
+  en: "The audio file is missing. Relink it first."
+  it: "Il file audio non è disponibile. Ricollegalo prima."
+beat.unsupported:
+  en: "Freeze frames, disabled and compound clips cannot be analysed."
+  it: "Fermi immagine, clip disattivate e clip composte non possono essere analizzate."
+beat.cancelled:
+  en: "Analysis cancelled."
+  it: "Analisi annullata."
+beat.error:
+  en: "Analysis failed: %{detail}"
+  it: "Analisi non riuscita: %{detail}"
+beat.markers:
+  en: "Markers"
+  it: "Marker"
+beat.markers_step:
+  en: "Beat markers"
+  it: "Marker dei beat"
+beat.marker_count:
+  en: "%{count} beat markers on the timeline. Drag or edit them like any marker."
+  it: "%{count} marker dei beat sulla timeline. Trascinali o modificali come ogni marker."
+beat.snap:
+  en: "Snap to beats"
+  it: "Snap ai beat"
+beat.snap_hint:
+  en: "With Snapping on, cuts and clip edges stick to the beat markers."
+  it: "Con lo Snap attivo, tagli e bordi delle clip si agganciano ai marker dei beat."
+beat.remove_markers:
+  en: "Remove beat markers"
+  it: "Rimuovi i marker dei beat"
+beat.cuts_title:
+  en: "Cuts on the beat"
+  it: "Tagli sui beat"
+beat.cuts_hint:
+  en: "The selected clips and photos are laid out one after the other from the first beat after the first of them."
+  it: "Le clip e le foto selezionate vengono messe una dopo l'altra dal primo beat dopo la prima di esse."
+beat.every:
+  en: "Every"
+  it: "Ogni"
+beat.preview:
+  en: "Preview"
+  it: "Anteprima"
+beat.apply:
+  en: "Apply"
+  it: "Applica"
+beat.discard:
+  en: "Discard"
+  it: "Annulla"
+beat.cuts_no_clips:
+  en: "Select clips or photos on a video track."
+  it: "Seleziona clip o foto su una traccia video."
+beat.cuts_no_beats:
+  en: "Detect the beats first (at least two markers)."
+  it: "Rileva prima i beat (servono almeno due marker)."
+beat.cuts_no_beat_after:
+  en: "No beat marker after the first selected clip."
+  it: "Nessun marker dei beat dopo la prima clip selezionata."
+beat.cuts_locked:
+  en: "Unlock the tracks of the selected clips and of their linked audio."
+  it: "Sblocca le tracce delle clip selezionate e del loro audio collegato."

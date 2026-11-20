@@ -47,14 +47,22 @@ pub(crate) enum VideoSubTab {
     RemoveBackground,
     Mask,
     Retouch,
+    AutoZoom,
 }
 
-pub(crate) const VIDEO_SUB_TABS: [VideoSubTab; 4] = [
+pub(crate) const VIDEO_SUB_TABS: [VideoSubTab; 5] = [
     VideoSubTab::Basic,
     VideoSubTab::RemoveBackground,
     VideoSubTab::Mask,
     VideoSubTab::Retouch,
+    VideoSubTab::AutoZoom,
 ];
+
+/// Opens a Video sub-tab from outside the panel (its index lives in egui memory, see `segmented`).
+pub(crate) fn select_video_sub_tab(ctx: &egui::Context, tab: VideoSubTab) {
+    let index = VIDEO_SUB_TABS.iter().position(|t| *t == tab).unwrap_or(0);
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new(("segmented", "video_subtab")), index));
+}
 
 impl VideoSubTab {
     pub(crate) fn label(self) -> Cow<'static, str> {
@@ -63,6 +71,7 @@ impl VideoSubTab {
             VideoSubTab::RemoveBackground => t!("props.sub_remove_bg"),
             VideoSubTab::Mask => t!("props.sub_mask"),
             VideoSubTab::Retouch => t!("props.sub_retouch"),
+            VideoSubTab::AutoZoom => t!("auto_zoom.sub_tab"),
         }
     }
 }

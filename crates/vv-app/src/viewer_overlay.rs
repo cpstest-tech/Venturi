@@ -224,6 +224,28 @@ pub(crate) fn frame_bounds(
         })
 }
 
+/// Like `frame_bounds` for the drawn part of a title, `content` as
+/// `title_content_box` gives it.
+pub(crate) fn content_frame_bounds(
+    timeline_size: (u32, u32),
+    [left, right, bottom, top]: [f32; 4],
+    transform: &Transform,
+) -> [f32; 4] {
+    let mut clip_box = ClipBox::new(timeline_size, timeline_size, transform.crop, transform.flip);
+    (clip_box.left, clip_box.right, clip_box.bottom, clip_box.top) = (left, right, bottom, top);
+    [(-1.0, 1.0), (1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)]
+        .map(|(sx, sy)| clip_to_frame(transform, clip_box.point(sx, sy)))
+        .iter()
+        .fold([f32::MAX, f32::MIN, f32::MAX, f32::MIN], |b, p| {
+            [
+                b[0].min(p[0]),
+                b[1].max(p[0]),
+                b[2].min(p[1]),
+                b[3].max(p[1]),
+            ]
+        })
+}
+
 /// Pulls the clip's centre onto the canvas centre, per axis, when it is within
 /// `threshold` timeline pixels. The flags tell which axes end up centred.
 fn snap_to_center(t: &mut Transform, clip_box: &ClipBox, threshold: f32) -> [bool; 2] {

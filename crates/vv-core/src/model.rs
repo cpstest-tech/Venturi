@@ -49,6 +49,9 @@ pub struct Marker {
     pub note: String,
     #[serde(default = "Marker::default_color")]
     pub color: ClipColor,
+    /// Placed by the beat analysis: removable all at once, optional snap target.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub beat: bool,
 }
 
 impl Marker {
@@ -2128,6 +2131,10 @@ pub struct Clip {
     /// Hand-picked timeline color; `None` = the one derived from the source kind.
     #[serde(default, deserialize_with = "lenient_clip_color")]
     pub display_color: Option<ClipColor>,
+    /// Transform keyframes written by the automatic zooms, so that removing
+    /// them leaves the hand-made ones alone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auto_keyframes: Vec<crate::auto_zoom::AutoKeyframe>,
 }
 
 fn pitch_correction_default() -> bool {
@@ -2165,6 +2172,7 @@ impl Clip {
             audio_splice_in_seconds: 0.0,
             audio_splice_out_seconds: 0.0,
             display_color: None,
+            auto_keyframes: Vec::new(),
         }
     }
 

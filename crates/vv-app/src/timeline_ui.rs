@@ -87,6 +87,8 @@ pub enum TimelineTool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimelineCommand {
     AutoCut,
+    AutoZoom,
+    BeatSync,
     Undo,
     Redo,
     SplitAtPlayhead,
@@ -208,6 +210,8 @@ pub struct TimelineState {
     pub reveal_in_pool_requested: Option<vv_core::MediaId>,
     /// Main Track Magnet: edits leave no hole on the Main Track.
     pub magnet: bool,
+    /// Beat markers are snap targets (with snapping on).
+    pub beat_snap: bool,
     /// Linkage: clips on other tracks follow the Main Track clip under them.
     pub linkage: bool,
     /// A vertical line follows the pointer and the player scrubs to it.
@@ -531,6 +535,7 @@ impl Default for TimelineState {
             silence_preview: Vec::new(),
             reveal_in_pool_requested: None,
             magnet: true,
+            beat_snap: true,
             linkage: true,
             preview_axis: false,
             hover_frame: None,
@@ -2466,6 +2471,7 @@ pub fn show_timeline(
             project.timelines[timeline_id]
                 .markers
                 .iter()
+                .filter(|m| state.beat_snap || !m.beat)
                 .flat_map(|m| [m.start, m.start + m.duration]),
         )
         .collect();

@@ -2809,6 +2809,7 @@ impl VenturiApp {
                                                     self.show_remove_background_tab(ui, targets, &info.filters, &mut pending_effects)
                                                 }
                                                 (_, properties_tabs::VideoSubTab::Retouch) => properties_tabs::retouch_tab(ui),
+                                                (_, properties_tabs::VideoSubTab::AutoZoom) => self.show_auto_zoom_tab(ui, &primary),
                                                 _ => {}
                                             }
                                         }

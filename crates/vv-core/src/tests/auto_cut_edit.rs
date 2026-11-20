@@ -239,6 +239,7 @@ fn ripple_updates_saved_words_and_marker_ranges_and_respects_other_locked_tracks
         duration: 60,
         note: "Range".into(),
         color: crate::Marker::default_color(),
+        beat: false,
     });
     let captions = Captions {
         words: vec![
