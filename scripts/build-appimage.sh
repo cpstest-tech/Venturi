@@ -47,6 +47,9 @@ mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib"
 cp "$TARGET_DIR/release/tandem" "$APPDIR/usr/bin/"
 cp "$FFMPEG_PREFIX/bin/ffmpeg" "$FFMPEG_PREFIX/bin/ffprobe" "$APPDIR/usr/bin/"
 cp -a "$FFMPEG_PREFIX"/lib/*.so.* "$APPDIR/usr/lib/"
+# Off the rpath: AppRun puts it on LD_LIBRARY_PATH only without a system libva.
+mkdir -p "$APPDIR/usr/lib/libva"
+mv "$APPDIR"/usr/lib/libva*.so* "$APPDIR/usr/lib/libva/"
 cp packaging/appimage/tandem.desktop "$APPDIR/"
 mkdir -p "$APPDIR/usr/share/applications"
 cp packaging/appimage/tandem.desktop "$APPDIR/usr/share/applications/"
@@ -65,7 +68,7 @@ for dir in media/icons/linux/hicolor/*/apps; do
     done
 done
 cp media/icons/png/tandem-icon-256.png "$APPDIR/.DirIcon"
-ln -s usr/bin/tandem "$APPDIR/AppRun"
+cp packaging/appimage/AppRun "$APPDIR/AppRun"
 
 # The rpath must be set here, not via a cargo link-arg: the arguments after
 # `--` to `cargo rustc` do not enter the fingerprint, so if the crate is
@@ -86,7 +89,12 @@ done
 # dependencies are checked too.
 for so in $(patchelf --print-needed "$APPDIR"/usr/bin/* "$APPDIR"/usr/lib/libavcodec.so.*); do
     case "$so" in
-        libav*|libsw*|libpostproc*|libx264*|libmp3lame*|libopus*|libvorbis*|libogg*|libva*)
+        libva*)
+            if [ ! -e "$APPDIR/usr/lib/libva/$so" ]; then
+                echo "required library missing from the bundle: $so" >&2
+                exit 1
+            fi ;;
+        libav*|libsw*|libpostproc*|libx264*|libmp3lame*|libopus*|libvorbis*|libogg*)
             if [ ! -e "$APPDIR/usr/lib/$so" ]; then
                 echo "required library missing from the bundle: $so" >&2
                 exit 1
