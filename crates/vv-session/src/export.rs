@@ -463,11 +463,16 @@ fn export_files(
     created: &mut Vec<PathBuf>,
 ) -> Result<(), ExportError> {
     if settings.video_enabled {
+        let retimed = retimed_to_output(project, timeline_id, settings, range.clone());
+        let (project, settings, video_range) = match &retimed {
+            Some((project, settings, range)) => (project, settings, range.clone()),
+            None => (project, settings, range.clone()),
+        };
         export_video(
             project,
             timeline_id,
             settings,
-            range.clone(),
+            video_range,
             progress,
             cancel,
             created,
@@ -490,6 +495,28 @@ fn export_files(
     }
     progress.lock().unwrap().done = true;
     Ok(())
+}
+
+/// Above the timeline's rate, output frames picked from the timeline grid
+/// repeat each frame and the motion stays at the timeline's rate: a copy
+/// retimed to the output rate renders every output frame on its own.
+fn retimed_to_output(
+    project: &Project,
+    timeline_id: TimelineId,
+    settings: &ExportSettings,
+    range: std::ops::Range<FrameIdx>,
+) -> Option<(Project, ExportSettings, std::ops::Range<FrameIdx>)> {
+    use vv_core::Command;
+    let from = project.timelines.get(timeline_id)?.fps;
+    let to = settings.fps.filter(|to| to.as_f64() > from.as_f64())?;
+    let mut project = project.clone();
+    vv_core::SetTimelineFps::new(timeline_id, to).apply(&mut project);
+    let settings = ExportSettings {
+        fps: None,
+        ..settings.clone()
+    };
+    let convert = |frame| vv_core::convert_frames(frame, from, to);
+    Some((project, settings, convert(range.start)..convert(range.end)))
 }
 
 /// The timeline frame shown by output frame `index`.

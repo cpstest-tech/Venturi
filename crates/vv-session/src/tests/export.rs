@@ -1992,3 +1992,39 @@ fn motion_blur_deduplication_fills_a_repeated_frame() {
     let halfway = 16.0 + 219.0 * 0.5;
     assert!((f64::from(luma[1]) - halfway).abs() < 8.0, "{luma:?}");
 }
+
+#[test]
+fn a_higher_output_rate_retimes_a_copy_of_the_timeline() {
+    let mut project = Project::default();
+    let track = Track {
+        kind: TrackKind::Video,
+        clips: vec![solid_color_clip(1, 10, 30, red())],
+        muted: false,
+        solo: false,
+        locked: false,
+        crossings: Vec::new(),
+        mix: Default::default(),
+        armed: Default::default(),
+        main: false,
+        subtitles: false,
+        effects: false,
+    };
+    let id = project.timelines.insert(timeline_with(vec![track]));
+    let mut settings = ExportSettings::new("out.mp4".into());
+    settings.fps = Some(vv_core::Rational::new(50, 1));
+
+    let (retimed, retimed_settings, range) =
+        retimed_to_output(&project, id, &settings, 5..40).unwrap();
+    let timeline = &retimed.timelines[id];
+    assert_eq!(timeline.fps, vv_core::Rational::new(50, 1));
+    let clip = &timeline.tracks[0].clips[0];
+    assert_eq!((clip.timeline_start, clip.timeline_len), (20, 60));
+    assert_eq!(range, 10..80);
+    assert_eq!(retimed_settings.fps, None);
+    assert_eq!(project.timelines[id].fps, vv_core::Rational::new(25, 1));
+
+    settings.fps = Some(vv_core::Rational::new(24, 1));
+    assert!(retimed_to_output(&project, id, &settings, 5..40).is_none());
+    settings.fps = None;
+    assert!(retimed_to_output(&project, id, &settings, 5..40).is_none());
+}

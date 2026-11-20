@@ -2,7 +2,7 @@
 
 use super::*;
 
-const FPS_CHOICES: [vv_core::Rational; 8] = [
+const FPS_CHOICES: [vv_core::Rational; 11] = [
     vv_core::Rational::new(24000, 1001),
     vv_core::Rational::new(24, 1),
     vv_core::Rational::new(25, 1),
@@ -11,6 +11,9 @@ const FPS_CHOICES: [vv_core::Rational; 8] = [
     vv_core::Rational::new(50, 1),
     vv_core::Rational::new(60000, 1001),
     vv_core::Rational::new(60, 1),
+    vv_core::Rational::new(120, 1),
+    vv_core::Rational::new(144, 1),
+    vv_core::Rational::new(240, 1),
 ];
 
 const RESOLUTION_CHOICES: [(u32, u32); 5] = [

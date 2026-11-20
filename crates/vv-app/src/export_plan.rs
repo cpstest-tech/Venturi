@@ -195,16 +195,18 @@ pub enum FpsChoice {
     F30,
     F50,
     F60,
+    F120,
     MatchBest,
 }
 
 impl FpsChoice {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::F24,
         Self::F25,
         Self::F30,
         Self::F50,
         Self::F60,
+        Self::F120,
         Self::MatchBest,
     ];
 
@@ -215,6 +217,7 @@ impl FpsChoice {
             Self::F30 => 30,
             Self::F50 => 50,
             Self::F60 => 60,
+            Self::F120 => 120,
             Self::MatchBest => return None,
         };
         Some(Rational::new(fps, 1))
