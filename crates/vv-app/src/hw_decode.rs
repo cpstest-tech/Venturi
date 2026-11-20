@@ -60,8 +60,8 @@ impl HwDecodeMode {
 const NVIDIA_VENDOR_ID: u32 = 0x10de;
 const INTEL_VENDOR_ID: u32 = 0x8086;
 
-/// Mesa's ANV offers Vulkan video before Gen12 only behind this flag, read
-/// when a Vulkan instance starts.
+/// Mesa's ANV offers Vulkan video on many Intel GPUs (Gen12 included) only
+/// behind this flag, read when a Vulkan instance starts; it can decode wrongly.
 ///
 /// # Safety
 /// No other thread may be running (`std::env::set_var`).

@@ -154,8 +154,8 @@ settings.hw_decode_intel_experimental:
   en: "Experimental Intel Vulkan decoding (restart required)"
   it: "Decodifica Vulkan Intel sperimentale (richiede riavvio)"
 settings.hw_decode_intel_experimental_hint:
-  en: "On Intel GPUs from Gen9 to Gen11 (Skylake to Ice Lake), Mesa offers Vulkan video decoding only as an experimental feature (ANV_DEBUG=video-decode). It can be faster and frees the CPU, but the driver may decode some files wrongly. Newer Intel GPUs do not need it."
-  it: "Sulle GPU Intel dalla Gen9 alla Gen11 (da Skylake a Ice Lake), Mesa offre la decodifica Vulkan video solo come funzione sperimentale (ANV_DEBUG=video-decode). Può essere più veloce e libera la CPU, ma il driver potrebbe decodificare male alcuni file. Le GPU Intel più recenti non ne hanno bisogno."
+  en: "Mesa offers Vulkan video decoding on many Intel GPUs, Iris Xe (Gen12) included, only as an experimental feature (ANV_DEBUG=video-decode), and it can decode files wrongly (corrupted or green frames). Not needed for GPU decoding: Auto already uses VA-API. Only for testing."
+  it: "Su molte GPU Intel, Iris Xe (Gen12) inclusa, Mesa offre la decodifica Vulkan video solo come funzione sperimentale (ANV_DEBUG=video-decode), e può decodificare male i file (frame corrotti o verdi). Non serve per decodificare con la GPU: Auto usa già VA-API. Solo per prove."
 settings.hw_decode_memory:
   en: "GPU decoding memory:"
   it: "Memoria decodifica GPU:"
