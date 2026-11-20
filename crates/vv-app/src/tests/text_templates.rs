@@ -171,3 +171,17 @@ fn dump_sheets_when_asked() {
         }
     }
 }
+
+#[test]
+fn fit_width_scale_shrinks_only_what_spills() {
+    assert_eq!(fit_width_scale(800.0, HAnchor::Center, 0.0, 1920.0), 1.0);
+    let s = fit_width_scale(2400.0, HAnchor::Center, 0.0, 1080.0);
+    assert!((2400.0 * s - 1080.0 * 0.9).abs() < 0.01);
+    // Anchored left at the center: only the right half is free.
+    let s = fit_width_scale(1000.0, HAnchor::Left, 0.0, 1080.0);
+    assert!((1000.0 * s - 540.0 * 0.9).abs() < 0.01);
+    let s = fit_width_scale(1000.0, HAnchor::Right, 0.0, 1080.0);
+    assert!((1000.0 * s - 540.0 * 0.9).abs() < 0.01);
+    // An anchor already outside the frame is left alone.
+    assert_eq!(fit_width_scale(1000.0, HAnchor::Left, 600.0, 1080.0), 1.0);
+}

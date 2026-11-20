@@ -1009,7 +1009,8 @@ fn row(ui: &mut egui::Ui, label: impl Into<String>, add: impl FnOnce(&mut egui::
     });
 }
 
-/// Arrow + checkbox; `true` when the section is expanded and enabled.
+/// Arrow + checkbox; `true` when expanded, even if disabled, so values
+/// can be set before turning the section on.
 fn section_header(ui: &mut egui::Ui, on: &mut bool, open: &mut bool, title: &str) -> bool {
     ui.add_space(theme::SPACE_1);
     ui.horizontal(|ui| {
@@ -1046,7 +1047,7 @@ fn section_header(ui: &mut egui::Ui, on: &mut bool, open: &mut bool, title: &str
                 .color(theme::TEXT_PRIMARY),
         );
     });
-    *open && *on
+    *open
 }
 
 fn paint_film_icon(ui: &mut egui::Ui) {

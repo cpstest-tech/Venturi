@@ -191,9 +191,9 @@ pub struct TimelineState {
     /// The playhead jumped programmatically (e.g. ripple delete): the next
     /// frame brings it into view if it left, without waiting for playback.
     pub reveal_playhead: bool,
-    /// A drag on the ruler started this frame: playback must pause, or
-    /// the scrub snippets fight the playing stream.
-    pub scrub_started: bool,
+    /// The pointer is held on the ruler: playback pauses until release, or
+    /// it keeps seeking back to the pointer and loops a fragment.
+    pub scrubbing: bool,
     /// Clips showing the retime bar (Ctrl+R): dragging their right edge
     /// changes the speed instead of trimming.
     pub retime_controls: BTreeSet<ClipId>,
@@ -524,7 +524,7 @@ impl Default for TimelineState {
             save_preset_requested: None,
             preset_drop: None,
             reveal_playhead: false,
-            scrub_started: false,
+            scrubbing: false,
             retime_controls: BTreeSet::new(),
             speed_dialog_requested: None,
             silence_dialog_requested: None,
@@ -2362,7 +2362,14 @@ pub fn show_timeline(
     // At low zoom the natural content is narrower than the panel: we force
     // at least `viewport_width` so the ruler always reaches the edge.
     let viewport_width = (panel_rect.width() - TRACK_HEADER_WIDTH).max(1.0);
-    let content_width = ((total_secs * state.pixels_per_sec as f64) as f32).max(viewport_width);
+    let mut content_width = ((total_secs * state.pixels_per_sec as f64) as f32).max(viewport_width);
+    // Room to keep dragging past the end while the view scrolls along.
+    if matches!(
+        state.gesture,
+        Some(Gesture::Move(_) | Gesture::Trim(_) | Gesture::Retime(_))
+    ) {
+        content_width += viewport_width;
+    }
 
     let row_order = track_row_order(&track_kinds);
     let mut row_of_track = vec![0usize; track_count];
@@ -2498,6 +2505,16 @@ pub fn show_timeline(
             playback_active,
             panel_rect,
             kinetic_scroll_enabled,
+        );
+        let viewport_left = ui.available_rect_before_wrap().left() + TRACK_HEADER_WIDTH;
+        edge_autoscroll(
+            ui.ctx(),
+            scroll_id,
+            state,
+            egui::Rangef::new(viewport_left, viewport_left + scroll_viewport_width),
+            panel_rect.y_range(),
+            content_width,
+            dt,
         );
 
         draw_track_headers(
@@ -6120,6 +6137,66 @@ pub(crate) fn apply_kinetic_scroll(
     true
 }
 
+/// Width of the strip at each side of the view where a drag scrolls it.
+const EDGE_SCROLL_ZONE: f32 = 60.0;
+/// Scroll speed (px/s) with the pointer at the very edge or past it.
+const EDGE_SCROLL_MAX_SPEED: f32 = 2400.0;
+
+/// Scrolls the view while a drag holds the pointer near its left or right
+/// edge; the gesture is shifted by the same amount so it stays under the
+/// pointer.
+fn edge_autoscroll(
+    ctx: &egui::Context,
+    scroll_id: egui::Id,
+    state: &mut TimelineState,
+    viewport_x: egui::Rangef,
+    panel_y: egui::Rangef,
+    content_width: f32,
+    dt: f32,
+) {
+    let gesture = matches!(
+        state.gesture,
+        Some(Gesture::Move(_) | Gesture::Trim(_) | Gesture::Retime(_) | Gesture::Marquee(_))
+    );
+    let media = egui::DragAndDrop::has_payload_of_type::<MediaDragSet>(ctx)
+        || egui::DragAndDrop::has_payload_of_type::<Generator>(ctx);
+    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else {
+        return;
+    };
+    if dt <= 0.0 || !(gesture || (media && panel_y.contains(pos.y))) {
+        return;
+    }
+    let depth = if pos.x < viewport_x.min + EDGE_SCROLL_ZONE {
+        pos.x - (viewport_x.min + EDGE_SCROLL_ZONE)
+    } else if pos.x > viewport_x.max - EDGE_SCROLL_ZONE {
+        pos.x - (viewport_x.max - EDGE_SCROLL_ZONE)
+    } else {
+        return;
+    };
+    let frac = (depth / EDGE_SCROLL_ZONE).clamp(-1.0, 1.0);
+    // Quadratic: slow near the inner side of the strip, fast at the edge.
+    let speed = EDGE_SCROLL_MAX_SPEED * frac * frac.abs();
+    let Some(mut scroll) = egui::containers::scroll_area::State::load(ctx, scroll_id) else {
+        return;
+    };
+    let max_offset = (content_width - viewport_x.span()).max(0.0);
+    let new_offset = (scroll.offset.x + speed * dt).clamp(0.0, max_offset);
+    let applied = new_offset - scroll.offset.x;
+    if applied == 0.0 {
+        return;
+    }
+    scroll.offset.x = new_offset;
+    scroll.store(ctx, scroll_id);
+    state.hscroll_vel = 0.0;
+    match &mut state.gesture {
+        Some(Gesture::Move(d)) => d.accum_px += applied,
+        Some(Gesture::Trim(t)) => t.accum_px += applied,
+        Some(Gesture::Retime(r)) => r.accum_px += applied,
+        _ => {}
+    }
+    ctx.request_repaint();
+}
+
 /// Corrects the saved scroll of the ScrollArea `scroll_id` before its `show`:
 /// on zoom the playhead stays still on screen, during playback it stays visible;
 /// it also handles the horizontal kinetic touchpad scroll (swipe + inertia
@@ -6253,9 +6330,7 @@ fn show_ruler(
             ui.close();
         }
     });
-    if ruler_resp.drag_started() {
-        state.scrub_started = true;
-    }
+    state.scrubbing = ruler_resp.is_pointer_button_down_on();
     // On a click what counts is where it was released: if the frame
     // arrived late, `interact_pointer_pos` is already
     // the last mouse position after the release.

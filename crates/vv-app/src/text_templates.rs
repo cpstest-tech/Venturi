@@ -2,6 +2,7 @@
 
 use std::sync::OnceLock;
 use vv_core::text_template::{TemplateCategory, TextTemplateDef};
+use vv_core::{HAnchor, TitleParams};
 
 macro_rules! bundled {
     ($($name:literal),* $(,)?) => {
@@ -107,6 +108,47 @@ impl SubtitleStyle {
                 &|text, res| vv_core::text_template::subtitle_from_title(base, text, res, 0.06),
             ),
         }
+    }
+}
+
+/// Share of the frame width kept free at each side of a new text.
+const FIT_MARGIN: f32 = 0.05;
+
+/// Factor (at most 1) that keeps a block `block_w` wide, anchored at `x`
+/// (from the frame center), inside a frame `frame_w` wide.
+pub(crate) fn fit_width_scale(block_w: f32, anchor: HAnchor, x: f32, frame_w: f32) -> f32 {
+    if block_w <= 0.0 {
+        return 1.0;
+    }
+    let half = frame_w / 2.0 - frame_w * FIT_MARGIN;
+    let room = match anchor {
+        HAnchor::Center => 2.0 * (half - x.abs()),
+        HAnchor::Left => half - x,
+        HAnchor::Right => half + x,
+    };
+    if room <= 0.0 {
+        return 1.0;
+    }
+    (room / block_w).min(1.0)
+}
+
+/// Shrinks a new title that would spill past the sides of the frame.
+pub(crate) fn fit_title_to_frame(title: &mut TitleParams, frame_w: u32) {
+    let metrics = vv_render::text::title_metrics(title);
+    let padding = if title.background.enabled {
+        2.0 * metrics.padding
+    } else {
+        0.0
+    };
+    let scale = fit_width_scale(
+        metrics.block.0 + padding,
+        title.anchor.0,
+        title.position[0],
+        frame_w as f32,
+    );
+    if scale < 1.0 {
+        title.size *= scale;
+        title.line_spacing *= scale;
     }
 }
 

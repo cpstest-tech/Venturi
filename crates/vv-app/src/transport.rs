@@ -59,7 +59,9 @@ impl MarkRange {
 #[derive(Default)]
 pub struct TransportResponse {
     pub seek: Option<FrameIdx>,
-    pub scrub_started: bool,
+    pub scrubbing: bool,
+    /// New `(in, out)` while a marker handle is dragged.
+    pub marks: Option<(FrameIdx, FrameIdx)>,
     pub toggle_play: bool,
     pub fit_view: bool,
     pub toggle_fullscreen: bool,
@@ -81,6 +83,8 @@ const CONTROL_BAR_HEIGHT: f32 = 44.0;
 /// Seek bar plus control bar, without the item spacing between them.
 pub const HEIGHT: f32 = BAR_HEIGHT + CONTROL_BAR_HEIGHT;
 const PLAY_HIT_SIZE: f32 = 28.0;
+/// Half width of the grab area of an in/out handle.
+const HANDLE_GRAB: f32 = 7.0;
 
 /// `total` frames of content; the playhead can sit on `0..total`.
 pub fn show_transport(
@@ -105,12 +109,62 @@ pub fn show_transport(
     let x_of =
         |frame: FrameIdx| track.left() + track.width() * (frame as f32 / span).clamp(0.0, 1.0);
 
-    response.scrub_started = bar_resp.drag_started();
+    let (mark_in, mark_out) = marks;
+    let handle_rect = |frame: FrameIdx| {
+        egui::Rect::from_x_y_ranges(
+            x_of(frame) - HANDLE_GRAB..=x_of(frame) + HANDLE_GRAB,
+            track.top() - 4.0..=rect.bottom(),
+        )
+    };
+    let handle_at = |pos: egui::Pos2| {
+        // Both at the same spot: the one that can still move inwards.
+        let on_in = handle_rect(mark_in).contains(pos);
+        let on_out = handle_rect(mark_out).contains(pos);
+        match (on_in, on_out) {
+            (true, true) => Some(pos.x >= x_of(mark_in)),
+            (true, false) => Some(true),
+            (false, true) => Some(false),
+            _ => None,
+        }
+    };
+    let grabbed_id = bar_resp.id.with("grabbed_mark");
+    let mut grabbed: Option<bool> = ui.data(|d| d.get_temp(grabbed_id));
+    if bar_resp.is_pointer_button_down_on() {
+        if grabbed.is_none() && total > 0 {
+            grabbed = ui.input(|i| i.pointer.press_origin()).and_then(handle_at);
+        }
+    } else {
+        grabbed = None;
+    }
+    ui.data_mut(|d| d.insert_temp(grabbed_id, grabbed));
+    if grabbed.is_some()
+        || bar_resp
+            .hover_pos()
+            .is_some_and(|p| total > 0 && handle_at(p).is_some())
+    {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+    }
+
+    response.scrubbing = bar_resp.is_pointer_button_down_on();
     if total > 0
         && let Some(pos) = bar_resp.interact_pointer_pos()
     {
         let frac = ((pos.x - track.left()) / track.width().max(1.0)).clamp(0.0, 1.0);
-        let frame = ((frac * span).round() as FrameIdx).min(total - 1);
+        let at = (frac * span).round() as FrameIdx;
+        // The playhead shows the frame the handle now cuts at.
+        let frame = match grabbed {
+            Some(true) => {
+                let new_in = at.min(mark_out - 1).max(0);
+                response.marks = Some((new_in, mark_out));
+                new_in
+            }
+            Some(false) => {
+                let new_out = at.max(mark_in + 1).min(total);
+                response.marks = Some((mark_in, new_out));
+                new_out - 1
+            }
+            None => at.min(total - 1),
+        };
         if frame != playhead {
             response.seek = Some(frame);
         }
@@ -118,7 +172,6 @@ pub fn show_transport(
 
     let painter = ui.painter_at(rect);
     painter.rect_filled(track, crate::theme::RADIUS_TAG, crate::theme::BG_RAISED);
-    let (mark_in, mark_out) = marks;
     let region = egui::Rect::from_min_max(
         egui::pos2(x_of(mark_in), track.top()),
         egui::pos2(x_of(mark_out), track.bottom()),

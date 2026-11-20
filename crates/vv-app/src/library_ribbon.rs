@@ -1239,7 +1239,8 @@ impl VenturiApp {
         let timeline = &self.session.project.timelines[timeline_id];
         let (fps, resolution) = (timeline.fps, timeline.resolution);
         let (clips, _) = self.text_template_clips(template, resolution);
-        for (n, clip) in clips.into_iter().enumerate() {
+        for (n, mut clip) in clips.into_iter().enumerate() {
+            crate::text_templates::fit_title_to_frame(&mut clip.title, resolution.0);
             let target = if n == 0 {
                 target
             } else {

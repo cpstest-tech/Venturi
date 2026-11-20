@@ -93,6 +93,8 @@ mod voiceover;
 mod waveform_worker;
 #[cfg(target_os = "linux")]
 mod wayland_dnd;
+#[cfg(target_os = "linux")]
+mod wayland_gestures;
 mod workspace;
 
 use eframe::wgpu;
@@ -480,6 +482,7 @@ struct VenturiApp {
 
     /// Audio during scrubbing (menu Timeline): on by default.
     scrub_audio: bool,
+    resume_after_scrub: bool,
 
     arrow_hold: Option<ArrowHold>,
     /// J held: the playhead walks backwards.
@@ -597,6 +600,8 @@ struct VenturiApp {
     mcp_forced: bool,
     #[cfg(target_os = "linux")]
     wayland_dnd: Option<wayland_dnd::WaylandDnd>,
+    #[cfg(target_os = "linux")]
+    wayland_gestures: Option<wayland_gestures::WaylandGestures>,
     #[cfg(target_os = "macos")]
     iso_key_down: bool,
     workspace: workspace::Workspace,
@@ -674,6 +679,7 @@ impl Default for VenturiApp {
             playback_speed: 1.0,
             selection_follows_playhead: true,
             scrub_audio: true,
+            resume_after_scrub: false,
             arrow_hold: None,
             reverse_shuttle: None,
             hover_jumped: None,
@@ -743,6 +749,8 @@ impl Default for VenturiApp {
             mcp_forced: false,
             #[cfg(target_os = "linux")]
             wayland_dnd: None,
+            #[cfg(target_os = "linux")]
+            wayland_gestures: None,
             #[cfg(target_os = "macos")]
             iso_key_down: false,
             workspace: workspace::Workspace::default(),
@@ -1046,8 +1054,14 @@ impl VenturiApp {
         self.last_synced_playhead = playhead;
     }
 
-    fn pause_timeline(&mut self) {
-        if self.is_timeline_playing() {
+    /// Pauses while the playhead is held and resumes on release.
+    fn hold_playback_while_scrubbing(&mut self, held: bool) {
+        if held {
+            if self.is_timeline_playing() {
+                self.toggle_playback();
+                self.resume_after_scrub = true;
+            }
+        } else if std::mem::take(&mut self.resume_after_scrub) && !self.is_timeline_playing() {
             self.toggle_playback();
         }
     }
@@ -4253,6 +4267,10 @@ impl eframe::App for VenturiApp {
         if let Some(dnd) = &self.wayland_dnd {
             dnd.feed(raw_input, ctx.zoom_factor());
         }
+        #[cfg(target_os = "linux")]
+        if let Some(gestures) = &self.wayland_gestures {
+            gestures.feed(raw_input);
+        }
     }
 
     // The only hook eframe still calls while the window is minimized,
@@ -4534,8 +4552,8 @@ impl VenturiApp {
             self.stop_browsing();
         }
 
-        if std::mem::take(&mut self.timeline_state.scrub_started) {
-            self.pause_timeline();
+        if self.timeline_state.scrubbing && self.browsing.is_none() {
+            self.hold_playback_while_scrubbing(true);
         }
         if self.browsing.is_none() {
             self.ensure_active_clip_matches_playhead(user_scrubbed_playhead);
@@ -4641,8 +4659,16 @@ impl VenturiApp {
         if transport_action.toggle_play {
             self.toggle_playback();
         }
-        if transport_action.scrub_started && self.browsing.is_none() {
-            self.pause_timeline();
+        let scrubbing =
+            std::mem::take(&mut self.timeline_state.scrubbing) || transport_action.scrubbing;
+        if self.browsing.is_none() {
+            self.hold_playback_while_scrubbing(scrubbing);
+        }
+        if let Some((mark_in, mark_out)) = transport_action.marks
+            && let Some(target) = self.mark_target()
+        {
+            target.marks.mark_in = (mark_in > 0).then_some(mark_in);
+            target.marks.mark_out = (mark_out < target.total).then_some(mark_out);
         }
         if let Some(frame) = transport_action.seek {
             if self.browsing.is_some() {
@@ -5356,6 +5382,7 @@ fn main() -> eframe::Result<()> {
             #[cfg(target_os = "linux")]
             {
                 app.wayland_dnd = wayland_dnd::WaylandDnd::start(cc);
+                app.wayland_gestures = wayland_gestures::WaylandGestures::start(cc);
             }
             let opens_project = startup_paths.iter().any(|p| {
                 p.extension()
