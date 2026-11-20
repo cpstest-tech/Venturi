@@ -175,7 +175,6 @@ fn gpus() -> &'static [wgpu::AdapterInfo] {
 /// setting's first. Starts checking them in the background, so the ones that
 /// do not open turn `known_unavailable` while the window is up.
 pub fn export_choices() -> Vec<HwDevice> {
-    let macos = cfg!(target_os = "macos");
     let has_nvidia = gpus().iter().any(|gpu| gpu.vendor == NVIDIA_VENDOR_ID);
     let mut choices = devices();
     let candidates = [HwDecodeMode::Auto, HwDecodeMode::Vulkan]
