@@ -2963,6 +2963,9 @@ pub struct Track {
     /// Audio only.
     #[serde(default)]
     pub mix: ChannelStrip,
+    /// Holds a dub (audio) or its subtitles (video).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dub: Option<crate::dub::DubTrack>,
 }
 
 impl Track {
@@ -2979,6 +2982,7 @@ impl Track {
             effects: false,
             crossings: Vec::new(),
             mix: ChannelStrip::default(),
+            dub: None,
         }
     }
 

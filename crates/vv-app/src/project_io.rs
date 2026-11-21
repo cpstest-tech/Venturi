@@ -51,6 +51,7 @@ pub(crate) enum DialogKind {
     RelinkMedia(Vec<MediaId>),
     RelinkLibraryAsset(String),
     RecordingFolder,
+    ModelsFolder,
     ImportProject,
     ProjectsFolder,
     CanvasImage(Vec<(TimelineId, usize, ClipId)>),
@@ -337,6 +338,11 @@ impl VenturiApp {
             }
             (DialogKind::RecordingFolder, DialogOutcome::File(Some(path))) => {
                 self.settings.recording_dir = Some(path);
+                self.persist_settings();
+            }
+            (DialogKind::ModelsFolder, DialogOutcome::File(Some(path))) => {
+                crate::subtitles::set_models_dir(Some(path.clone()));
+                self.settings.models_dir = Some(path);
                 self.persist_settings();
             }
             (DialogKind::ExportOtio(timeline_id), DialogOutcome::File(Some(path))) => {
@@ -935,6 +941,9 @@ impl VenturiApp {
     /// After the session switched project: the UI state tied to the old
     /// one goes, the first timeline opens.
     pub(crate) fn reset_for_replaced_project(&mut self) {
+        self.dub = dub::State::default();
+        self.reframe = reframe::State::default();
+        self.transcript = transcript::State::default();
         self.auto_cut.modal = None;
         self.seen_epoch = self.session.epoch();
         self.reset_autosave();

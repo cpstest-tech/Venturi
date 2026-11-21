@@ -311,7 +311,7 @@ impl VenturiApp {
         tl.tracks
             .iter()
             .enumerate()
-            .filter(|(_, t)| t.kind == TrackKind::Audio)
+            .filter(|(_, t)| t.kind == TrackKind::Audio && t.dub.is_none())
             .map(|(i, _)| with_audio(i))
             .find(|clips| !clips.is_empty())
             .unwrap_or_default()
@@ -562,6 +562,15 @@ impl VenturiApp {
             }
         }
         (to_transcribe, failure)
+    }
+
+    pub(crate) fn retry_transcript_after_model_install(&mut self) {
+        for error in self.transcript.jobs.errors.values_mut() {
+            if error == "model_missing" {
+                "no_transcript".clone_into(error);
+            }
+        }
+        self.transcribe_missing();
     }
 
     pub(crate) fn transcribe_missing(&mut self) {

@@ -48,14 +48,16 @@ pub(crate) enum VideoSubTab {
     Mask,
     Retouch,
     AutoZoom,
+    Reframe,
 }
 
-pub(crate) const VIDEO_SUB_TABS: [VideoSubTab; 5] = [
+pub(crate) const VIDEO_SUB_TABS: [VideoSubTab; 6] = [
     VideoSubTab::Basic,
     VideoSubTab::RemoveBackground,
     VideoSubTab::Mask,
     VideoSubTab::Retouch,
     VideoSubTab::AutoZoom,
+    VideoSubTab::Reframe,
 ];
 
 /// Opens a Video sub-tab from outside the panel (its index lives in egui memory, see `segmented`).
@@ -72,6 +74,7 @@ impl VideoSubTab {
             VideoSubTab::Mask => t!("props.sub_mask"),
             VideoSubTab::Retouch => t!("props.sub_retouch"),
             VideoSubTab::AutoZoom => t!("auto_zoom.sub_tab"),
+            VideoSubTab::Reframe => t!("reframe.sub_tab"),
         }
     }
 }

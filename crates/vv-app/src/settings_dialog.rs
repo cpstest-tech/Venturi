@@ -75,6 +75,7 @@ pub struct SettingsDialogResponse {
     pub changed: bool,
     /// The folder of the takes must be chosen with the system dialog.
     pub pick_recording_dir: bool,
+    pub pick_models_dir: bool,
     pub gemini_key_changed: bool,
 }
 
@@ -107,6 +108,7 @@ impl SettingsDialog {
             open: true,
             changed: false,
             pick_recording_dir: false,
+            pick_models_dir: false,
             gemini_key_changed: false,
         };
         response.changed |= self.capture_key(ctx, &mut settings.keymap);
@@ -153,6 +155,11 @@ impl SettingsDialog {
                             );
                         }
                         Section::AiProviders => {
+                            let (changed, pick) = models_and_dub_section(ui, settings);
+                            response.changed |= changed;
+                            response.pick_models_dir |= pick;
+                            ui.add_space(12.0);
+                            ui.separator();
                             response.changed |= self.ai_section(ui, settings);
                             response.gemini_key_changed |= gemini_key_section(
                                 ui,
@@ -531,6 +538,41 @@ fn recording_section(
         }
         pick |= ui.button(t!("settings.recording_dir_choose")).clicked();
     });
+    (changed, pick)
+}
+
+/// Where models go, and what dubbing may send out.
+fn models_and_dub_section(ui: &mut egui::Ui, settings: &mut Settings) -> (bool, bool) {
+    let mut changed = false;
+    let mut pick = false;
+    ui.label(egui::RichText::new(t!("settings.models_dir")).strong());
+    ui.horizontal(|ui| {
+        let shown = crate::subtitles::models_dir()
+            .map(|d| d.display().to_string())
+            .unwrap_or_default();
+        ui.monospace(shown);
+    });
+    ui.horizontal(|ui| {
+        pick |= ui.button(t!("settings.models_dir_choose")).clicked();
+        if ui
+            .add_enabled(
+                settings.models_dir.is_some(),
+                egui::Button::new(t!("settings.models_dir_default")),
+            )
+            .clicked()
+        {
+            settings.models_dir = None;
+            changed = true;
+        }
+    });
+    ui.weak(t!("settings.models_dir_hint"));
+    changed |= ui
+        .checkbox(
+            &mut settings.shorts.dub.allow_cloud_translation,
+            t!("dub.cloud_consent"),
+        )
+        .changed();
+    ui.weak(t!("dub.cloud_consent_hint"));
     (changed, pick)
 }
 

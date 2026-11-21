@@ -53,6 +53,8 @@ pub struct ExportSettings {
     /// The audio as a separate file next to the video.
     pub audio_file: Option<AudioFileExport>,
     pub motion_blur: Option<Box<crate::motion_blur::MotionBlurSettings>>,
+    /// Which dub plays (see `vv_core::dub::switch`).
+    pub language: vv_core::dub::Language,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,6 +80,7 @@ impl ExportSettings {
             video_enabled: true,
             audio_file: None,
             motion_blur: None,
+            language: vv_core::dub::Language::AsIs,
         }
     }
 

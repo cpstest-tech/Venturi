@@ -663,7 +663,8 @@ impl Session {
             return None;
         }
         let job = self.jobs.alloc();
-        let project = self.project.clone();
+        let mut project = self.project.clone();
+        vv_core::dub::apply_language(&mut project, timeline_id, &settings.language);
         let progress = Arc::new(Mutex::new(ExportProgress::default()));
         let cancel = Arc::new(AtomicBool::new(false));
         let waker = self.waker.clone();

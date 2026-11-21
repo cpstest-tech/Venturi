@@ -7,6 +7,9 @@ const TOP_BAR_TITLE_MIN_WIDTH: f32 = 760.0;
 
 impl VenturiApp {
     pub(crate) fn handle_shortcuts(&mut self, ui: &mut egui::Ui) {
+        if self.dub.open {
+            return;
+        }
         // Copy/paste are handled outside `ui.input`: `ctx.copy_text` takes
         // the same lock and would deadlock inside it.
         let mut clipboard_events: Vec<egui::Event> = Vec::new();
@@ -1144,6 +1147,10 @@ fn command_label(label: vv_core::CommandLabel) -> std::borrow::Cow<'static, str>
         L::ApplyStylePack => t!("style_pack.history_apply"),
         L::AutoZoom => t!("auto_zoom.title"),
         L::RemoveAutoZoom => t!("auto_zoom.remove"),
+        L::Reframe => t!("reframe.title"),
+        L::RemoveReframe => t!("reframe.remove"),
+        L::Dub => t!("dub.history"),
+        L::DubLanguage => t!("dub.history_language"),
         L::BeatMarkers => t!("beat.markers_step"),
         L::BeatCuts => t!("beat.cuts_title"),
         L::AddMarker => t!("history.add_marker"),

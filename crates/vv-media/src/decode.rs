@@ -73,6 +73,54 @@ impl FrameYuv420 {
     }
 }
 
+/// RGB in 0..1 of the pixels of a YUV frame.
+pub struct RgbReader<'a> {
+    frame: &'a FrameYuv420,
+    kr: f32,
+    kb: f32,
+    y_scale: f32,
+    y_off: f32,
+    c_scale: f32,
+}
+
+impl<'a> RgbReader<'a> {
+    pub fn new(frame: &'a FrameYuv420) -> Self {
+        let (kr, kb) = match frame.matrix {
+            ColorMatrix::Bt709 => (0.2126f32, 0.0722f32),
+            ColorMatrix::Bt2020 => (0.2627, 0.0593),
+            _ => (0.299, 0.114),
+        };
+        let (y_scale, y_off, c_scale) = if frame.full_range {
+            (1.0 / 255.0, 0.0, 1.0 / 255.0)
+        } else {
+            (1.0 / 219.0, 16.0, 1.0 / 224.0)
+        };
+        Self {
+            frame,
+            kr,
+            kb,
+            y_scale,
+            y_off,
+            c_scale,
+        }
+    }
+
+    pub fn at(&self, x: usize, y: usize) -> [f32; 3] {
+        let frame = self.frame;
+        let luma = (f32::from(frame.y[y * frame.width as usize + x]) - self.y_off) * self.y_scale;
+        let (u, v) = frame.chroma_at(
+            (x / 2).min(frame.chroma_width as usize - 1),
+            (y / 2).min(frame.chroma_height as usize - 1),
+        );
+        let cb = (f32::from(u) - 128.0) * self.c_scale;
+        let cr = (f32::from(v) - 128.0) * self.c_scale;
+        let r = luma + 2.0 * (1.0 - self.kr) * cr;
+        let b = luma + 2.0 * (1.0 - self.kb) * cb;
+        let g = (luma - self.kr * r - self.kb * b) / (1.0 - self.kr - self.kb);
+        [r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0)]
+    }
+}
+
 /// Bytes of an 8-bit YUV420 `width`x`height` frame, to estimate cache
 /// budgets before having decoded it.
 pub fn yuv420_frame_bytes(width: u32, height: u32) -> usize {

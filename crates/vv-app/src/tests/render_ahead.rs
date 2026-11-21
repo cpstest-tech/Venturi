@@ -92,6 +92,7 @@ fn walk_and_fill_decodes_a_stretched_image_clip_past_its_only_real_frame() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -289,6 +290,7 @@ fn collect_media_segments_walks_across_a_straight_cut_between_two_media() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]);
 
     let segments = collect_media_segments(&Project::default(), &tl, 40, 60);
@@ -319,6 +321,7 @@ fn collect_media_segments_skips_gaps_and_solid_color_without_decoding() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]);
 
     let segments = collect_media_segments(&Project::default(), &tl, 0, 40);
@@ -350,6 +353,7 @@ fn collect_media_segments_covers_every_video_track_topmost_first() {
             main: false,
             subtitles: false,
             effects: false,
+            dub: None,
         },
         Track {
             kind: TrackKind::Video,
@@ -363,6 +367,7 @@ fn collect_media_segments_covers_every_video_track_topmost_first() {
             main: false,
             subtitles: false,
             effects: false,
+            dub: None,
         },
     ]);
 
@@ -399,6 +404,7 @@ fn collect_media_segments_behind_walks_across_a_straight_cut_between_two_media()
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]);
 
     // Window behind [40,60): crosses the cut at 50 going
@@ -434,6 +440,7 @@ fn collect_media_segments_behind_skips_gaps_and_solid_color_without_decoding() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]);
 
     let segments = collect_media_segments_behind(&Project::default(), &tl, 40, 0);
@@ -470,6 +477,7 @@ fn collect_media_segments_behind_stops_at_the_start_frame_bound() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]);
 
     let segments = collect_media_segments_behind(&Project::default(), &tl, 150, 100);
@@ -503,6 +511,7 @@ fn project_with_compound_clip() -> (Project, Timeline, MediaId, MediaId) {
             main: false,
             subtitles: false,
             effects: false,
+            dub: None,
         }],
         markers: Vec::new(),
         master: Default::default(),
@@ -537,6 +546,7 @@ fn project_with_compound_clip() -> (Project, Timeline, MediaId, MediaId) {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]);
     (project, root, real_media, compound_media)
 }
@@ -618,6 +628,7 @@ fn collect_media_segments_stops_at_a_cyclic_compound_clip_instead_of_overflowing
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     });
 
     let real = collect_media_segments(&project, &project.timelines[timeline_id], 0, 100);
@@ -834,6 +845,7 @@ fn render_ahead_buffers_across_a_straight_cut_between_two_different_media() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let render_ahead = RenderAhead::spawn(
@@ -929,6 +941,7 @@ fn render_ahead_keeps_both_sides_of_a_crossing_readable_through_the_whole_window
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
     let timeline = project.timelines.get(timeline_id).unwrap().clone();
 
@@ -1039,6 +1052,7 @@ fn render_ahead_does_not_loop_when_the_playhead_sits_still_just_before_a_cut() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let render_ahead = RenderAhead::spawn(
@@ -1520,6 +1534,7 @@ fn walk_and_fill_reports_caught_up_when_the_whole_window_fits_the_budget() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -1588,6 +1603,7 @@ fn walk_and_fill_decodes_the_behind_window_on_a_fresh_area() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -1682,6 +1698,7 @@ fn walk_and_fill_decodes_the_behind_window_nearest_frames_first_under_a_tight_bu
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -1776,6 +1793,7 @@ fn walk_and_fill_does_not_reseek_an_already_complete_behind_window_when_idle() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -1882,6 +1900,7 @@ fn walk_and_fill_buffers_only_a_minimal_margin_when_configured_to_zero_seconds()
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -1973,6 +1992,7 @@ fn walk_and_fill_prioritizes_frames_near_the_playhead_when_the_budget_is_too_sma
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -2051,6 +2071,7 @@ fn walk_and_fill_stops_early_and_reports_true_when_the_live_target_has_already_d
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -2146,6 +2167,7 @@ fn walk_and_fill_does_not_invalidate_one_segment_while_processing_another_segmen
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -2241,6 +2263,7 @@ fn walk_and_fill_does_not_let_one_segment_of_a_media_evict_another_via_capacity_
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -2448,6 +2471,7 @@ fn walk_and_fill_buffers_more_of_a_media_once_fewer_distinct_media_share_the_bud
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -2555,6 +2579,7 @@ fn render_ahead_catches_up_after_a_large_backward_seek() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let render_ahead = RenderAhead::spawn(
@@ -2650,6 +2675,7 @@ fn render_ahead_catches_up_after_a_backward_seek_beyond_the_retention_window() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let render_ahead = RenderAhead::spawn(
@@ -2756,6 +2782,7 @@ fn render_ahead_reacts_to_each_target_change_faster_than_the_old_poll_interval()
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let render_ahead = RenderAhead::spawn(project, timeline_id, 100_000_000, None, 0.0, 0.0);
@@ -2837,6 +2864,7 @@ fn walk_and_fill_catches_up_after_a_backward_seek_above_the_historical_minimum()
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -2968,6 +2996,7 @@ fn walk_and_fill_does_not_redecode_the_already_buffered_tail_after_a_small_backw
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -3089,6 +3118,7 @@ fn walk_and_fill_does_not_loop_forever_after_reconnecting_early_from_a_backward_
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -3487,6 +3517,7 @@ fn walk_and_fill_keeps_the_buffer_front_at_the_playhead_even_without_a_real_rese
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
 
     let caches = SharedFrameCache::new();
@@ -3731,6 +3762,7 @@ fn single_media_project(path: std::path::PathBuf) -> (Project, MediaId, Timeline
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]));
     (project, media, timeline_id)
 }
@@ -3912,6 +3944,7 @@ fn bench_black_frames_after_repositioning_during_playback() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]);
     timeline.fps = meta.fps;
     let fps = meta.fps.as_f64();
@@ -4011,6 +4044,7 @@ fn bench_backward_scrub_with_proxy() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }]);
     timeline.fps = meta.fps;
     let fps = meta.fps.as_f64();
@@ -4853,6 +4887,7 @@ fn video_track(clips: Vec<Clip>) -> Track {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }
 }
 

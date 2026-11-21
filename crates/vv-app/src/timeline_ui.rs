@@ -88,6 +88,8 @@ pub enum TimelineTool {
 pub enum TimelineCommand {
     AutoCut,
     AutoZoom,
+    Reframe,
+    Dub,
     BeatSync,
     Undo,
     Redo,

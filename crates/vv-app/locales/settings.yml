@@ -476,3 +476,16 @@ settings.gemini_key_location:
 settings.section_ai:
   en: AI Providers
   it: Provider AI
+
+settings.models_dir:
+  en: "Models folder"
+  it: "Cartella dei modelli"
+settings.models_dir_choose:
+  en: "Choose folder…"
+  it: "Scegli cartella…"
+settings.models_dir_default:
+  en: "Use default folder"
+  it: "Usa la cartella predefinita"
+settings.models_dir_hint:
+  en: "Whisper, background removal and Piper share this folder. Existing files stay in their current location."
+  it: "Whisper, rimozione sfondo e Piper condividono questa cartella. I file già scaricati restano dove sono."

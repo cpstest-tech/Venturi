@@ -2810,6 +2810,7 @@ impl VenturiApp {
                                                 }
                                                 (_, properties_tabs::VideoSubTab::Retouch) => properties_tabs::retouch_tab(ui),
                                                 (_, properties_tabs::VideoSubTab::AutoZoom) => self.show_auto_zoom_tab(ui, &primary),
+                                                (_, properties_tabs::VideoSubTab::Reframe) => self.show_reframe_tab(ui, &primary),
                                                 _ => {}
                                             }
                                         }

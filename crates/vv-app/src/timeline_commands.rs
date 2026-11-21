@@ -40,6 +40,12 @@ impl VenturiApp {
                 self.clip_tab = properties_tabs::ClipTab::Video;
                 properties_tabs::select_video_sub_tab(ctx, properties_tabs::VideoSubTab::AutoZoom);
             }
+            TimelineCommand::Reframe => {
+                self.reveal_block(Block::Properties);
+                self.clip_tab = properties_tabs::ClipTab::Video;
+                properties_tabs::select_video_sub_tab(ctx, properties_tabs::VideoSubTab::Reframe);
+            }
+            TimelineCommand::Dub => self.open_dub(),
             TimelineCommand::BeatSync => self.beat.open = !self.beat.open,
             TimelineCommand::Undo => self.undo(),
             TimelineCommand::Redo => self.redo(),

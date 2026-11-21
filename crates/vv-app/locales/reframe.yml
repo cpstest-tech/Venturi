@@ -1,0 +1,128 @@
+_version: 2
+
+reframe.title:
+  en: "Automatic reframe"
+  it: "Reframe automatico"
+reframe.sub_tab:
+  en: "Reframe"
+  it: "Reframe"
+reframe.button:
+  en: "Automatic reframe"
+  it: "Reframe automatico"
+reframe.button_hint:
+  en: "Keeps the face of the selected clip in frame, e.g. from 16:9 to 9:16"
+  it: "Tiene il volto della clip selezionata nell'inquadratura, per esempio da 16:9 a 9:16"
+reframe.hint:
+  en: "Finds the faces on this device (nothing is sent anywhere) and follows the subject with zoom and position keyframes. Edit them freely, undo with Ctrl+Z."
+  it: "Trova i volti su questo dispositivo (non viene inviato nulla) e segue il soggetto con keyframe di zoom e posizione. Modificali liberamente, annulla con Ctrl+Z."
+reframe.select_video:
+  en: "Select a video clip."
+  it: "Seleziona una clip video."
+reframe.unsupported_clip:
+  en: "Frozen or disabled clips cannot be reframed."
+  it: "Le clip congelate o disattivate non si possono reinquadrare."
+reframe.unsupported_transform:
+  en: "The clip is rotated, cropped or has a moved anchor point: reset them to use the reframe."
+  it: "La clip è ruotata, ritagliata o ha il punto di ancoraggio spostato: azzerali per usare il reframe."
+reframe.offline:
+  en: "The media file is not reachable."
+  it: "Il file della clip non è raggiungibile."
+reframe.local_note:
+  en: "The analysis runs on a reduced copy of the frames; the result is cached for this clip."
+  it: "L'analisi lavora su una copia ridotta dei fotogrammi; il risultato resta in cache per questa clip."
+reframe.analyse:
+  en: "Find faces"
+  it: "Analizza i volti"
+reframe.analysing:
+  en: "Looking for faces and shot changes…"
+  it: "Ricerca di volti e cambi scena…"
+reframe.cancel:
+  en: "Cancel"
+  it: "Annulla"
+reframe.cancelled:
+  en: "Analysis cancelled."
+  it: "Analisi annullata."
+reframe.error:
+  en: "The analysis failed: %{detail}"
+  it: "L'analisi non è riuscita: %{detail}"
+reframe.not_vertical:
+  en: "The timeline is not vertical: the reframe will only zoom. Set it to 9:16 to crop a horizontal video."
+  it: "La timeline non è verticale: il reframe potrà solo zoomare. Impostala a 9:16 per ritagliare un video orizzontale."
+reframe.analysed:
+  en: "%{shots} shots, faces in %{found} of %{samples} analysed frames."
+  it: "%{shots} inquadrature, volti in %{found} fotogrammi analizzati su %{samples}."
+reframe.follow:
+  en: "Tracking speed"
+  it: "Velocità di inseguimento"
+reframe.dead_zone:
+  en: "Dead zone"
+  it: "Zona morta"
+reframe.min_zoom:
+  en: "Minimum zoom"
+  it: "Zoom minimo"
+reframe.margin:
+  en: "Margin around the face"
+  it: "Margine attorno al volto"
+reframe.placement:
+  en: "Face position"
+  it: "Posizione del volto"
+reframe.upper_third:
+  en: "Upper third"
+  it: "Terzo superiore"
+reframe.center:
+  en: "Centre"
+  it: "Centro"
+reframe.follow_speaker:
+  en: "Follow who is speaking"
+  it: "Segui chi parla"
+reframe.follow_speaker_hint:
+  en: "With several faces, follows the one whose mouth moves while there is speech (uses the transcript's audio levels when the clip has one)."
+  it: "Con più volti segue quello che muove la bocca mentre si parla (usa i livelli audio della trascrizione, se la clip ne ha una)."
+reframe.step:
+  en: "Detect every N frames"
+  it: "Rileva ogni N fotogrammi"
+reframe.step_hint:
+  en: "Lower is more precise and slower; changing it needs a new analysis."
+  it: "Più basso è più preciso e più lento; cambiarlo richiede una nuova analisi."
+reframe.choose_face:
+  en: "Subject in this shot (or click a face in the player):"
+  it: "Soggetto in questa inquadratura (o clicca un volto nel player):"
+reframe.face_n:
+  en: "Face %{n}"
+  it: "Volto %{n}"
+reframe.clear_choices:
+  en: "Forget the %{count} choices"
+  it: "Dimentica le %{count} scelte"
+reframe.click_face:
+  en: "Follow this face until the end of the shot"
+  it: "Segui questo volto fino alla fine dell'inquadratura"
+reframe.preview:
+  en: "Preview"
+  it: "Anteprima"
+reframe.preview_count:
+  en: "Preview of the reframe over %{count} shots: play it to check."
+  it: "Anteprima del reframe su %{count} inquadrature: riproduci per controllare."
+reframe.apply:
+  en: "Apply"
+  it: "Applica"
+reframe.discard:
+  en: "Discard"
+  it: "Annulla"
+reframe.reanalyse:
+  en: "Analyse again"
+  it: "Rianalizza"
+reframe.reanalyse_hint:
+  en: "Throws the cached analysis away and runs it again"
+  it: "Scarta l'analisi in cache e la ripete"
+reframe.replaces_keys:
+  en: "The clip already has zoom or position keyframes: the reframe replaces them (Ctrl+Z brings them back)."
+  it: "La clip ha già keyframe di zoom o posizione: il reframe li sostituisce (Ctrl+Z li ripristina)."
+reframe.no_faces:
+  en: "No face in %{ranges}: the frame stays on the last point of interest, or the centre."
+  it: "Nessun volto in %{ranges}: l'inquadratura resta sull'ultimo punto di interesse, o al centro."
+reframe.remove:
+  en: "Remove reframe"
+  it: "Rimuovi reframe"
+reframe.remove_hint:
+  en: "Removes the keyframes the reframe made and you did not change, in one step"
+  it: "Rimuove in un passo i keyframe creati dal reframe che non hai modificato"

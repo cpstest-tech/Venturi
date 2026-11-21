@@ -889,7 +889,7 @@ impl VenturiApp {
 
     /// Clips on audio tracks that are not someone speaking: not linked to a
     /// picture and not a transcribed voice the transcript follows.
-    fn music_clips(&self, timeline: TimelineId) -> Vec<(usize, ClipId)> {
+    pub(crate) fn music_clips(&self, timeline: TimelineId) -> Vec<(usize, ClipId)> {
         let tl = &self.session.project.timelines[timeline];
         let speech: BTreeSet<ClipId> = self
             .transcript_candidates(timeline)
@@ -910,7 +910,7 @@ impl VenturiApp {
         tl.tracks
             .iter()
             .enumerate()
-            .filter(|(_, t)| t.kind == TrackKind::Audio && !t.locked)
+            .filter(|(_, t)| t.kind == TrackKind::Audio && !t.locked && t.dub.is_none())
             .flat_map(|(i, t)| t.clips.iter().map(move |c| (i, c)))
             .filter(|(_, c)| {
                 matches!(c.source, ClipSource::Media(_))

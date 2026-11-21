@@ -301,6 +301,7 @@ fn would_create_a_cycle_catches_an_indirect_cycle_through_a_nested_compound_clip
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     });
 
     assert!(project.would_create_a_cycle(media_b, a), "A -> B -> A");

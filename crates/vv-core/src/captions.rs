@@ -662,8 +662,11 @@ pub fn clips_to_srt(timeline: &crate::model::Timeline) -> String {
     let Some(track) = subtitle_track(timeline).map(|i| &timeline.tracks[i]) else {
         return String::new();
     };
-    let to_ms =
-        |frame: FrameIdx| (frame.max(0) as f64 / timeline.fps.as_f64() * 1000.0).round() as u32;
+    track_to_srt(track, timeline.fps)
+}
+
+pub fn track_to_srt(track: &crate::Track, fps: crate::Rational) -> String {
+    let to_ms = |frame: FrameIdx| (frame.max(0) as f64 / fps.as_f64() * 1000.0).round() as u32;
     let mut out = String::new();
     for (n, clip) in track.clips.iter().enumerate() {
         let text = clip
@@ -688,6 +691,10 @@ pub fn clips_to_txt(timeline: &crate::model::Timeline) -> String {
     let Some(track) = subtitle_track(timeline).map(|i| &timeline.tracks[i]) else {
         return String::new();
     };
+    track_to_txt(track)
+}
+
+pub fn track_to_txt(track: &crate::Track) -> String {
     let mut text = track
         .clips
         .iter()

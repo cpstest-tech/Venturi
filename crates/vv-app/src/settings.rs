@@ -804,6 +804,8 @@ pub struct Settings {
     pub recording_format: Option<AudioFileFormat>,
     /// Where the takes go; `None` is `Recordings` next to the project file.
     pub recording_dir: Option<PathBuf>,
+    /// Speech, matting and voice models; `None` is `models` next to the library.
+    pub models_dir: Option<PathBuf>,
     /// Folder of the last export, where the next one starts.
     pub last_export_dir: Option<PathBuf>,
     /// Serve MCP on a local socket for `vv-app mcp --attach`.
@@ -832,6 +834,8 @@ pub struct Settings {
 #[serde(default)]
 pub struct ShortsPrefs {
     pub auto_zoom: vv_core::auto_zoom::Config,
+    pub reframe: vv_core::reframe::Config,
+    pub dub: crate::dub::Prefs,
     pub beat_snap: bool,
     /// Beats per clip of «Tagli sui beat»: 1, 2 or 4.
     pub beat_every: u8,
@@ -848,6 +852,8 @@ impl Default for ShortsPrefs {
     fn default() -> Self {
         Self {
             auto_zoom: Default::default(),
+            reframe: Default::default(),
+            dub: Default::default(),
             beat_snap: true,
             beat_every: 1,
             safe_zones: false,
@@ -962,6 +968,7 @@ impl Default for Settings {
             input_device: None,
             recording_format: None,
             recording_dir: None,
+            models_dir: None,
             last_export_dir: None,
             mcp_enabled: false,
             projects_dir: None,
@@ -1077,6 +1084,8 @@ struct SettingsFile {
     recording_format: Option<String>,
     #[serde(default)]
     recording_dir: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    models_dir: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     last_export_dir: Option<PathBuf>,
     #[serde(default)]
@@ -1282,6 +1291,7 @@ impl Settings {
             .as_deref()
             .and_then(AudioFileFormat::from_id);
         settings.recording_dir = file.recording_dir;
+        settings.models_dir = file.models_dir;
         settings.last_export_dir = file.last_export_dir;
         settings.compressor_presets = readable_entries(file.compressor_presets);
         settings.eq_presets = readable_entries(file.eq_presets);
@@ -1408,6 +1418,7 @@ impl Settings {
             input_device: self.input_device.clone(),
             recording_format: self.recording_format.map(|f| f.id().to_owned()),
             recording_dir: self.recording_dir.clone(),
+            models_dir: self.models_dir.clone(),
             last_export_dir: self.last_export_dir.clone(),
             mcp_enabled: Some(self.mcp_enabled),
             projects_dir: self.projects_dir.clone(),

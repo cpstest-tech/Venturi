@@ -203,6 +203,17 @@ pub(crate) fn show_bar(
                             {
                                 state.commands.push(TimelineCommand::AutoZoom);
                             }
+                            if has_selection
+                                && ui
+                                    .button(t!("reframe.button"))
+                                    .on_hover_text(t!("reframe.button_hint"))
+                                    .clicked()
+                            {
+                                state.commands.push(TimelineCommand::Reframe);
+                            }
+                            if ui.button(t!("dub.title")).clicked() {
+                                state.commands.push(TimelineCommand::Dub);
+                            }
                             if ui
                                 .button(t!("beat.button"))
                                 .on_hover_text(t!("beat.button_hint"))

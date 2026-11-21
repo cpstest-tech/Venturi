@@ -422,6 +422,7 @@ fn video_track(clips: Vec<Clip>) -> Track {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }
 }
 
@@ -481,6 +482,7 @@ fn crossing_offsets_clear_a_zoomed_clip_fully_off_screen() {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     };
     let timeline = Timeline {
         name: "t".into(),

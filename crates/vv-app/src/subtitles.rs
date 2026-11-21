@@ -56,7 +56,17 @@ pub(crate) enum Message {
     Info(String),
 }
 
+static MODELS_DIR: std::sync::RwLock<Option<PathBuf>> = std::sync::RwLock::new(None);
+
+/// The folder chosen in the settings for every downloaded model.
+pub(crate) fn set_models_dir(dir: Option<PathBuf>) {
+    *MODELS_DIR.write().unwrap_or_else(|e| e.into_inner()) = dir;
+}
+
 pub(crate) fn models_dir() -> Option<PathBuf> {
+    if let Some(dir) = MODELS_DIR.read().unwrap_or_else(|e| e.into_inner()).clone() {
+        return Some(dir);
+    }
     library::Library::default_root()?
         .parent()
         .map(|dir| dir.join("models"))
@@ -271,16 +281,8 @@ impl VenturiApp {
         if !self.session.project.timelines.contains_key(timeline_id) {
             return;
         }
-        let mut clips = if let Some(template) = SubtitleTemplate::find(&captions.template) {
-            vv_core::captions::build_clips(
-                &mut self.session.project,
-                timeline_id,
-                &captions.words,
-                template,
-            )
-        } else if let Some(style) = self.text_subtitle_style(&captions.template) {
-            style.build(&mut self.session.project, timeline_id, &captions.words)
-        } else {
+        let Some(mut clips) = self.subtitle_clips(timeline_id, &captions.words, &captions.template)
+        else {
             return;
         };
         carry_look(look_from, &mut clips);
@@ -288,6 +290,27 @@ impl VenturiApp {
             &mut self.session.project,
             Box::new(SetCaptions::new(timeline_id, Some(captions), clips)),
         );
+    }
+
+    /// The subtitle clips of `words` in `template` (a subtitle template or
+    /// a `text:<id>` one).
+    pub(crate) fn subtitle_clips(
+        &mut self,
+        timeline_id: TimelineId,
+        words: &[CaptionWord],
+        template: &str,
+    ) -> Option<Vec<vv_core::Clip>> {
+        if let Some(template) = SubtitleTemplate::find(template) {
+            Some(vv_core::captions::build_clips(
+                &mut self.session.project,
+                timeline_id,
+                words,
+                template,
+            ))
+        } else {
+            let style = self.text_subtitle_style(template)?;
+            Some(style.build(&mut self.session.project, timeline_id, words))
+        }
     }
 
     /// The text template behind a `text:<id>` subtitle template id.
@@ -352,7 +375,7 @@ impl VenturiApp {
 /// Gives each of `clips` the effects (style, position, filters) of the
 /// nearest of `old`, keeping its own text and word times: editing the words
 /// must not undo what the user did to the subtitles.
-fn carry_look(old: &[vv_core::Clip], clips: &mut [vv_core::Clip]) {
+pub(crate) fn carry_look(old: &[vv_core::Clip], clips: &mut [vv_core::Clip]) {
     for clip in clips {
         let Some(reference) = old
             .iter()

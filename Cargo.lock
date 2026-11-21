@@ -5001,6 +5001,7 @@ dependencies = [
  "vv-mcp",
  "vv-media",
  "vv-plugin",
+ "vv-reframe",
  "vv-render",
  "vv-session",
  "vv-transcribe",
@@ -5092,6 +5093,16 @@ name = "vv-plugin-fixture"
 version = "0.10.3"
 dependencies = [
  "vst3",
+]
+
+[[package]]
+name = "vv-reframe"
+version = "0.10.3"
+dependencies = [
+ "serde_json",
+ "tract-onnx",
+ "vv-core",
+ "vv-media",
 ]
 
 [[package]]

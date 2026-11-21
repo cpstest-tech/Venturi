@@ -25,6 +25,7 @@ mod compressor_panel;
 mod cover;
 mod downloader;
 mod downloader_ui;
+mod dub;
 mod eq_panel;
 mod export_dialog;
 mod export_modal;
@@ -64,6 +65,7 @@ mod projects;
 mod properties_panel;
 mod properties_tabs;
 mod proxy_worker;
+mod reframe;
 mod render_ahead;
 mod ribbon_editors;
 mod safe_zones;
@@ -626,6 +628,8 @@ struct VenturiApp {
     subtitles: subtitles::SubtitleState,
     auto_cut: auto_cut::State,
     auto_zoom: auto_zoom::State,
+    reframe: reframe::State,
+    dub: dub::State,
     beat: beat_sync::State,
     vertical: vertical_layout::State,
     transcript: transcript::State,
@@ -784,6 +788,8 @@ impl Default for VenturiApp {
             subtitles: subtitles::SubtitleState::default(),
             auto_cut: auto_cut::State::default(),
             auto_zoom: auto_zoom::State::default(),
+            reframe: reframe::State::default(),
+            dub: dub::State::default(),
             beat: beat_sync::State::default(),
             vertical: vertical_layout::State::default(),
             transcript: transcript::State::default(),
@@ -1321,7 +1327,7 @@ impl VenturiApp {
     /// Play/pause of the timeline from the playhead, with no need for a selection:
     /// gaps included (they play silence), stopping only past the end of the
     /// content.
-    fn toggle_playback(&mut self) {
+    pub(crate) fn toggle_playback(&mut self) {
         if self.browsing.is_some() {
             self.toggle_browse_playback();
             return;
@@ -2792,6 +2798,19 @@ impl VenturiApp {
         }
         if !response.open {
             self.settings_dialog = None;
+        }
+        if response.pick_models_dir {
+            let start = subtitles::models_dir();
+            self.spawn_file_dialog(project_io::DialogKind::ModelsFolder, move |dlg| {
+                let dlg = match start {
+                    Some(dir) => dlg.set_directory(dir),
+                    None => dlg,
+                };
+                dlg.pick_folder()
+            });
+        }
+        if self.settings.models_dir != before.models_dir {
+            subtitles::set_models_dir(self.settings.models_dir.clone());
         }
         if response.pick_recording_dir {
             let start = self.settings.recording_dir.clone();
@@ -4490,6 +4509,8 @@ impl VenturiApp {
 
         self.show_export_dialog(ui);
         self.show_export_modal(ui.ctx());
+        self.poll_dub(ui.ctx());
+        self.show_dub(ui.ctx());
         self.show_cover_picker(ui.ctx());
         self.poll_subtitles(ui.ctx());
         self.poll_ai_clips(ui.ctx());
@@ -5195,6 +5216,7 @@ impl VenturiApp {
         if viewer_area.is_some() {
             self.paint_safe_zones(ui, rect, area);
             self.show_viewer_overlay(ui, rect, area, video_targets, overlay_effects);
+            self.show_reframe_faces(ui, rect, area);
         }
 
         if let Some(browsed) = self.browsing.clone() {
@@ -5358,6 +5380,7 @@ fn main() -> eframe::Result<()> {
         .as_deref()
         .map(settings::Settings::load)
         .unwrap_or_default();
+    subtitles::set_models_dir(settings.models_dir.clone());
     if settings.intel_experimental_decode {
         // SAFETY: no other thread started yet.
         unsafe { hw_decode::enable_intel_experimental_decode() };

@@ -59,6 +59,7 @@ fn compound_project(path: &Path, secs: u32) -> (Project, MediaId, vv_core::Timel
             main: false,
             subtitles: false,
             effects: false,
+            dub: None,
         }],
         markers: Vec::new(),
         master: Default::default(),

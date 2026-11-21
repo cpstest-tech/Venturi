@@ -316,7 +316,7 @@ impl VenturiApp {
         });
     }
 
-    fn transcript_status(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn transcript_status(&mut self, ui: &mut egui::Ui) {
         let Some(model) = &self.transcript.model else {
             return;
         };

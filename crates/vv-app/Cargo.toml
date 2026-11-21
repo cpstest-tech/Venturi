@@ -32,6 +32,7 @@ vv-audio = { path = "../vv-audio" }
 vv-core = { path = "../vv-core" }
 vv-media = { path = "../vv-media" }
 vv-matting = { path = "../vv-matting" }
+vv-reframe = { path = "../vv-reframe" }
 vv-render = { path = "../vv-render" }
 vv-mcp = { path = "../vv-mcp" }
 vv-plugin = { path = "../vv-plugin" }

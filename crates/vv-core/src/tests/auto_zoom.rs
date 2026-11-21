@@ -172,7 +172,7 @@ fn removing_keeps_hand_made_and_edited_keyframes() {
         .transform
         .track_mut(TransformParam::ZoomX)
         .upsert(50, 1.3, Interpolation::Linear);
-    let stripped = strip(&c.effects.transform, &c.auto_keyframes);
+    let stripped = strip(&c.effects.transform, &c.auto_keyframes, Origin::Zoom);
     let frames: Vec<_> = stripped
         .track(TransformParam::ZoomX)
         .keyframes()
@@ -273,7 +273,7 @@ fn the_command_round_trips_through_undo() {
     );
     let c = project.timelines[timeline].clip(0, ClipId(1)).unwrap();
     assert!(!c.auto_keyframes.is_empty());
-    let remove = SetAutoZoom::remove(timeline, 0, c);
+    let remove = SetAutoZoom::remove(timeline, 0, c, Origin::Zoom);
     history.do_command(&mut project, Box::new(remove));
     let c = project.timelines[timeline].clip(0, ClipId(1)).unwrap();
     assert!(c.effects.transform.is_constant());

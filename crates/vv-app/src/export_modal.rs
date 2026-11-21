@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
-use vv_core::{FrameIdx, Project, TimelineId};
+use vv_core::dub::Language;
+use vv_core::{FrameIdx, Project, Timeline, TimelineId, Track, TrackKind};
 use vv_media::{HwDevice, VideoBitrate, VideoCodec, VideoSettings};
 use vv_session::export::{ExportError, ExportProgress, ExportSettings};
 use vv_session::motion_blur::{
@@ -45,6 +46,7 @@ pub(crate) struct ExportModal {
     audio_on: bool,
     audio_open: bool,
     audio_format: AudioFormat,
+    language: Language,
     captions_on: bool,
     captions_open: bool,
     caption_format: CaptionFormat,
@@ -135,6 +137,7 @@ impl ExportModal {
             audio_on: false,
             audio_open: true,
             audio_format: AudioFormat::Mp3,
+            language: Language::AsIs,
             captions_on: false,
             captions_open: true,
             caption_format: CaptionFormat::Srt,
@@ -276,20 +279,22 @@ impl ExportModal {
                 bitrate_kbps: AUDIO_KBPS,
             });
         }
-        let captions = (self.captions_on
-            && vv_core::captions::has_subtitles(env.project, env.timeline))
-        .then(|| {
-            let text = match self.caption_format {
-                CaptionFormat::Srt => vv_core::captions::clips_to_srt(tl),
-                CaptionFormat::Txt => vv_core::captions::clips_to_txt(tl),
-            };
-            (
-                settings
-                    .output_path
-                    .with_extension(self.caption_format.extension()),
-                text,
-            )
-        });
+        settings.language = self.language.clone();
+        let captions = self
+            .caption_track(tl)
+            .filter(|_| self.captions_on)
+            .map(|track| {
+                let text = match self.caption_format {
+                    CaptionFormat::Srt => vv_core::captions::track_to_srt(track, tl.fps),
+                    CaptionFormat::Txt => vv_core::captions::track_to_txt(track),
+                };
+                (
+                    settings
+                        .output_path
+                        .with_extension(self.caption_format.extension()),
+                    text,
+                )
+            });
         StartRequest {
             settings,
             range: env.range.clone(),
@@ -475,7 +480,18 @@ impl ExportModal {
                 ui.weak(t!("export.audio_only_hint"));
             }
         }
-        if vv_core::captions::has_subtitles(env.project, env.timeline)
+        if !vv_core::dub::languages(tl).is_empty() {
+            row(ui, t!("dub.export_language"), |ui| {
+                crate::dub::ui::language_combo(
+                    ui,
+                    "export_dub_language",
+                    tl,
+                    &mut self.language,
+                    true,
+                );
+            });
+        }
+        if self.caption_track(tl).is_some()
             && section_header(
                 ui,
                 &mut self.captions_on,
@@ -503,6 +519,21 @@ impl ExportModal {
                 CaptionFormat::Txt => t!("export.captions_txt_hint"),
             });
         }
+    }
+
+    fn caption_track<'a>(&self, timeline: &'a Timeline) -> Option<&'a Track> {
+        let dub = timeline.tracks.iter().find(|track| {
+            track.kind == TrackKind::Video
+                && track.dub.as_ref().is_some_and(|dub| match &self.language {
+                    Language::AsIs => !track.muted,
+                    Language::Original => false,
+                    Language::Dub(code) => dub.language == *code,
+                })
+        });
+        dub.or_else(|| {
+            vv_core::captions::subtitle_track(timeline).map(|index| &timeline.tracks[index])
+        })
+        .filter(|track| !track.clips.is_empty())
     }
 
     fn video_rows(&mut self, ui: &mut egui::Ui, env: &Env, derived: &Derived) {

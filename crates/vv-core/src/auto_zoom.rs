@@ -93,6 +93,22 @@ pub struct AutoKeyframe {
     pub param: TransformParam,
     pub frame: FrameIdx,
     pub value: f32,
+    #[serde(default, skip_serializing_if = "Origin::is_zoom")]
+    pub origin: Origin,
+}
+
+/// Which generator wrote a keyframe: each one removes only its own.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Origin {
+    #[default]
+    Zoom,
+    Reframe,
+}
+
+impl Origin {
+    fn is_zoom(&self) -> bool {
+        *self == Self::Zoom
+    }
 }
 
 /// One punch-in, in seconds from the start of the clip.
@@ -231,11 +247,15 @@ pub fn plan(words: &[Word], energy: &Energy, duration: f64, config: &Config) -> 
 const ZOOM_PARAMS: [TransformParam; 2] = [TransformParam::ZoomX, TransformParam::ZoomY];
 const SHIFT_PARAMS: [TransformParam; 2] = [TransformParam::PositionX, TransformParam::PositionY];
 
-/// The transform with the generated keyframes of a previous run taken out:
-/// a keyframe the user moved or changed no longer matches and stays.
-pub fn strip(transform: &TransformTracks, auto: &[AutoKeyframe]) -> TransformTracks {
+/// The transform with the keyframes `origin` generated taken out: a
+/// keyframe the user moved or changed no longer matches and stays.
+pub fn strip(
+    transform: &TransformTracks,
+    auto: &[AutoKeyframe],
+    origin: Origin,
+) -> TransformTracks {
     let mut out = transform.clone();
-    for k in auto {
+    for k in auto.iter().filter(|k| k.origin == origin) {
         let track = out.track_mut(k.param);
         if track
             .keyframe_at(k.frame)
@@ -257,8 +277,13 @@ pub fn keyframes(
     fps: f64,
     frame: (u32, u32),
 ) -> (TransformTracks, Vec<AutoKeyframe>) {
-    let mut transform = strip(&clip.effects.transform, &clip.auto_keyframes);
+    let mut transform = strip(&clip.effects.transform, &clip.auto_keyframes, Origin::Zoom);
     let base = transform.clone();
+    let reframed = |p: TransformParam, f: FrameIdx| {
+        clip.auto_keyframes
+            .iter()
+            .any(|k| k.origin == Origin::Reframe && k.param == p && k.frame == f)
+    };
     let (ramp_in, ramp_out) = config.speed.ramps();
     let last = clip.timeline_len - 1;
     let source = |secs: f64| {
@@ -274,7 +299,7 @@ pub fn keyframes(
             base.track(*p)
                 .keyframes()
                 .iter()
-                .any(|k| (from..=to).contains(&k.0))
+                .any(|k| (from..=to).contains(&k.0) && !reframed(*p, k.0))
         })
     };
     let zooms: Vec<&Zoom> = zooms
@@ -282,7 +307,12 @@ pub fn keyframes(
         .filter(|z| !busy(source(z.at - ramp_in), source(z.hold_end + ramp_out)))
         .collect();
 
-    let mut auto = Vec::new();
+    let mut auto: Vec<AutoKeyframe> = clip
+        .auto_keyframes
+        .iter()
+        .filter(|k| k.origin != Origin::Zoom)
+        .copied()
+        .collect();
     let mut put = |transform: &mut TransformTracks,
                    secs: f64,
                    z: Option<&Zoom>,
@@ -305,6 +335,7 @@ pub fn keyframes(
                 param: p,
                 frame: f,
                 value,
+                origin: Origin::Zoom,
             });
         }
     };
@@ -367,18 +398,33 @@ impl SetAutoZoom {
         }
     }
 
-    /// Takes the generated keyframes out of the clip, the hand-made ones stay.
-    pub fn remove(timeline: TimelineId, track_index: usize, clip: &Clip) -> Self {
+    /// Takes the keyframes `origin` generated out of the clip; the
+    /// hand-made ones and those of the other generator stay.
+    pub fn remove(timeline: TimelineId, track_index: usize, clip: &Clip, origin: Origin) -> Self {
+        let kept = clip
+            .auto_keyframes
+            .iter()
+            .filter(|k| k.origin != origin)
+            .copied()
+            .collect();
         Self {
-            label: CommandLabel::RemoveAutoZoom,
+            label: match origin {
+                Origin::Zoom => CommandLabel::RemoveAutoZoom,
+                Origin::Reframe => CommandLabel::RemoveReframe,
+            },
             ..Self::new(
                 timeline,
                 track_index,
                 clip.id,
-                strip(&clip.effects.transform, &clip.auto_keyframes),
-                Vec::new(),
+                strip(&clip.effects.transform, &clip.auto_keyframes, origin),
+                kept,
             )
         }
+    }
+
+    pub fn with_label(mut self, label: CommandLabel) -> Self {
+        self.label = label;
+        self
     }
 }
 

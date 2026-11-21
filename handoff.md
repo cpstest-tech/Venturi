@@ -1208,3 +1208,52 @@ applying a pack, touch screen) — see the checklist. No LLM, no network, **no n
    and one with `"version": 99`.
 9. Playback performance with the Trascrizione tab open on a 30-minute
    recording.
+
+## Short-form round 3 — automatic reframe and dubbing
+
+The implementation plan and dependency trade-offs are in
+[plans/round3-reframe-dubbing.md](plans/round3-reframe-dubbing.md).
+
+### Automatic reframe
+
+- **Entry point** — select a video clip and click «Reframe automatico» in the timeline toolbar to open Properties → Video → Reframe.
+- **Analysis** — `vv-reframe` decodes the source at up to 640 px on its longest side with an available hardware decoder. It samples faces every N frames and checks every frame for scene cuts. YuNet runs locally on tract. The cache is in `library/reframe/` and is keyed by source fingerprint, source range and detection interval. Remove that folder to rebuild it.
+- **Tracking** — `vv-core/src/reframe.rs` follows the largest face first and resets the EMA at scene cuts. Mouth motion can pick an active speaker. If energy from the speech cache is available, it gates that decision. Frames without faces use the last point of interest in the shot or the center, with a warning. In the paused player, click a visible face to pin it through the end of the shot. Face buttons also work for detections outside the current crop.
+- **Editing** — «Anteprima» generates regular position and scale keyframes. «Applica» keeps them in one undo step. «Rimuovi reframe» removes generated keys that still match their original values. Auto zoom and reframe track their ownership separately. The panel warns before replacing a pre-existing position or scale curve. Undo restores the previous curve.
+- **Settings and model** — `shorts.reframe` remembers tracking speed, dead zone, face margin and placement, minimum zoom, speaker following and the detection interval. [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) is about 232 KB, under MIT, embedded with its license in `crates/vv-reframe/assets/`. There is no separately installed face model. Reframe currently requires a clip without crop, rotation, an offset anchor or a freeze.
+
+### Dubbing
+
+- **Entry point** — choose «Doppiaggio» in the timeline toolbar, a target language, a preset voice and Manual or Gemini translation. The modal reuses the transcript panel’s source selection, Whisper worker and word cache. It displays original and editable translated phrases side by side before audio generation.
+- **Translation and consent** — Manual uses the reviewed text directly. Gemini uses the saved API key, saved Gemini model and existing API access settings. Enable the separate dubbing checkbox under Settings → AI providers to send phrase text and the glossary to Gemini. Audio stays local. Quota, network and empty responses have distinct errors. The default glossary includes Apple, iPad, iPhone, Mac and Sidecar.
+- **Synthesis and fit** — `crates/vv-app/src/dub/{ui,translate,tts,mod}.rs` handles review, workers and caches. `vv-core/src/dub.rs` handles phrases, fit and language switching. A phrase that exceeds the maximum speed increase (default 20%) is shown in red. «Accorcia» invokes Gemini when enabled or focuses the row for editing. «Riprova» acts on the failed row. Audio is reused by model and reviewed text. Translation cache files live under `library/dub/`. Generated media used by the project is written under `Dub/` beside its project file, or under `library/dub/tracks/` for an untitled project. Keep the WAV media referenced by projects that use it.
+- **Mix and export** — «Anteprima» prepares one audio file in a worker and places separate editable, pitch-corrected clips in a new track. «Applica» commits audio, configurable ducking or muting, optional loudness normalization and translated subtitles as one undo step. Locked clips and clips with animated gains retain those gains. There is one audio track and an optional subtitle track per target language. Switch languages in the same modal or choose Original, As in timeline or a dub in the export modal. The export snapshot uses the selected audio and subtitles, including SRT/TXT sidecars.
+- **Settings and limits** — `shorts.dub` stores the target language, voice, translation provider, glossary, voice and music ducking, stretch limit, subtitles, normalization and Gemini consent. Subtitles estimate word timing within each synthesized phrase. Translation cache holds Gemini results. Manual drafts are session-local. When a source clip mixes voice and music, lowering or muting it affects the entire clip. **Voice/music separation** remains a future extension. For voice cloning, implement the `Voice` trait in `dub/tts.rs` and register a provider in `voice_for`. An external provider would require explicit consent describing the data it receives.
+
+### Downloaded models
+
+- **Shared storage** — Settings → AI providers → Models folder. The default is `models/` next to the Tandem library. Changing the path leaves existing files in their prior directory.
+- **Whisper** — existing [whisper.cpp models](https://huggingface.co/ggerganov/whisper.cpp), MIT, about 190 MB for Small or 874 MB for Turbo. The dubbing modal asks before downloading a missing model. Remove `ggml-small-q5_1.bin` or `ggml-large-v3-turbo-q8_0.bin` to reclaim space. Matting continues to use the same configurable directory.
+- **Piper** — [rhasspy 2023.11.14-2](https://github.com/rhasspy/piper/releases/tag/2023.11.14-2), MIT engine, about 22–27 MB across Linux x86-64/arm64 and Windows x86-64. Extracted with system `tar` into `models/piper/`. Remove that directory to uninstall the engine. Piper is launched as a local subprocess.
+- **Voices** — each ONNX model and its JSON configuration total about 63–64 MB. The catalog uses [a pinned compatible revision](https://huggingface.co/rhasspy/piper-voices/tree/b4e358ffcb232591bf73a540e70f7de528e4174a). Each binary archive, model and configuration is checked against SHA-256 at install time. Each voice links to its credits in the app. The catalog lists Paola, Joe, Davefx, Thorsten, Faber and Cadu (CC0), Kristin and John (public-domain datasets), Ald (Unlicense), and [Siwis](https://huggingface.co/rhasspy/piper-voices/blob/b4e358ffcb232591bf73a540e70f7de528e4174a/fr/fr_FR/siwis/medium/MODEL_CARD) (CC BY 4.0 dataset). Remove the selected pair from `models/piper-voices/` to free its space. A download begins only after its size and license have been shown and confirmed.
+
+### Manual test checklist
+
+1. Set a 9:16 timeline with a 16:9 talking-head clip. Open Reframe from the toolbar. Start analysis, cancel it, retry and confirm that the result is reused. Try a clip with two speakers, a hard cut and a shot without a face.
+2. Preview, pause, pin a face in the player and check the framing after the next cut. Change the tracking speed, margin and dead zone. Apply, edit a generated key, then remove the reframe. Verify one undo per operation.
+3. Open Doppiaggio with speech and music on separate tracks. Use an empty models folder to check both confirmation prompts and cancellation. Generate or reuse the transcript. Choose Manual and edit a few phrases before generating audio.
+4. Make one phrase deliberately too long. Check the red row. Use Accorcia or edit the row, regenerate and confirm that the unchanged audio is reused. Listen to the preview, discard, preview again and apply. Check the track, ducking, text style and Ctrl+Z / Ctrl+Y.
+5. Generate a second language. Switch between Original and each dub in the editor. Export once in each language with a subtitle sidecar and verify the selected speech, mix and subtitles. Check that exporting leaves the editor’s language as it was.
+6. In Settings, toggle Gemini consent off and check that translation is disabled. For a live test, enable consent and use a non-sensitive sample. Verify the glossary, empty responses and retry behavior. The test suite does not call Gemini.
+
+### Round 3 verification
+
+The workspace suite passed on Linux with isolated XDG directories, 2,315
+passed and 23 skipped by default. The app accounted for 984 passing tests. The opt-in Piper smoke test ran separately with the
+pinned English Joe and Italian Paola voices and produced valid WAV files.
+Clippy and rustfmt passed. This machine has FFmpeg 9.1, while the locked
+`ffmpeg-next` 9.0 bindings expect FFmpeg 9.0 headers. The release was built
+with FFmpeg 9.0.2 headers and checked against the local 9.1 runtime. The
+Linux installer placed it in `~/.local/bin/tandem` and the installed binary
+passed a headless startup check. The GUI checklist, Windows runtime and live
+Gemini request remain manual checks.

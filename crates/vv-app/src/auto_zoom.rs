@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use vv_core::auto_zoom::{self, Config, Frequency, SetAutoZoom, Speed};
+use vv_core::auto_zoom::{self, Config, Frequency, Origin, SetAutoZoom, Speed};
 use vv_core::{ClipId, ClipSource, TimelineId};
 
 use crate::auto_cut::{Cached, SourceJob, SourceKey, clip_local, start_source};
@@ -252,7 +252,11 @@ impl VenturiApp {
                 if ui.button(t!("auto_zoom.preview")).clicked() {
                     self.preview_auto_zoom(&source, &spec, key3, &config);
                 }
-                let generated = clip.auto_keyframes.len();
+                let generated = clip
+                    .auto_keyframes
+                    .iter()
+                    .filter(|k| k.origin == Origin::Zoom)
+                    .count();
                 if ui
                     .add_enabled(generated > 0, egui::Button::new(t!("auto_zoom.remove")))
                     .on_hover_text(t!("auto_zoom.remove_hint"))
@@ -264,6 +268,7 @@ impl VenturiApp {
                             target.timeline,
                             target.track_index,
                             &clip,
+                            Origin::Zoom,
                         )),
                     );
                 }

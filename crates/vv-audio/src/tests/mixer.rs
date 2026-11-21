@@ -74,6 +74,7 @@ fn audio_track(clips: Vec<Clip>) -> Track {
         main: false,
         subtitles: false,
         effects: false,
+        dub: None,
     }
 }
 

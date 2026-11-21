@@ -1,0 +1,203 @@
+_version: 2
+
+dub.title:
+  en: "Dubbing"
+  it: "Doppiaggio"
+dub.lang_it:
+  en: "Italian"
+  it: "Italiano"
+dub.lang_en:
+  en: "English"
+  it: "Inglese"
+dub.lang_es:
+  en: "Spanish"
+  it: "Spagnolo"
+dub.lang_fr:
+  en: "French"
+  it: "Francese"
+dub.lang_de:
+  en: "German"
+  it: "Tedesco"
+dub.lang_pt:
+  en: "Portuguese"
+  it: "Portoghese"
+dub.original:
+  en: "Original"
+  it: "Originale"
+dub.as_is:
+  en: "As in timeline"
+  it: "Come in timeline"
+dub.export_language:
+  en: "Dubbing language"
+  it: "Lingua del doppiaggio"
+dub.target_language:
+  en: "Target language"
+  it: "Lingua di destinazione"
+dub.voice:
+  en: "Voice"
+  it: "Voce"
+dub.translator:
+  en: "Translation"
+  it: "Traduzione"
+dub.manual:
+  en: "Manual"
+  it: "Manuale"
+dub.glossary:
+  en: "Glossary"
+  it: "Glossario"
+dub.mix:
+  en: "Mix and subtitles"
+  it: "Mix e sottotitoli"
+dub.duck_voice:
+  en: "Lower original voice"
+  it: "Abbassa la voce originale"
+dub.mute_voice:
+  en: "Mute original voice"
+  it: "Muta la voce originale"
+dub.music:
+  en: "Music"
+  it: "Musica"
+dub.max_stretch:
+  en: "Maximum speed increase"
+  it: "Aumento massimo della velocità"
+dub.subtitles:
+  en: "Generate translated subtitles"
+  it: "Genera sottotitoli tradotti"
+dub.normalize:
+  en: "Normalize dubbing volume"
+  it: "Normalizza il volume del doppiaggio"
+dub.translation:
+  en: "Translated text"
+  it: "Testo tradotto"
+dub.review_hint:
+  en: "Review each line before generating audio. You can edit the translated text directly."
+  it: "Rivedi ogni frase prima di generare l’audio. Puoi modificare direttamente il testo tradotto."
+dub.too_long:
+  en: "Too long for this segment. Shorten the text and generate it again."
+  it: "La frase è troppo lunga per questo segmento. Accorcia il testo e rigenera l’audio."
+dub.shorten:
+  en: "Shorten"
+  it: "Accorcia"
+dub.retry:
+  en: "Retry"
+  it: "Riprova"
+dub.translate:
+  en: "Translate"
+  it: "Traduci"
+dub.generate_audio:
+  en: "Generate audio"
+  it: "Genera audio"
+dub.preview:
+  en: "Preview"
+  it: "Anteprima"
+dub.preview_ready:
+  en: "Listen to the mix, then apply it to the timeline or discard the preview."
+  it: "Ascolta il mix, poi applicalo alla timeline oppure annulla l’anteprima."
+dub.play:
+  en: "Play"
+  it: "Riproduci"
+dub.pause:
+  en: "Pause"
+  it: "Pausa"
+dub.seek_phrase:
+  en: "Go to phrase"
+  it: "Vai alla frase"
+dub.apply:
+  en: "Apply"
+  it: "Applica"
+dub.close:
+  en: "Close"
+  it: "Chiudi"
+dub.download_hint:
+  en: "Download the required files to the models folder? Piper then runs on this device."
+  it: "Scaricare i file necessari nella cartella dei modelli? Piper funzionerà in locale."
+dub.download_engine:
+  en: "Piper engine from GitHub, ~%{mb} MB (MIT)."
+  it: "Motore Piper da GitHub, circa %{mb} MB (MIT)."
+dub.download_voice:
+  en: "%{voice} from Hugging Face, ~%{mb} MB. Dataset license: %{license}."
+  it: "%{voice} da Hugging Face, circa %{mb} MB. Licenza del dataset: %{license}."
+dub.download:
+  en: "Download"
+  it: "Scarica"
+dub.downloading:
+  en: "Downloading Piper files…"
+  it: "Scaricamento dei file di Piper…"
+dub.translating:
+  en: "Translating…"
+  it: "Traduzione in corso…"
+dub.synthesizing:
+  en: "Generating audio…"
+  it: "Generazione dell’audio…"
+dub.preparing:
+  en: "Preparing the preview…"
+  it: "Preparazione dell’anteprima…"
+dub.cloud_consent:
+  en: "Allow dubbing translation with Gemini"
+  it: "Consenti la traduzione del doppiaggio con Gemini"
+dub.cloud_consent_hint:
+  en: "Translation sends the selected phrases and glossary to Google Gemini. Piper synthesizes audio locally."
+  it: "La traduzione invia le frasi e il glossario a Google Gemini. Piper genera la voce in locale."
+dub.consent_missing:
+  en: "Enable dubbing translation under Settings → AI providers to use Gemini."
+  it: "Per usare Gemini, abilita la traduzione del doppiaggio in Impostazioni → Provider IA."
+dub.key_missing:
+  en: "Add a Gemini API key in Settings."
+  it: "Aggiungi una chiave API Gemini nelle Impostazioni."
+dub.piper_unsupported:
+  en: "The Piper binary is unavailable for this platform."
+  it: "Il binario di Piper non è disponibile su questa piattaforma."
+dub.nothing_to_translate:
+  en: "All lines already have text."
+  it: "Tutte le frasi hanno già un testo."
+dub.nothing_to_voice:
+  en: "All lines already have audio."
+  it: "Tutte le frasi hanno già l’audio."
+dub.nothing_voiced:
+  en: "Generate audio that fits for every line before previewing."
+  it: "Genera un audio della durata adatta per ogni frase prima di avviare l’anteprima."
+dub.install_failed:
+  en: "Could not install Piper: %{error}"
+  it: "Impossibile installare Piper: %{error}"
+dub.empty_translation:
+  en: "The translation is empty."
+  it: "La traduzione è vuota."
+dub.cancelled:
+  en: "Operation cancelled."
+  it: "Operazione annullata."
+dub.quota:
+  en: "Gemini quota exceeded: %{detail}"
+  it: "Quota Gemini esaurita: %{detail}"
+dub.unreachable:
+  en: "Could not reach Gemini: %{detail}"
+  it: "Gemini non raggiungibile: %{detail}"
+dub.translate_failed:
+  en: "Translation failed: %{detail}"
+  it: "Traduzione non riuscita: %{detail}"
+dub.manual_gain:
+  en: "Gain was preserved on %{count} locked or animated clips."
+  it: "Il guadagno è stato mantenuto su %{count} clip bloccate o con keyframe di volume."
+dub.timeline_changed:
+  en: "The timeline changed. Review the updated phrases and try again."
+  it: "La timeline è cambiata. Controlla le frasi aggiornate e riprova."
+dub.history:
+  en: "Build dubbing track"
+  it: "Crea traccia doppiata"
+dub.history_language:
+  en: "Switch dubbing language"
+  it: "Cambia lingua del doppiaggio"
+dub.voice_card:
+  en: "Voice credits and license"
+  it: "Crediti e licenza della voce"
+dub.get_whisper:
+  en: "Get the Whisper model"
+  it: "Scarica il modello Whisper"
+dub.whisper_download_hint:
+  en: "Download the Whisper model from Hugging Face (~%{mb} MB) to transcribe locally?"
+  it: "Scaricare il modello Whisper da Hugging Face (circa %{mb} MB) per trascrivere in locale?"
+dub.whisper_failed:
+  en: "Could not install Whisper: %{error}"
+  it: "Impossibile installare Whisper: %{error}"
+dub.missing_term:
+  en: "The translation dropped a glossary term: %{term}. Edit the line or retry."
+  it: "Nella traduzione manca un termine del glossario: %{term}. Modifica la frase o riprova."
