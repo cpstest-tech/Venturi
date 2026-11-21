@@ -23,6 +23,10 @@ const MODAL_WIDTH: f32 = 760.0;
 const LEFT_WIDTH: f32 = 250.0;
 const LABEL_WIDTH: f32 = 130.0;
 const BODY_HEIGHT: f32 = 430.0;
+const MIN_MODAL_WIDTH: f32 = 300.0;
+const MIN_BODY_HEIGHT: f32 = 160.0;
+/// Title, footer and margins around the scrolled body.
+const MODAL_CHROME_HEIGHT: f32 = 220.0;
 const MAX_CUSTOM_MBPS: f64 = 200.0;
 
 pub(crate) struct ExportModal {
@@ -300,13 +304,20 @@ impl ExportModal {
             let _ = codec.availability();
         }
         let mut outcome = Outcome::None;
+        let screen = ctx.content_rect().size();
+        let width = MODAL_WIDTH
+            .min(screen.x - 2.0 * theme::SPACE_5)
+            .max(MIN_MODAL_WIDTH);
+        let body = BODY_HEIGHT
+            .min(screen.y - MODAL_CHROME_HEIGHT)
+            .max(MIN_BODY_HEIGHT);
         let modal = egui::Modal::new(egui::Id::new("export_modal")).show(ctx, |ui| {
-            ui.set_width(MODAL_WIDTH);
+            ui.set_width(width);
             ui.label(egui::RichText::new(t!("export.title")).size(theme::FONT_MODAL_TITLE));
             ui.add_space(theme::SPACE_3);
             match env.running {
                 Some(progress) => outcome = self.running_view(ui, progress),
-                None => outcome = self.settings_view(ui, env),
+                None => outcome = self.settings_view(ui, env, width, body),
             }
         });
         if env.running.is_none() && modal.should_close() {
@@ -315,24 +326,41 @@ impl ExportModal {
         outcome
     }
 
-    fn settings_view(&mut self, ui: &mut egui::Ui, env: &Env) -> Outcome {
+    fn settings_view(&mut self, ui: &mut egui::Ui, env: &Env, width: f32, body: f32) -> Outcome {
         let derived = self.derive(env);
         let mut outcome = Outcome::None;
-        ui.horizontal_top(|ui| {
-            ui.vertical(|ui| {
-                ui.set_width(LEFT_WIDTH);
-                if self.cover_view(ui, env) {
-                    outcome = Outcome::EditCover;
-                }
+        if width >= MODAL_WIDTH * 0.85 {
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(LEFT_WIDTH);
+                    if self.cover_view(ui, env) {
+                        outcome = Outcome::EditCover;
+                    }
+                });
+                ui.add_space(theme::SPACE_3);
+                ui.vertical(|ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(body)
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| self.form(ui, env, &derived));
+                });
             });
-            ui.add_space(theme::SPACE_3);
-            ui.vertical(|ui| {
-                egui::ScrollArea::vertical()
-                    .max_height(BODY_HEIGHT)
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| self.form(ui, env, &derived));
-            });
-        });
+        } else {
+            // Narrow window: the cover goes inside the scrolled column.
+            egui::ScrollArea::vertical()
+                .max_height(body)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        ui.set_width(LEFT_WIDTH.min(width));
+                        if self.cover_view(ui, env) {
+                            outcome = Outcome::EditCover;
+                        }
+                    });
+                    ui.add_space(theme::SPACE_3);
+                    self.form(ui, env, &derived);
+                });
+        }
         ui.add_space(theme::SPACE_2);
         ui.separator();
         ui.add_space(theme::SPACE_1);

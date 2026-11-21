@@ -1,0 +1,44 @@
+_version: 2
+
+layout.mode_desktop:
+  en: "Desktop layout"
+  it: "Layout desktop"
+layout.mode_vertical:
+  en: "Vertical layout (9:16, small screens)"
+  it: "Layout verticale (9:16, schermi piccoli)"
+layout.propose_setting:
+  en: "Suggest the layout that fits the window"
+  it: "Proponi il layout adatto alla finestra"
+layout.propose_vertical:
+  en: "The window is narrow: the vertical layout shows the 9:16 player at full height."
+  it: "La finestra è stretta: il layout verticale mostra il player 9:16 a tutta altezza."
+layout.propose_desktop:
+  en: "The window is wide again: the desktop layout shows every panel."
+  it: "La finestra è di nuovo ampia: il layout desktop mostra tutti i pannelli."
+layout.switch_vertical:
+  en: "Switch to vertical"
+  it: "Passa al verticale"
+layout.switch_desktop:
+  en: "Desktop layout"
+  it: "Layout desktop"
+layout.not_now:
+  en: "Not now"
+  it: "Non ora"
+layout.never:
+  en: "Don't ask again"
+  it: "Non chiedere più"
+layout.library:
+  en: "Library"
+  it: "Libreria"
+layout.library_hint:
+  en: "Media, text, effects, transcript and styles"
+  it: "Media, testo, effetti, trascrizione e stili"
+layout.properties:
+  en: "Properties"
+  it: "Proprietà"
+layout.properties_hint:
+  en: "Properties of the selected clip"
+  it: "Proprietà della clip selezionata"
+layout.desktop_hint:
+  en: "Back to the desktop layout (the blocks keep their arrangement)"
+  it: "Torna al layout desktop (i blocchi mantengono la loro disposizione)"

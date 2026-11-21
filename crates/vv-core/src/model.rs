@@ -3461,6 +3461,9 @@ pub struct Project {
     /// AI provenance survives media path relinking.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub ai_sequences: std::collections::BTreeMap<MediaId, String>,
+    /// Words of the transcripts corrected by hand, per source.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transcript_edits: Vec<crate::transcript_edit::TranscriptEdit>,
 }
 
 /// Where the user left the project, to resume from there when it is reopened.

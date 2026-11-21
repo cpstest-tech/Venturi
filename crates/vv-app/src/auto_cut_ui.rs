@@ -15,7 +15,7 @@ fn type_label(kind: SegmentType) -> std::borrow::Cow<'static, str> {
     }
 }
 
-fn type_color(kind: SegmentType) -> egui::Color32 {
+pub(crate) fn type_color(kind: SegmentType) -> egui::Color32 {
     match kind {
         SegmentType::Speech => theme::CLIP_VIDEO,
         SegmentType::Silence => theme::CLIP_AUDIO_FX,
@@ -24,7 +24,7 @@ fn type_color(kind: SegmentType) -> egui::Color32 {
     }
 }
 
-fn timecode(seconds: f64) -> String {
+pub(crate) fn timecode(seconds: f64) -> String {
     let ms = (seconds.max(0.0) * 1000.0).round() as u64;
     format!(
         "{:02}:{:02}:{:02}.{:03}",

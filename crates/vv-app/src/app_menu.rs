@@ -3,6 +3,7 @@
 use super::*;
 
 const DISCORD_INVITE: &str = "https://discord.gg/3v2xjXFnZv";
+const TOP_BAR_TITLE_MIN_WIDTH: f32 = 760.0;
 
 impl VenturiApp {
     pub(crate) fn handle_shortcuts(&mut self, ui: &mut egui::Ui) {
@@ -34,6 +35,12 @@ impl VenturiApp {
             || self.cover_picker.is_some()
             || self.pending_project_switch.is_some();
         let library_tab = self.library_ui.tab == library_ui::PoolTab::Library;
+        // The transcript panel owns Del and Ctrl+A after a click in it.
+        let transcript_keys = self.media_pool_state.focused
+            && self.transcript.focused
+            && self.library_ribbon.editor.is_none()
+            && self.library_ribbon.tab == library_ribbon::RibbonTab::Transcript
+            && self.block_shown(Block::Library);
         let keymap = self.settings.keymap.clone();
         let menu_paste = std::mem::take(&mut self.menu_paste_pending);
         let ctx = ui.ctx().clone();
@@ -62,6 +69,13 @@ impl VenturiApp {
                 // keyframe editor, media pool or timeline.
                 if self.keyframe_editor.owns_delete() {
                     self.delete_selected_keyframes();
+                } else if transcript_keys {
+                    self.transcript.delete_requested = true;
+                } else if self.media_pool_state.focused
+                    && self.library_ribbon.tab == library_ribbon::RibbonTab::Styles
+                    && self.library_ribbon.editor.is_none()
+                {
+                    // Nothing to delete with a key there: the pool is not shown.
                 } else if self.media_pool_state.focused && library_tab {
                     self.delete_selected_library_assets();
                 } else if self.media_pool_state.focused {
@@ -197,7 +211,9 @@ impl VenturiApp {
             if pressed(Action::SelectAll) {
                 // Same rule as Del: the panel with the last click
                 // decides what Ctrl+A selects.
-                if self.media_pool_state.focused && library_tab {
+                if transcript_keys {
+                    self.transcript.select_all_requested = true;
+                } else if self.media_pool_state.focused && library_tab {
                     self.select_all_library_assets();
                 } else if self.media_pool_state.focused {
                     self.select_all_media();
@@ -362,7 +378,10 @@ impl VenturiApp {
                     .response
                     .rect;
                 let row = egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), row.y_range());
-                self.show_top_bar_center(ui, row);
+                // On a narrow window the title would cover the menus.
+                if row.width() >= TOP_BAR_TITLE_MIN_WIDTH {
+                    self.show_top_bar_center(ui, row);
+                }
                 let mut right = ui.new_child(
                     egui::UiBuilder::new()
                         .max_rect(row)
@@ -861,6 +880,27 @@ impl VenturiApp {
     }
 
     fn layout_menu(&mut self, ui: &mut egui::Ui) {
+        use crate::vertical_layout::LayoutMode;
+        let current = self.settings.shorts.layout;
+        for (mode, label) in [
+            (LayoutMode::Desktop, t!("layout.mode_desktop")),
+            (LayoutMode::Vertical, t!("layout.mode_vertical")),
+        ] {
+            if ui.radio(current == mode, label).clicked() {
+                self.set_layout(mode);
+                ui.close();
+            }
+        }
+        if ui
+            .checkbox(
+                &mut self.settings.shorts.propose_layout,
+                t!("layout.propose_setting"),
+            )
+            .changed()
+        {
+            self.persist_settings();
+        }
+        ui.separator();
         if ui.button(t!("workspace.reset")).clicked() {
             self.workspace.reset();
             ui.close();
@@ -1099,6 +1139,9 @@ fn command_label(label: vv_core::CommandLabel) -> std::borrow::Cow<'static, str>
         L::FreezeFrame => t!("history.freeze_frame"),
         L::RemoveSilences => t!("history.remove_silences"),
         L::AutoCut => t!("auto_cut.title"),
+        L::TextCut => t!("transcript.history_cut"),
+        L::CorrectWord => t!("transcript.history_correct"),
+        L::ApplyStylePack => t!("style_pack.history_apply"),
         L::AutoZoom => t!("auto_zoom.title"),
         L::RemoveAutoZoom => t!("auto_zoom.remove"),
         L::BeatMarkers => t!("beat.markers_step"),

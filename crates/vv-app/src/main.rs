@@ -76,6 +76,8 @@ mod speed_dialog;
 mod sticker_anim;
 mod stickers;
 mod stickers_ui;
+mod style_packs;
+mod style_packs_ui;
 mod subtitles;
 mod subtitles_ui;
 mod text_anim_panel;
@@ -88,9 +90,12 @@ mod timeline_audio;
 mod timeline_bar;
 mod timeline_commands;
 mod timeline_ui;
+mod transcript;
+mod transcript_ui;
 mod transport;
 mod updater;
 mod updater_ui;
+mod vertical_layout;
 mod viewer_overlay;
 mod viewer_waveform;
 mod viewer_zoom;
@@ -622,6 +627,12 @@ struct VenturiApp {
     auto_cut: auto_cut::State,
     auto_zoom: auto_zoom::State,
     beat: beat_sync::State,
+    vertical: vertical_layout::State,
+    transcript: transcript::State,
+    style_packs: style_packs::State,
+    style_pack_previews: style_packs_ui::Previews,
+    /// Blocks laid out in the main window this frame.
+    block_rects: std::collections::HashSet<Block>,
     /// Read at startup and each time the overlay is switched on.
     safe_zone_platforms: (Vec<safe_zones::Platform>, Option<String>),
     ai_clips: ai_clips::State,
@@ -774,6 +785,11 @@ impl Default for VenturiApp {
             auto_cut: auto_cut::State::default(),
             auto_zoom: auto_zoom::State::default(),
             beat: beat_sync::State::default(),
+            vertical: vertical_layout::State::default(),
+            transcript: transcript::State::default(),
+            style_packs: style_packs::State::default(),
+            style_pack_previews: Default::default(),
+            block_rects: Default::default(),
             safe_zone_platforms: safe_zones::load(),
             ai_clips: ai_clips::State::default(),
             ai_sequences: ai_sequence_ui::State::default(),
@@ -2896,7 +2912,7 @@ impl VenturiApp {
     /// User settings on disk, including the panel layout: called
     /// from the Settings window and periodically/on close (see
     /// `eframe::App::save`).
-    fn persist_settings(&mut self) {
+    pub(crate) fn persist_settings(&mut self) {
         self.settings.workspace = self.workspace.to_value();
         if let Some(path) = &self.settings_path
             && let Err(e) = self.settings.save(path)
@@ -4528,10 +4544,14 @@ impl VenturiApp {
         let (video_targets, audio_targets) = self.selection_targets();
         let panel_targets = self.with_linked_subtitles(&video_targets);
 
+        self.sync_layout_density(ui.ctx());
+        self.show_layout_proposal(ui);
         let rects = egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(theme::BG_WINDOW))
             .show(ui, |ui| {
-                if self.workspace.has_docked_blocks() {
+                if self.vertical_layout() {
+                    self.vertical_layout_ui(ui)
+                } else if self.workspace.has_docked_blocks() {
                     self.workspace.layout_ui(ui)
                 } else {
                     ui.centered_and_justified(|ui| ui.weak(t!("workspace.nothing_docked")));
@@ -4539,12 +4559,13 @@ impl VenturiApp {
                 }
             })
             .inner;
+        self.block_rects = rects.keys().copied().collect();
 
         let mut preview_action = None;
         self.show_block(ui, &rects, Block::Library, |app, ui| {
             app.show_library_block(ui, &mut preview_action)
         });
-        if !self.workspace.is_shown(Block::Library) {
+        if !self.block_shown(Block::Library) {
             self.media_pool_state.focused = false;
         }
 
@@ -4776,6 +4797,11 @@ impl VenturiApp {
             );
             child.set_clip_rect(rect.intersect(ui.clip_rect()));
             return Some(content(self, &mut child));
+        }
+        // The vertical layout has no separate windows: they come back with
+        // the desktop one.
+        if self.vertical_layout() {
+            return None;
         }
         let builder = self.workspace.viewport_builder(block)?;
         let ctx = ui.ctx().clone();

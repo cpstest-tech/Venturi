@@ -406,11 +406,12 @@ impl VenturiApp {
     /// Selects `media` and makes it visible: opens the pool and the folders
     /// containing it, drops a search hiding it, scrolls to it.
     pub(crate) fn reveal_in_media_pool(&mut self, media: MediaId) {
-        let Some(item) = self.session.project.media_pool.get(media) else {
+        if !self.session.project.media_pool.contains_key(media) {
             return;
-        };
+        }
+        self.reveal_block(Block::Library);
+        let item = &self.session.project.media_pool[media];
         self.settings.panels.media_pool_open = true;
-        self.workspace.reopen(Block::Library);
         self.library_ui.tab = library_ui::PoolTab::Project;
         let folders = &self.session.project.folders;
         self.media_pool_state

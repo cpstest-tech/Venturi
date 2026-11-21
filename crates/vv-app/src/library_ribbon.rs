@@ -33,6 +33,8 @@ pub(crate) enum RibbonTab {
     Filters,
     Transitions,
     Subtitles,
+    Transcript,
+    Styles,
     AiClips,
     AiSequence,
     Curves,
@@ -43,7 +45,7 @@ pub(crate) enum RibbonTab {
 const SIDEBAR_WIDTH: f32 = 112.0;
 
 impl RibbonTab {
-    const ALL: [RibbonTab; 13] = [
+    const ALL: [RibbonTab; 15] = [
         Self::Media,
         Self::Audio,
         Self::Text,
@@ -52,6 +54,8 @@ impl RibbonTab {
         Self::Filters,
         Self::Transitions,
         Self::Subtitles,
+        Self::Transcript,
+        Self::Styles,
         Self::AiClips,
         Self::AiSequence,
         Self::Curves,
@@ -74,6 +78,8 @@ impl RibbonTab {
             Self::Filters => t!("fx.tab_filters"),
             Self::Transitions => t!("fx.tab_transitions"),
             Self::Subtitles => t!("ribbon.tab_subtitles"),
+            Self::Transcript => t!("transcript.tab"),
+            Self::Styles => t!("style_pack.tab"),
             Self::AiClips => "AI Clips".into(),
             Self::AiSequence => t!("ai_sequence.tab"),
             Self::Curves => t!("toolbar.keyframe_editor"),
@@ -100,6 +106,8 @@ impl RibbonTab {
             | Self::Filters
             | Self::Transitions
             | Self::Subtitles
+            | Self::Transcript
+            | Self::Styles
             | Self::AiClips
             | Self::AiSequence
             | Self::Curves
@@ -597,6 +605,20 @@ fn paint_tab_icon(painter: &egui::Painter, tab: RibbonTab, c: egui::Pos2, color:
             line(v(1.0, 1.5), v(4.5, 1.5));
             line(v(-4.5, -1.5), v(2.5, -1.5));
         }
+        RibbonTab::Transcript => {
+            for (y, w) in [(-5.0, 14.0), (-1.5, 10.0), (2.0, 14.0), (5.5, 8.0)] {
+                line(v(-7.0, y), v(-7.0 + w, y));
+            }
+        }
+        RibbonTab::Styles => {
+            painter.circle_stroke(v(-3.0, -3.0), 4.0, stroke);
+            painter.rect_stroke(
+                egui::Rect::from_center_size(v(3.0, 3.0), egui::vec2(8.0, 8.0)),
+                1.5,
+                stroke,
+                egui::StrokeKind::Middle,
+            );
+        }
         RibbonTab::AiClips => {
             painter.rect_stroke(square, 2.0, stroke, egui::StrokeKind::Middle);
             line(v(-4.0, -4.0), v(4.0, 0.0));
@@ -819,6 +841,16 @@ impl VenturiApp {
                 ui.allocate_rect(area, egui::Sense::hover());
                 return;
             }
+            RibbonTab::Transcript => {
+                self.show_transcript_tab(ui);
+                ui.allocate_rect(area, egui::Sense::hover());
+                return;
+            }
+            RibbonTab::Styles => {
+                self.show_style_packs_tab(ui);
+                ui.allocate_rect(area, egui::Sense::hover());
+                return;
+            }
             RibbonTab::AiClips => {
                 self.show_ai_clips_tab(ui);
                 ui.allocate_rect(area, egui::Sense::hover());
@@ -996,7 +1028,7 @@ impl VenturiApp {
     /// Yours. `None` on the other tabs, or with the Library block closed.
     pub(crate) fn ribbon_import_category(&self) -> Option<Category> {
         let ribbon = &self.library_ribbon;
-        if !self.workspace.is_shown(Block::Library)
+        if !self.block_shown(Block::Library)
             || !matches!(ribbon.tab, RibbonTab::Audio | RibbonTab::Sticker)
         {
             return None;
@@ -1234,12 +1266,33 @@ impl VenturiApp {
         start: FrameIdx,
         target: timeline_ui::MediaDropTarget,
     ) {
+        self.insert_text_template_with(template, start, target, None);
+    }
+
+    /// The template's duration in seconds, as `insert_text_template_with` uses it.
+    pub(crate) fn text_template_secs(&self, template: &str, resolution: (u32, u32)) -> f32 {
+        self.text_template_clips(Some(template), resolution).1
+    }
+
+    /// `insert_text_template` with `text` in place of the first layer's.
+    pub(crate) fn insert_text_template_with(
+        &mut self,
+        template: Option<&str>,
+        start: FrameIdx,
+        target: timeline_ui::MediaDropTarget,
+        text: Option<&str>,
+    ) {
         let group = self.session.history.begin_group();
         let timeline_id = self.ensure_timeline();
         let timeline = &self.session.project.timelines[timeline_id];
         let (fps, resolution) = (timeline.fps, timeline.resolution);
         let (clips, _) = self.text_template_clips(template, resolution);
         for (n, mut clip) in clips.into_iter().enumerate() {
+            if n == 0
+                && let Some(text) = text.filter(|t| !t.trim().is_empty())
+            {
+                clip.title.content = vv_core::Keyframed::constant(text.to_owned());
+            }
             crate::text_templates::fit_title_to_frame(&mut clip.title, resolution.0);
             let target = if n == 0 {
                 target

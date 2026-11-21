@@ -2253,6 +2253,10 @@ pub fn show_timeline(
         if zoom != 1.0 {
             state.set_pixels_per_sec(state.pixels_per_sec * zoom);
         }
+        // Touch screens report two fingers only as touches, never as a wheel.
+        if let Some(touch) = ui.input(|i| i.multi_touch()) {
+            ui.input_mut(|i| i.smooth_scroll_delta += touch.translation_delta);
+        }
     }
 
     // A new touch immediately interrupts any residual inertia, as on

@@ -123,6 +123,36 @@ fn language_label(code: Option<&str>) -> std::borrow::Cow<'static, str> {
     }
 }
 
+impl VenturiApp {
+    /// A still of subtitle style `id` (a template or `text:<id>`) showing
+    /// `sample`, as the Subtitles tab cards draw it.
+    pub(crate) fn subtitle_style_image(&self, id: &str, sample: &str) -> Option<egui::ColorImage> {
+        let title = match SubtitleTemplate::find(id) {
+            Some(template) => template.title(sample, PREVIEW_RES),
+            None => {
+                let text_id = id.strip_prefix(crate::text_templates::SUBTITLE_PREFIX)?;
+                match crate::text_templates::find(text_id) {
+                    Some(def) => def.subtitle_title(sample, PREVIEW_RES),
+                    None => {
+                        let user = self
+                            .settings
+                            .text_templates
+                            .iter()
+                            .find(|t| t.id == text_id)?;
+                        vv_core::text_template::subtitle_from_title(
+                            &user.title,
+                            sample,
+                            PREVIEW_RES,
+                            0.06,
+                        )
+                    }
+                }
+            }
+        };
+        Some(square_preview_image(&title, text_chars(&title)))
+    }
+}
+
 pub(crate) fn template_name(id: &str) -> std::borrow::Cow<'static, str> {
     match id {
         "word_pop" => t!("subtitles.tpl_word_pop"),

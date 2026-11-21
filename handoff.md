@@ -1017,3 +1017,194 @@ transcription is the existing Whisper engine.
    subtitle at the bottom (warning), export and check the file has no overlay.
    Copy the JSON next to `settings.json`, change a value, toggle off/on.
 8. Playback performance with the auto-zoom tab and the beat window open.
+
+## Short-form round 2 — vertical layout, text editing, style packs
+
+`cargo clippy --workspace --all-targets -- -D warnings` clean, `cargo test
+--workspace` passes (vv-app 978, vv-core 430, the other crates unchanged).
+New tests: 5 layout, 9 + 7 transcript (one cuts a word on a real app state
+and undoes it), 7 + 6 style packs.
+
+Looked at in the real app (isolated `XDG_CONFIG_HOME`, 1270×690 window,
+driven with `ydotool`): vertical layout with both drawers, the layout
+proposal strip, the Trascrizione and Stili tabs, the pack card and its parts,
+switching back to desktop (arrangement and density restored), crash
+recovery. Two fixes came out of it: the player's centred Play button covered
+the right-hand controls in a narrow player (it now moves left of them,
+`transport.rs`), and the pack cards wrapped their part list letter by
+letter. Not tried by hand: anything needing media (transcription, cuts,
+applying a pack, touch screen) — see the checklist. No LLM, no network, **no new dependency** (`rfd`,
+`serde_json`, `egui_tiles` were already there).
+
+### 1. Vertical layout and small screens
+
+- **Where**: Layout menu → «Layout desktop» / «Layout verticale» (radio), and
+  «Proponi il layout adatto alla finestra». The choice is saved
+  (`settings.json` → `shorts.layout`, `shorts.propose_layout`).
+- **How** (`vertical_layout.rs`): only the block rectangles change. The
+  player gets the top at full height (a 9:16 timeline fills it), the timeline
+  sits below (34 % of the height, 150–340 px), a 44 px bar holds the
+  «Libreria» and «Proprietà» drawers and «Layout desktop». The drawers sit
+  beside the player and push it (360 px each; opening one closes the other
+  when both would leave the player under 200 px). On a phone-width window a
+  drawer takes the whole top as a sheet. The desktop tile tree is never
+  touched, so switching back is instant and restores the arrangement;
+  detached windows are hidden while vertical and come back with desktop.
+- **Responsive** (simplest choice, noted): the app *proposes* instead of
+  switching by itself. Under 900 px wide, or taller than wide, a strip
+  offers the vertical layout («Passa al verticale» / «Non ora» / «Non
+  chiedere più»); from 1200 px and wider than tall it offers desktop back.
+  «Non ora» holds until the window shape changes again.
+- **Touch**: the vertical layout uses a touch density (`theme::set_touch_density`:
+  36 px controls, larger padding, sliders, checkboxes, splitter grab).
+  Two-finger pan scrolls the timeline (`timeline_ui.rs`); pinch zoom was
+  already there. Mouse and keyboard are unchanged.
+- **Small screens, both layouts**: the timeline bar commands scroll
+  sideways instead of being clipped (the zoom and toggles stay on the
+  right); the export modal shrinks to the window and stacks the cover above
+  the form below ~650 px; the project title of the top bar hides under
+  760 px so it cannot cover the menus.
+- `block_shown` / `reveal_block` replace `workspace.is_shown/reopen` for the
+  Library (downloads, editors, «Mostra nel pool», «Zoom automatici» opens the
+  Properties drawer).
+
+### 2. Text-based editing
+
+- **Where**: Library → **Trascrizione** tab (`transcript.rs` model and
+  actions, `transcript_ui.rs` panel). It follows the Main Track media clips
+  with audio (falls back to the first audio track with media when the Main
+  Track has none), in timeline order, one paragraph per clip.
+- **Same engine as Automatic cut**: the words come from the Automatic cut
+  source cache (`auto_cut::start_source`, Whisper, SHA-256 + disk cache), so
+  a source transcribed once serves Automatic cut, Auto zoom and this panel.
+  Opening the tab looks the cache up in the background; «Genera trascrizione
+  (N)» transcribes the missing sources one after the other with progress and
+  Cancel. Pauses, false starts and fillers come from `auto_cut::analyze`
+  (the modal's colours), and the panel has a shortcut to the Automatic cut
+  modal on the clip under the playhead. The session cache now holds 64
+  sources (was 4).
+- **Player sync**: the word under the playhead is highlighted and followed
+  during playback; a click seeks to the word (with the scrub sound when
+  stopped). Search (phrase, case and punctuation ignored, the last word as a
+  prefix) with ‹ › and Enter selects the match and seeks to it.
+- **Selection**: click, Shift+click (range), Ctrl+click (add/remove), drag,
+  double click (sentence), menu Seleziona → all pauses / false starts /
+  fillers. Touch: tap selects and seeks, a long press opens the menu and
+  extends the selection from the last tap; dragging scrolls.
+- **Cut**: Del/Backspace (after a click in the panel), «Elimina (n)» or the
+  menu. `vv_core::transcript_edit::word_cuts` turns each run of selected
+  words into a clip-local range: each side keeps up to the margin of the
+  pause next to it, never enters a kept word (also with overlapping
+  Whisper times) and moves to the quietest 10 ms within ±80 ms. Selected
+  pauses go as analysed. Each clip gets one `AutoCut` command (ripple of the
+  other tracks optional, linked audio, captions, markers, the audio
+  crossfade at every join), the last clip first; all of them are one undo
+  step («Taglio dal testo»), all or nothing.
+- **Corrections**: F2, Enter or right click → «Correggi la parola». Stored
+  in `Project::transcript_edits` (source path, stream, word start ms,
+  heard text → text; serde default, skipped when empty, **no format bump**:
+  an older app drops the corrections but keeps the corrected subtitles).
+  `CorrectWord` also replaces the word in the saved caption words and in
+  the subtitle clip showing it, without touching any timing. Corrected words
+  are cyan; words under 45 % confidence get a dashed yellow underline and a
+  tooltip.
+- **Keys**: while the panel owns the keyboard (last click inside it, tab
+  shown), Del/Backspace and Ctrl+A act on the text instead of the media pool
+  or the timeline; Esc clears the selection.
+- **Settings** (Opzioni, saved in `shorts.transcript`): pause kept (margin)
+  0–400 ms, default 120 ms; audio crossfade 0–20 ms, default 15 ms; «Sposta
+  anche le altre tracce» (default on); show pauses.
+
+### 3. Style packs
+
+- **Format** (`vv-core/src/style_pack.rs`): JSON with `format:
+  "venturi-style-pack"` and `version: 1`. Every component is optional:
+  `subtitles` (template id or `text:<id>`), `auto_zoom` (the auto zoom
+  `Config`), `animations` (clip In/Out asset ids `animations/<name>` with
+  seconds, text In/Out preset ids), `music` (optional file, level dB,
+  ducking dB), `transition` (`transitions/<name>`, seconds), `intro` /
+  `outro` (text template id, optional text; the template sets the length),
+  `safe_zone` (platform id). Unknown fields are ignored; a newer version is
+  refused with its number; another JSON file is «not a pack»; a broken one
+  is reported with the parser's reason. `migrate` is where a version 2
+  will rewrite version 1 files.
+- **Built-in packs** (`style_packs.rs::builtin_packs`, one commented block
+  each, copy one to add more): **Pulito**, **Dinamico**, **Tech**, **Vlog**.
+  A test checks that every part they name exists.
+- **Library** (`style-packs/*.json` next to `settings.json`): Libreria →
+  **Stili** tab. Cards with a still of the subtitle look, name, description
+  and the list of parts. Save the current edit as a pack, duplicate, rename,
+  edit (form with an «include» checkbox per part), export to a file, import
+  a file (it gets a new id), delete (with confirmation). Built-in packs can
+  only be duplicated and exported. Unreadable files are listed by name with
+  the reason.
+- **Applying**: tick the parts (parts that cannot be applied here are
+  disabled with the reason), «Anteprima» applies them as one real history
+  step; play to check; ticking a part again re-applies; «Conferma» keeps it,
+  «Annulla» undoes it. Any other edit makes it final. Ctrl+Z undoes a
+  confirmed pack in one step («Applica pacchetto stile»).
+- **What never gets overwritten**: clips that already have an In/Out
+  animation, pairs that already have a transition, music clips whose volume
+  you animated by hand, and auto zoom spans holding hand-made keyframes.
+- **Per part**: subtitles are rebuilt from the saved words with the new
+  template (no new transcription; without subtitles the template becomes
+  the default of «Genera sottotitoli»). Auto zoom runs on Main Track videos
+  that already have a transcript (the others are counted in the report).
+  Transitions go on every free cut of the Main Track. Animations go on
+  every video, photo and text clip (not subtitles, effects or locked
+  tracks) without one. Music: with a file that exists, it is imported and
+  placed on a new audio track for the length of the edit; without a file
+  (built-in packs), the level and ducking go to the music already there
+  (audio clips not linked to a picture and not a transcribed voice).
+  **Ducking** is new: plain gain keyframes on the music clip, down by the
+  ducking amount over the transcript's words (0.15 s lead, 0.35 s release,
+  close phrases merged); a Main Track clip with no transcript counts as
+  speech for its whole length. Intro/outro: the text template on a new
+  track at the start / ending with the video. Safe zones: switched on with
+  the platform; this is a player setting, so «Annulla» restores it but
+  Ctrl+Z does not.
+
+### Known limits
+
+- Vertical: the player, timeline and properties contents are the same
+  widgets, only placed and spaced for touch; the track header stays 120 px
+  and the clip trim handles keep their size. The top bar menus can still
+  overflow under ~560 px.
+- Text editing: subtitles generated by a different transcription than the
+  Automatic cut cache may not contain the corrected word (then only the
+  transcript changes); a correction with several words keeps one caption
+  word; the panel re-measures every word after each edit (a few ms for
+  thousands of words); dragging a selection does not auto-scroll.
+- Style packs: built-in names follow the language at the first load of the
+  tab; a pack's music file is an absolute path (on another machine it falls
+  back to the existing music, with a note); auto zoom needs transcripts made
+  beforehand; restyling the subtitles drops per-clip edits of their look (as
+  switching template always did).
+
+### Manual test checklist
+
+1. Layout menu → Verticale, open/close both drawers at 1080×1920, 1366×768
+   and 420×800 (sheet); back to desktop (arrangement and detached windows
+   come back); restart (layout kept); narrow the window under 900 px
+   (proposal), «Non ora», widen and narrow again, «Non chiedere più».
+2. On a touchscreen: pinch and two-finger pan on the timeline, tap/long
+   press in the transcript, sliders and buttons in the drawers.
+3. Export modal and Automatic cut modal at 1366×768 and in a narrow window.
+4. Trascrizione on a talking-head project: Genera trascrizione, cancel
+   halfway, retry; play (highlight and follow); click a word; search a
+   phrase; delete a word, a sentence (double click) and a pause; listen to
+   each join (no click, no swallowed syllable); Ctrl+Z / Ctrl+Y; margin 0 and
+   300 ms; ripple off with music.
+5. Correct a misheard word with subtitles on: the subtitle changes, its
+   timing does not; reopen the project (the correction stays); undo.
+6. Del in the transcript after clicking the media pool, and vice versa: each
+   deletes only its own selection.
+7. Stili: apply each built-in pack to a 9:16 talking-head edit with music:
+   Anteprima, untick parts, Annulla, Anteprima, Conferma, play, export,
+   Ctrl+Z (one step). Check that hand-made animations, transitions and a
+   hand-made volume fade survive.
+8. Save the current style, edit it (music file, intro text), export it,
+   delete it, import it back; import a JSON that is not a pack, a broken one
+   and one with `"version": 99`.
+9. Playback performance with the Trascrizione tab open on a 30-minute
+   recording.

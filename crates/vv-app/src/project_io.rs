@@ -54,6 +54,9 @@ pub(crate) enum DialogKind {
     ImportProject,
     ProjectsFolder,
     CanvasImage(Vec<(TimelineId, usize, ClipId)>),
+    ImportStylePack,
+    ExportStylePack(String),
+    StylePackMusic,
 }
 
 pub(crate) enum DialogOutcome {
@@ -358,6 +361,22 @@ impl VenturiApp {
             }
             (DialogKind::RelinkLibraryAsset(id), DialogOutcome::File(Some(base_dir))) => {
                 self.relink_library_asset(&id, &base_dir);
+            }
+            (DialogKind::ImportStylePack, DialogOutcome::File(Some(path))) => {
+                self.import_style_pack(&path);
+            }
+            (DialogKind::ExportStylePack(id), DialogOutcome::File(Some(path))) => {
+                self.export_style_pack(&id, &path);
+            }
+            (DialogKind::StylePackMusic, DialogOutcome::File(Some(path))) => {
+                if let Some(music) = self
+                    .style_packs
+                    .editor
+                    .as_mut()
+                    .and_then(|pack| pack.music.as_mut())
+                {
+                    music.file = Some(path);
+                }
             }
             _ => {} // dialog cancelled by the user
         }

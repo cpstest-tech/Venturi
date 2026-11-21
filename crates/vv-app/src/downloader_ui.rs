@@ -179,7 +179,7 @@ impl VenturiApp {
     /// Where a link pasted anywhere goes: the audio category on screen, else
     /// Music for Spotify and the project for the rest.
     fn default_download_destination(&self, site: Site) -> Destination {
-        if self.workspace.is_shown(Block::Library) && self.library_ribbon.tab == RibbonTab::Audio {
+        if self.block_shown(Block::Library) && self.library_ribbon.tab == RibbonTab::Audio {
             if self.library_ribbon.category() == Category::Sfx {
                 return Destination::Sfx;
             }
@@ -396,9 +396,7 @@ impl VenturiApp {
                 Destination::Sfx => (RibbonTab::Audio, Category::Sfx),
             };
             self.library_ribbon.show(tab, category);
-            if !self.workspace.is_shown(Block::Library) {
-                self.workspace.reopen(Block::Library);
-            }
+            self.reveal_block(Block::Library);
         }
     }
 

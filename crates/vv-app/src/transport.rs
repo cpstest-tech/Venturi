@@ -330,7 +330,7 @@ fn show_control_bar(
         font.clone(),
         current_color,
     );
-    painter.text(
+    let timecode = painter.text(
         egui::pos2(left.right() + 4.0, bar.center().y),
         egui::Align2::LEFT_CENTER,
         format!("/ {}", tc(total)),
@@ -338,7 +338,17 @@ fn show_control_bar(
         total_color,
     );
 
-    let play_rect = egui::Rect::from_center_size(bar.center(), egui::Vec2::splat(PLAY_HIT_SIZE));
+    // Centred, unless a narrow player would put it under the right group
+    // (measured last frame).
+    let right_width_id = ui.id().with("control_bar_right_width");
+    let right_width: f32 = ui.data(|d| d.get_temp(right_width_id)).unwrap_or(0.0);
+    let half = PLAY_HIT_SIZE / 2.0 + crate::theme::SPACE_3;
+    let max_x = bar.right() - crate::theme::SPACE_3 - right_width - half;
+    let play_x = bar.center().x.min(max_x).max(timecode.right() + half);
+    let play_rect = egui::Rect::from_center_size(
+        egui::pos2(play_x, bar.center().y),
+        egui::Vec2::splat(PLAY_HIT_SIZE),
+    );
     let play = ui.interact(play_rect, ui.id().with("play_button"), egui::Sense::click());
     let color = if !enabled {
         crate::theme::TEXT_DISABLED
@@ -380,6 +390,7 @@ fn show_control_bar(
             .max_rect(right)
             .layout(egui::Layout::right_to_left(egui::Align::Center)),
     );
+    right_ui.set_clip_rect(right.intersect(ui.clip_rect()));
     let ui = &mut right_ui;
     ui.spacing_mut().item_spacing.x = crate::theme::SPACE_3;
     if icon_button(ui, Icon::Fullscreen, t!("player.fullscreen").into_owned()).clicked() {
@@ -417,6 +428,11 @@ fn show_control_bar(
         }
     });
     safe_zones_menu(ui, &options, response);
+    let used = ui.min_rect().width();
+    if (used - right_width).abs() > 0.5 {
+        ui.data_mut(|d| d.insert_temp(right_width_id, used));
+        ui.ctx().request_repaint();
+    }
 }
 
 /// One button: its face shows the chosen platform while the overlay is on,

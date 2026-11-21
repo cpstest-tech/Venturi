@@ -36,6 +36,7 @@ impl VenturiApp {
         match command {
             TimelineCommand::AutoCut => self.open_auto_cut(ctx),
             TimelineCommand::AutoZoom => {
+                self.reveal_block(Block::Properties);
                 self.clip_tab = properties_tabs::ClipTab::Video;
                 properties_tabs::select_video_sub_tab(ctx, properties_tabs::VideoSubTab::AutoZoom);
             }

@@ -7,14 +7,12 @@ use crate::library_ribbon::RibbonTab;
 impl VenturiApp {
     pub(crate) fn open_ribbon_editor(&mut self, editor: RibbonTab) {
         self.library_ribbon.editor = Some(editor);
-        if !self.workspace.is_shown(workspace::Block::Library) {
-            self.workspace.reopen(workspace::Block::Library);
-        }
+        self.reveal_block(workspace::Block::Library);
     }
 
     pub(crate) fn color_editor_shown(&self) -> bool {
         self.library_ribbon.editor == Some(RibbonTab::Color)
-            && self.workspace.is_shown(workspace::Block::Library)
+            && self.block_shown(workspace::Block::Library)
     }
 
     /// Header with the title and «←», then the editor. Its commands are

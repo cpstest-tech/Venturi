@@ -826,7 +826,8 @@ pub struct Settings {
     pub shorts: ShortsPrefs,
 }
 
-/// Automatic zooms, beat sync and safe zones, remembered between sessions.
+/// Short-form workflow (auto zoom, beat sync, safe zones, layout, text
+/// editing), remembered between sessions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShortsPrefs {
@@ -837,6 +838,10 @@ pub struct ShortsPrefs {
     pub safe_zones: bool,
     /// Id of a platform in `safe_zones.json`.
     pub safe_zone_platform: String,
+    pub layout: crate::vertical_layout::LayoutMode,
+    /// Offer the other layout when the window shape suits it better.
+    pub propose_layout: bool,
+    pub transcript: TranscriptPrefs,
 }
 
 impl Default for ShortsPrefs {
@@ -847,6 +852,33 @@ impl Default for ShortsPrefs {
             beat_every: 1,
             safe_zones: false,
             safe_zone_platform: "tiktok".into(),
+            layout: Default::default(),
+            propose_layout: true,
+            transcript: TranscriptPrefs::default(),
+        }
+    }
+}
+
+/// Cuts made from the transcript panel.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscriptPrefs {
+    /// Seconds of the pause kept on each side of a cut.
+    pub margin: f64,
+    /// Audio crossfade at each join, seconds (the mixer caps it at 20 ms).
+    pub crossfade: f64,
+    /// Shift the other tracks too (music, titles, subtitles).
+    pub ripple_all: bool,
+    pub show_pauses: bool,
+}
+
+impl Default for TranscriptPrefs {
+    fn default() -> Self {
+        Self {
+            margin: 0.12,
+            crossfade: 0.015,
+            ripple_all: true,
+            show_pauses: true,
         }
     }
 }

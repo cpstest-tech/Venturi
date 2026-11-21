@@ -12,6 +12,7 @@ use vv_core::{Clip, ClipId, ClipSource, FrameIdx, TimelineId, TrackKind};
 use crate::{VenturiApp, subtitles};
 
 const CACHE_VERSION: u32 = 1;
+const SESSION_CACHE_SOURCES: usize = 64;
 const BLOCK_SECONDS: usize = 60;
 const OVERLAP_SECONDS: usize = 2;
 const RATE: usize = vv_transcribe::SAMPLE_RATE as usize;
@@ -27,10 +28,24 @@ pub(crate) struct Cached {
     pub energy: Energy,
 }
 
+#[cfg(test)]
+impl Cached {
+    pub fn new(duration: f64, words: Vec<Word>, energy: Energy) -> Self {
+        Self {
+            version: CACHE_VERSION,
+            duration,
+            words,
+            energy,
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct State {
     pub modal: Option<Modal>,
     cache: HashMap<SourceKey, Arc<Cached>>,
+    /// Bumped by every source added to the session cache.
+    pub cache_revision: u64,
 }
 
 #[derive(Default)]
@@ -300,10 +315,20 @@ impl VenturiApp {
     }
 
     pub(crate) fn remember_speech(&mut self, key: &SourceKey, source: &Arc<Cached>) {
-        if self.auto_cut.cache.len() >= 4 && !self.auto_cut.cache.contains_key(key) {
+        // The transcript panel holds every source of the Main Track at once.
+        if self.auto_cut.cache.len() >= SESSION_CACHE_SOURCES
+            && !self.auto_cut.cache.contains_key(key)
+        {
             self.auto_cut.cache.clear();
         }
-        self.auto_cut.cache.insert(key.clone(), source.clone());
+        let fresh = self
+            .auto_cut
+            .cache
+            .insert(key.clone(), source.clone())
+            .is_none_or(|old| !Arc::ptr_eq(&old, source));
+        if fresh {
+            self.auto_cut.cache_revision += 1;
+        }
     }
 
     pub(crate) fn cached_speech(&self, spec: &SpeechSource) -> Option<Arc<Cached>> {
@@ -360,6 +385,7 @@ impl VenturiApp {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct SpeechSource {
     pub path: PathBuf,
     pub stream: usize,
@@ -424,12 +450,20 @@ fn removed_frames(segments: &[Segment], clip: &Clip, fps: f64) -> Vec<(FrameIdx,
             .filter(|s| s.checked)
             .map(|s| s.start..s.end),
     );
-    let removed = auto_cut::keep_ranges(duration, keep);
+    frames_of_ranges(auto_cut::keep_ranges(duration, keep), clip, fps)
+}
+
+/// Clip-local seconds as timeline frames, rounded inward.
+pub(crate) fn frames_of_ranges(
+    ranges: impl IntoIterator<Item = std::ops::Range<f64>>,
+    clip: &Clip,
+    fps: f64,
+) -> Vec<(FrameIdx, FrameIdx)> {
     vv_core::auto_cut_edit::merge_frame_ranges(
-        &removed
+        &auto_cut::merge_ranges(ranges)
             .into_iter()
             .filter_map(|r| {
-                // Round after merging: adjacent checked rows must not leave a stray frame.
+                // Round after merging: adjacent ranges must not leave a stray frame.
                 let start = clip.timeline_start + (r.start * fps - 1e-7).ceil() as FrameIdx;
                 let end = clip.timeline_start + (r.end * fps + 1e-7).floor() as FrameIdx;
                 (end > start).then_some((start, end))

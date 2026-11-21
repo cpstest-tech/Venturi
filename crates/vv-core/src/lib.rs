@@ -17,10 +17,12 @@ pub mod otio;
 pub mod persistence;
 pub mod pool;
 mod stable_hash;
+pub mod style_pack;
 pub mod text_anim;
 pub mod text_anim_presets;
 pub mod text_style;
 pub mod text_template;
+pub mod transcript_edit;
 pub mod workflow;
 
 pub use captions::{CaptionWord, Captions, SetCaptions, SetSubtitlesLinked, SubtitleTemplate};

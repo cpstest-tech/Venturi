@@ -45,118 +45,6 @@ pub(crate) fn show_bar(
     ui.horizontal(|ui| {
         ui.set_height(BUTTON_SIZE.y);
         ui.spacing_mut().item_spacing.x = 2.0;
-        tool_menu(ui, state, keymap);
-        divider(ui);
-
-        let mut command = |ui: &mut egui::Ui,
-                           enabled: bool,
-                           paint: &PaintIcon,
-                           label: std::borrow::Cow<str>,
-                           action: Option<Action>,
-                           command: TimelineCommand| {
-            let tip = match action {
-                Some(action) => keymap.menu_label(&label, action),
-                None => label.into_owned(),
-            };
-            if icon_button(ui, enabled, false, paint)
-                .on_hover_text(tip)
-                .clicked()
-            {
-                state.commands.push(command);
-            }
-        };
-        command(
-            ui,
-            can_undo,
-            &paint_undo,
-            t!("timeline_bar.undo"),
-            Some(Action::Undo),
-            TimelineCommand::Undo,
-        );
-        command(
-            ui,
-            can_redo,
-            &paint_redo,
-            t!("timeline_bar.redo"),
-            Some(Action::Redo),
-            TimelineCommand::Redo,
-        );
-        divider(ui);
-        command(
-            ui,
-            true,
-            &paint_split,
-            t!("timeline_bar.split"),
-            Some(Action::Split),
-            TimelineCommand::SplitAtPlayhead,
-        );
-        command(
-            ui,
-            true,
-            &|p, c, col| paint_delete_side(p, c, col, true),
-            t!("timeline_bar.delete_left"),
-            Some(Action::DeleteLeft),
-            TimelineCommand::DeleteLeft,
-        );
-        command(
-            ui,
-            true,
-            &|p, c, col| paint_delete_side(p, c, col, false),
-            t!("timeline_bar.delete_right"),
-            Some(Action::DeleteRight),
-            TimelineCommand::DeleteRight,
-        );
-        command(
-            ui,
-            has_selection,
-            &paint_trash,
-            t!("timeline_bar.delete"),
-            Some(Action::Delete),
-            TimelineCommand::Delete,
-        );
-        divider(ui);
-        command(
-            ui,
-            true,
-            &paint_freeze,
-            t!("timeline.freeze_frame_action"),
-            None,
-            TimelineCommand::FreezeFrame,
-        );
-        command(
-            ui,
-            has_selection,
-            &paint_mirror,
-            t!("timeline.mirror"),
-            None,
-            TimelineCommand::Mirror,
-        );
-
-        if has_selection
-            && ui
-                .add_enabled(can_auto_cut, egui::Button::new(t!("auto_cut.title")))
-                .on_disabled_hover_text(t!("auto_cut.select_source"))
-                .clicked()
-        {
-            state.commands.push(TimelineCommand::AutoCut);
-        }
-        if has_selection
-            && ui
-                .add_enabled(can_auto_cut, egui::Button::new(t!("auto_zoom.title")))
-                .on_hover_text(t!("auto_zoom.button_hint"))
-                .on_disabled_hover_text(t!("auto_zoom.select_video"))
-                .clicked()
-        {
-            state.commands.push(TimelineCommand::AutoZoom);
-        }
-        if ui
-            .button(t!("beat.button"))
-            .on_hover_text(t!("beat.button_hint"))
-            .clicked()
-        {
-            state.commands.push(TimelineCommand::BeatSync);
-        }
-
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             // Right to left: the first added is the rightmost.
@@ -196,6 +84,135 @@ pub(crate) fn show_bar(
                     *value = !*value;
                 }
             }
+            // A narrow window scrolls the commands instead of clipping them.
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                egui::ScrollArea::horizontal()
+                    .id_salt("timeline_bar_commands")
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 2.0;
+                            tool_menu(ui, state, keymap);
+                            divider(ui);
+
+                            let mut command =
+                                |ui: &mut egui::Ui,
+                                 enabled: bool,
+                                 paint: &PaintIcon,
+                                 label: std::borrow::Cow<str>,
+                                 action: Option<Action>,
+                                 command: TimelineCommand| {
+                                    let tip = match action {
+                                        Some(action) => keymap.menu_label(&label, action),
+                                        None => label.into_owned(),
+                                    };
+                                    if icon_button(ui, enabled, false, paint)
+                                        .on_hover_text(tip)
+                                        .clicked()
+                                    {
+                                        state.commands.push(command);
+                                    }
+                                };
+                            command(
+                                ui,
+                                can_undo,
+                                &paint_undo,
+                                t!("timeline_bar.undo"),
+                                Some(Action::Undo),
+                                TimelineCommand::Undo,
+                            );
+                            command(
+                                ui,
+                                can_redo,
+                                &paint_redo,
+                                t!("timeline_bar.redo"),
+                                Some(Action::Redo),
+                                TimelineCommand::Redo,
+                            );
+                            divider(ui);
+                            command(
+                                ui,
+                                true,
+                                &paint_split,
+                                t!("timeline_bar.split"),
+                                Some(Action::Split),
+                                TimelineCommand::SplitAtPlayhead,
+                            );
+                            command(
+                                ui,
+                                true,
+                                &|p, c, col| paint_delete_side(p, c, col, true),
+                                t!("timeline_bar.delete_left"),
+                                Some(Action::DeleteLeft),
+                                TimelineCommand::DeleteLeft,
+                            );
+                            command(
+                                ui,
+                                true,
+                                &|p, c, col| paint_delete_side(p, c, col, false),
+                                t!("timeline_bar.delete_right"),
+                                Some(Action::DeleteRight),
+                                TimelineCommand::DeleteRight,
+                            );
+                            command(
+                                ui,
+                                has_selection,
+                                &paint_trash,
+                                t!("timeline_bar.delete"),
+                                Some(Action::Delete),
+                                TimelineCommand::Delete,
+                            );
+                            divider(ui);
+                            command(
+                                ui,
+                                true,
+                                &paint_freeze,
+                                t!("timeline.freeze_frame_action"),
+                                None,
+                                TimelineCommand::FreezeFrame,
+                            );
+                            command(
+                                ui,
+                                has_selection,
+                                &paint_mirror,
+                                t!("timeline.mirror"),
+                                None,
+                                TimelineCommand::Mirror,
+                            );
+
+                            if has_selection
+                                && ui
+                                    .add_enabled(
+                                        can_auto_cut,
+                                        egui::Button::new(t!("auto_cut.title")),
+                                    )
+                                    .on_disabled_hover_text(t!("auto_cut.select_source"))
+                                    .clicked()
+                            {
+                                state.commands.push(TimelineCommand::AutoCut);
+                            }
+                            if has_selection
+                                && ui
+                                    .add_enabled(
+                                        can_auto_cut,
+                                        egui::Button::new(t!("auto_zoom.title")),
+                                    )
+                                    .on_hover_text(t!("auto_zoom.button_hint"))
+                                    .on_disabled_hover_text(t!("auto_zoom.select_video"))
+                                    .clicked()
+                            {
+                                state.commands.push(TimelineCommand::AutoZoom);
+                            }
+                            if ui
+                                .button(t!("beat.button"))
+                                .on_hover_text(t!("beat.button_hint"))
+                                .clicked()
+                            {
+                                state.commands.push(TimelineCommand::BeatSync);
+                            }
+                        });
+                    });
+            });
         });
     });
 }

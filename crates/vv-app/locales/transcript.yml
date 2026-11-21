@@ -1,0 +1,107 @@
+_version: 2
+
+transcript.tab:
+  en: "Transcript"
+  it: "Trascrizione"
+transcript.history_cut:
+  en: "Cut from the transcript"
+  it: "Taglio dal testo"
+transcript.history_correct:
+  en: "Correct word"
+  it: "Correggi parola"
+transcript.no_timeline:
+  en: "Open or create a timeline to see its transcript."
+  it: "Apri o crea una timeline per vederne la trascrizione."
+transcript.no_clips:
+  en: "No clip with audio on the Main Track."
+  it: "Nessuna clip con audio sulla Main Track."
+transcript.unreadable:
+  en: "%{count} clip(s) cannot be read (file missing or not supported): they are left out."
+  it: "%{count} clip non leggibili (file mancante o non supportato): restano escluse."
+transcript.no_transcript:
+  en: "No transcript yet. Generate it with the speech engine (it stays on this device)."
+  it: "Nessuna trascrizione. Generala con il motore vocale (resta su questo dispositivo)."
+transcript.some_missing:
+  en: "%{count} clip(s) have no transcript yet."
+  it: "%{count} clip non hanno ancora una trascrizione."
+transcript.generate:
+  en: "Generate transcript (%{count})"
+  it: "Genera trascrizione (%{count})"
+transcript.no_words:
+  en: "The speech engine found no words in these clips."
+  it: "Il motore vocale non ha trovato parole in queste clip."
+transcript.search:
+  en: "Search the text…"
+  it: "Cerca nel testo…"
+transcript.no_match:
+  en: "No match"
+  it: "Nessun risultato"
+transcript.cut:
+  en: "Delete (%{count})"
+  it: "Elimina (%{count})"
+transcript.cut_hint:
+  en: "Cuts the selected words and pauses from the timeline (Del). Ctrl+Z undoes it."
+  it: "Taglia dalla timeline le parole e le pause selezionate (Canc). Ctrl+Z annulla."
+transcript.nothing_to_cut:
+  en: "Nothing to cut in the selection."
+  it: "Niente da tagliare nella selezione."
+transcript.select:
+  en: "Select"
+  it: "Seleziona"
+transcript.select_pauses:
+  en: "All pauses"
+  it: "Tutte le pause"
+transcript.select_false_starts:
+  en: "All false starts"
+  it: "Tutte le false partenze"
+transcript.select_fillers:
+  en: "All fillers"
+  it: "Tutti i riempitivi"
+transcript.select_none:
+  en: "Nothing"
+  it: "Niente"
+transcript.auto_cut_hint:
+  en: "Opens Automatic cut on the clip under the playhead"
+  it: "Apre il Taglio automatico sulla clip sotto la testina"
+transcript.options:
+  en: "Options"
+  it: "Opzioni"
+transcript.margin:
+  en: "Pause kept"
+  it: "Pausa mantenuta"
+transcript.margin_hint:
+  en: "Silence left on each side of a cut, so the speech does not sound rushed"
+  it: "Silenzio lasciato ai lati di ogni taglio, perché il parlato non suoni affrettato"
+transcript.crossfade:
+  en: "Crossfade"
+  it: "Dissolvenza audio"
+transcript.crossfade_hint:
+  en: "Short audio crossfade at each join: no click between the cut points"
+  it: "Breve dissolvenza audio a ogni giunzione: nessun click tra i punti di taglio"
+transcript.show_pauses:
+  en: "Show pauses"
+  it: "Mostra le pause"
+transcript.low_confidence:
+  en: "Uncertain word"
+  it: "Parola incerta"
+transcript.uncertain:
+  en: "Uncertain word (%{percent}%): right click to correct it"
+  it: "Parola incerta (%{percent}%): clic destro per correggerla"
+transcript.corrected_from:
+  en: "Corrected (heard: «%{original}»)"
+  it: "Corretta (sentito: «%{original}»)"
+transcript.pause:
+  en: "· %{secs} s ·"
+  it: "· %{secs} s ·"
+transcript.clip_header:
+  en: "Clip %{number} · %{at}"
+  it: "Clip %{number} · %{at}"
+transcript.correct:
+  en: "Correct the word… (F2)"
+  it: "Correggi la parola… (F2)"
+transcript.select_sentence:
+  en: "Select the sentence"
+  it: "Seleziona la frase"
+transcript.play_from_here:
+  en: "Go here"
+  it: "Vai qui"

@@ -1,0 +1,296 @@
+_version: 2
+
+style_pack.tab:
+  en: "Styles"
+  it: "Stili"
+style_pack.history_apply:
+  en: "Apply style pack"
+  it: "Applica pacchetto stile"
+style_pack.builtin_clean:
+  en: "Clean"
+  it: "Pulito"
+style_pack.builtin_clean_desc:
+  en: "Interviews and tutorials: classic captions, gentle zooms, dissolves, music well below the voice."
+  it: "Interviste e tutorial: sottotitoli classici, zoom leggeri, dissolvenze, musica ben sotto la voce."
+style_pack.builtin_dynamic:
+  en: "Dynamic"
+  it: "Dinamico"
+style_pack.builtin_dynamic_desc:
+  en: "TikTok and Reels energy: one word at a time, strong punch-ins, flashes, zoom transitions, an opening title."
+  it: "Energia da TikTok e Reels: una parola alla volta, zoom decisi, flash, transizioni a zoom, titolo d'apertura."
+style_pack.builtin_tech:
+  en: "Tech"
+  it: "Tech"
+style_pack.builtin_tech_desc:
+  en: "Keynote-like product videos: captions building word by word, soft slides, dips to black, elegant titles."
+  it: "Video di prodotto in stile keynote: sottotitoli che si compongono, scorrimenti morbidi, passaggi dal nero, titoli eleganti."
+style_pack.builtin_vlog:
+  en: "Vlog"
+  it: "Vlog"
+style_pack.builtin_vlog_desc:
+  en: "Warm and casual: yellow captions, side slides between shots, music a little louder."
+  it: "Caldo e informale: sottotitoli gialli, scorrimenti laterali tra le inquadrature, musica un po' più alta."
+style_pack.builtin:
+  en: "Built-in"
+  it: "Predefinito"
+style_pack.builtin_locked:
+  en: "Built-in packs cannot be changed: duplicate it to make your own."
+  it: "I pacchetti predefiniti non si modificano: duplicalo per crearne uno tuo."
+style_pack.c_subtitles:
+  en: "Subtitle style"
+  it: "Stile sottotitoli"
+style_pack.c_auto_zoom:
+  en: "Auto zoom"
+  it: "Zoom automatici"
+style_pack.c_animations:
+  en: "In/Out animations"
+  it: "Animazioni In/Out"
+style_pack.c_music:
+  en: "Music and ducking"
+  it: "Musica e ducking"
+style_pack.c_transition:
+  en: "Transitions"
+  it: "Transizioni"
+style_pack.c_intro:
+  en: "Intro"
+  it: "Intro"
+style_pack.c_outro:
+  en: "Outro"
+  it: "Outro"
+style_pack.c_safe_zone:
+  en: "Safe zones"
+  it: "Safe zone"
+style_pack.save_current:
+  en: "Save current style"
+  it: "Salva lo stile attuale"
+style_pack.save_current_hint:
+  en: "Makes a pack from this edit: subtitle style, auto zoom, animations, music level, transition, safe zones"
+  it: "Crea un pacchetto da questo montaggio: stile sottotitoli, zoom automatici, animazioni, volume musica, transizione, safe zone"
+style_pack.import:
+  en: "Import…"
+  it: "Importa…"
+style_pack.export:
+  en: "Export…"
+  it: "Esporta…"
+style_pack.reload:
+  en: "Read the library folder again"
+  it: "Rileggi la cartella della libreria"
+style_pack.file_filter:
+  en: "Style pack"
+  it: "Pacchetto stile"
+style_pack.load_errors:
+  en: "%{count} file(s) of the library could not be read"
+  it: "%{count} file della libreria non leggibili"
+style_pack.no_timeline:
+  en: "Open a timeline to apply a pack."
+  it: "Apri una timeline per applicare un pacchetto."
+style_pack.choose_parts:
+  en: "What to apply"
+  it: "Cosa applicare"
+style_pack.safe_zone_note:
+  en: "Safe zones are a player setting: Ctrl+Z does not turn them off (Annulla does)."
+  it: "Le safe zone sono un'impostazione del player: Ctrl+Z non le spegne (Annulla sì)."
+style_pack.preview:
+  en: "Preview"
+  it: "Anteprima"
+style_pack.preview_button_hint:
+  en: "Applies the ticked parts so you can play them; confirm or cancel afterwards"
+  it: "Applica le parti spuntate per vederle in riproduzione; poi conferma o annulla"
+style_pack.preview_hint:
+  en: "Play the edit to check it. Ticking a part applies it again; any other edit keeps the result."
+  it: "Riproduci il montaggio per controllarlo. Spuntare una parte la riapplica; qualsiasi altra modifica mantiene il risultato."
+style_pack.confirm:
+  en: "Confirm"
+  it: "Conferma"
+style_pack.applied:
+  en: "Style applied. Ctrl+Z undoes it in one step."
+  it: "Stile applicato. Ctrl+Z lo annulla in un solo passo."
+style_pack.duplicate:
+  en: "Duplicate"
+  it: "Duplica"
+style_pack.duplicated:
+  en: "Pack duplicated."
+  it: "Pacchetto duplicato."
+style_pack.copy_name:
+  en: "%{name} (copy)"
+  it: "%{name} (copia)"
+style_pack.rename:
+  en: "Rename"
+  it: "Rinomina"
+style_pack.renamed:
+  en: "Pack renamed."
+  it: "Pacchetto rinominato."
+style_pack.ok:
+  en: "OK"
+  it: "OK"
+style_pack.edit:
+  en: "Edit"
+  it: "Modifica"
+style_pack.delete:
+  en: "Delete"
+  it: "Elimina"
+style_pack.delete_confirm:
+  en: "Delete «%{name}» for good?"
+  it: "Eliminare definitivamente «%{name}»?"
+style_pack.deleted:
+  en: "Pack deleted."
+  it: "Pacchetto eliminato."
+style_pack.saved:
+  en: "Pack saved in the library."
+  it: "Pacchetto salvato nella libreria."
+style_pack.imported:
+  en: "Pack imported into the library."
+  it: "Pacchetto importato nella libreria."
+style_pack.exported:
+  en: "Pack exported."
+  it: "Pacchetto esportato."
+style_pack.my_style:
+  en: "My style %{number}"
+  it: "Il mio stile %{number}"
+style_pack.error_save:
+  en: "Could not save: %{detail}"
+  it: "Salvataggio non riuscito: %{detail}"
+style_pack.error_no_dir:
+  en: "no settings folder"
+  it: "nessuna cartella delle impostazioni"
+style_pack.error_not_pack:
+  en: "This file is not a style pack."
+  it: "Questo file non è un pacchetto stile."
+style_pack.error_corrupt:
+  en: "The style pack is damaged (%{detail})."
+  it: "Il pacchetto stile è danneggiato (%{detail})."
+style_pack.error_newer:
+  en: "The pack was made by a newer version (format %{found}, this one reads up to %{supported}): update the app."
+  it: "Il pacchetto è stato creato da una versione più recente (formato %{found}, questa legge fino al %{supported}): aggiorna l'app."
+style_pack.error_duplicate:
+  en: "a pack with the same id is already in the library"
+  it: "nella libreria c'è già un pacchetto con lo stesso id"
+style_pack.missing_template:
+  en: "Template «%{id}» is not installed: this part is skipped."
+  it: "Il template «%{id}» non è installato: questa parte viene saltata."
+style_pack.missing_animation:
+  en: "Animation «%{id}» is not available: this part is skipped."
+  it: "L'animazione «%{id}» non è disponibile: questa parte viene saltata."
+style_pack.missing_transition:
+  en: "Transition «%{id}» is not available: this part is skipped."
+  it: "La transizione «%{id}» non è disponibile: questa parte viene saltata."
+style_pack.missing_platform:
+  en: "Platform «%{id}» is not in safe_zones.json: this part is skipped."
+  it: "La piattaforma «%{id}» non è in safe_zones.json: questa parte viene saltata."
+style_pack.no_main_track:
+  en: "The timeline has no Main Track."
+  it: "La timeline non ha una Main Track."
+style_pack.no_cuts:
+  en: "No free cut between the Main Track clips (the existing transitions stay)."
+  it: "Nessun taglio libero tra le clip della Main Track (le transizioni esistenti restano)."
+style_pack.transitions_done:
+  en: "%{count} transition(s) added."
+  it: "%{count} transizioni aggiunte."
+style_pack.animations_none:
+  en: "Every clip already has its animations."
+  it: "Tutte le clip hanno già le loro animazioni."
+style_pack.animations_done:
+  en: "Animations on %{count} clip(s); clips you had animated keep theirs."
+  it: "Animazioni su %{count} clip; quelle già animate da te restano invariate."
+style_pack.subtitles_done:
+  en: "Subtitles restyled from the saved words."
+  it: "Sottotitoli ricreati dalle parole salvate con il nuovo stile."
+style_pack.subtitles_later:
+  en: "No subtitles yet: the style will be used by «Genera sottotitoli»."
+  it: "Ancora nessun sottotitolo: lo stile verrà usato da «Genera sottotitoli»."
+style_pack.zoom_done:
+  en: "Auto zoom on %{count} clip(s)."
+  it: "Zoom automatici su %{count} clip."
+style_pack.zoom_untranscribed:
+  en: " %{count} clip(s) have no transcript: generate it in the Transcript tab."
+  it: " %{count} clip senza trascrizione: generala nella scheda Trascrizione."
+style_pack.zoom_summary:
+  en: "Punch-in +%{percent}%, every %{gap} s at most"
+  it: "Zoom +%{percent}%, al più ogni %{gap} s"
+style_pack.text_anim:
+  en: "text: %{name}"
+  it: "testo: %{name}"
+style_pack.music_summary:
+  en: "Volume %{volume} dB, ducking %{ducking} dB"
+  it: "Volume %{volume} dB, ducking %{ducking} dB"
+style_pack.music_added:
+  en: "Music added on a new audio track."
+  it: "Musica aggiunta su una nuova traccia audio."
+style_pack.music_done:
+  en: "Level and ducking on %{count} music clip(s)."
+  it: "Volume e ducking su %{count} clip musicali."
+style_pack.music_manual:
+  en: "%{count} clip(s) with a volume you animated by hand left as they are."
+  it: "%{count} clip con il volume animato a mano lasciate invariate."
+style_pack.music_missing:
+  en: "Music file not found (%{file}): the music already on the timeline is used."
+  it: "File musicale non trovato (%{file}): si usa la musica già in timeline."
+style_pack.music_failed:
+  en: "The music could not be placed on the timeline."
+  it: "Impossibile mettere la musica in timeline."
+style_pack.no_music:
+  en: "No music on the timeline."
+  it: "Nessuna musica in timeline."
+style_pack.empty_timeline:
+  en: "The timeline is empty."
+  it: "La timeline è vuota."
+style_pack.intro_done:
+  en: "Intro title added at the start, on a new track."
+  it: "Titolo d'apertura aggiunto all'inizio, su una nuova traccia."
+style_pack.outro_done:
+  en: "Closing title added at the end, on a new track."
+  it: "Titolo di chiusura aggiunto alla fine, su una nuova traccia."
+style_pack.safe_zone_done:
+  en: "Safe zones shown in the player."
+  it: "Safe zone mostrate nel player."
+style_pack.sample:
+  en: "Your style"
+  it: "Il tuo stile"
+style_pack.editor_title:
+  en: "Edit style pack"
+  it: "Modifica pacchetto stile"
+style_pack.name:
+  en: "Name"
+  it: "Nome"
+style_pack.description:
+  en: "Description"
+  it: "Descrizione"
+style_pack.save:
+  en: "Save"
+  it: "Salva"
+style_pack.none:
+  en: "None"
+  it: "Nessuna"
+style_pack.clip_in:
+  en: "Clip In"
+  it: "Clip In"
+style_pack.clip_out:
+  en: "Clip Out"
+  it: "Clip Out"
+style_pack.text_in:
+  en: "Text In"
+  it: "Testo In"
+style_pack.text_out:
+  en: "Text Out"
+  it: "Testo Out"
+style_pack.music_existing:
+  en: "No file: the music already on the timeline"
+  it: "Nessun file: la musica già in timeline"
+style_pack.music_pick:
+  en: "Choose file…"
+  it: "Scegli file…"
+style_pack.music_clear:
+  en: "No file"
+  it: "Nessun file"
+style_pack.music_volume:
+  en: "Volume"
+  it: "Volume"
+style_pack.music_ducking:
+  en: "Ducking under the voice"
+  it: "Ducking sotto la voce"
+style_pack.bumper_text:
+  en: "Text"
+  it: "Testo"
+style_pack.bumper_text_hint:
+  en: "Empty: the template's own text"
+  it: "Vuoto: il testo del template"

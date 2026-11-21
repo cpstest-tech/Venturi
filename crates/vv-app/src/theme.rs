@@ -108,13 +108,42 @@ fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+/// Control height of the touch density (vertical layout).
+pub(crate) const TOUCH_CONTROL_HEIGHT: f32 = 36.0;
+
+fn set_spacing(style: &mut egui::Style, touch: bool) {
+    if touch {
+        style.spacing.item_spacing = egui::vec2(SPACE_2 + 2.0, SPACE_2);
+        style.spacing.button_padding = egui::vec2(SPACE_3, SPACE_2);
+        style.spacing.interact_size.y = TOUCH_CONTROL_HEIGHT;
+        style.spacing.icon_width = 20.0;
+        style.spacing.icon_width_inner = 12.0;
+        style.spacing.slider_rail_height = 10.0;
+        style.interaction.resize_grab_radius_side = 10.0;
+    } else {
+        let default = egui::Style::default();
+        style.spacing.item_spacing = egui::vec2(SPACE_2, SPACE_1 + 2.0);
+        style.spacing.button_padding = egui::vec2(SPACE_2, SPACE_1 / 2.0);
+        style.spacing.interact_size.y = CONTROL_HEIGHT;
+        style.spacing.icon_width = default.spacing.icon_width;
+        style.spacing.icon_width_inner = default.spacing.icon_width_inner;
+        style.spacing.slider_rail_height = default.spacing.slider_rail_height;
+        style.interaction.resize_grab_radius_side = default.interaction.resize_grab_radius_side;
+    }
+}
+
+/// Bigger targets for fingers, or back to the desktop sizes.
+pub(crate) fn set_touch_density(ctx: &egui::Context, touch: bool) {
+    for theme in [egui::Theme::Dark, egui::Theme::Light] {
+        ctx.style_mut_of(theme, |style| set_spacing(style, touch));
+    }
+}
+
 pub(crate) fn apply(ctx: &egui::Context) {
     install_fonts(ctx);
     for theme in [egui::Theme::Dark, egui::Theme::Light] {
         ctx.style_mut_of(theme, |style| {
-            style.spacing.item_spacing = egui::vec2(SPACE_2, SPACE_1 + 2.0);
-            style.spacing.button_padding = egui::vec2(SPACE_2, SPACE_1 / 2.0);
-            style.spacing.interact_size.y = CONTROL_HEIGHT;
+            set_spacing(style, false);
             style.spacing.window_margin = egui::Margin::same(PANEL_PADDING as i8);
             style
                 .text_styles

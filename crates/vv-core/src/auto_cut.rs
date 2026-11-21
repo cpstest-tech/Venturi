@@ -160,7 +160,8 @@ fn similarity(a: &[String], b: &[String]) -> f64 {
     1.0 - row[b.len()] as f64 / a.len().max(b.len()).max(1) as f64
 }
 
-fn sentences(words: &[Word], config: &Config) -> Vec<Range<usize>> {
+/// Word ranges of each sentence: a final `.?!…` or a pause of `sentence_gap`.
+pub fn sentences(words: &[Word], config: &Config) -> Vec<Range<usize>> {
     let mut out = Vec::new();
     let mut start = 0;
     for (i, w) in words.iter().enumerate() {
@@ -232,7 +233,8 @@ fn false_starts(
     Some(merge_ranges(out))
 }
 
-fn snap(energy: &Energy, edge: f64, lo: f64, hi: f64) -> f64 {
+/// The quietest point of `lo..=hi`, the nearest to `edge` among equals.
+pub fn snap(energy: &Energy, edge: f64, lo: f64, hi: f64) -> f64 {
     if energy.step <= 0.0 || energy.db.is_empty() {
         return edge;
     }
