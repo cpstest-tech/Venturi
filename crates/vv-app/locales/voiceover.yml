@@ -1,5 +1,37 @@
 _version: 2
 
+voiceover.title:
+  en: "Record voiceover"
+  it: "Registra voce"
+
+voiceover.record:
+  en: "Record"
+  it: "Registra"
+
+voiceover.stop:
+  en: "Stop recording"
+  it: "Ferma registrazione"
+
+voiceover.recording:
+  en: "Recording"
+  it: "Registrazione in corso"
+
+voiceover.countdown:
+  en: "Recording starts in %{seconds}…"
+  it: "Registrazione tra %{seconds}…"
+
+voiceover.mute_preview:
+  en: "Mute preview while recording"
+  it: "Silenzia l’anteprima durante la registrazione"
+
+voiceover.start_hint:
+  en: "Move the playhead before the end of the timeline."
+  it: "Sposta il cursore prima della fine della timeline."
+
+voiceover.empty_take:
+  en: "No microphone audio was captured."
+  it: "Il microfono non ha acquisito audio."
+
 voiceover.needs_save_title:
   en: "Save the project to record"
   it: "Salva il progetto per registrare"

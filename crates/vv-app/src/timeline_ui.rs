@@ -90,6 +90,7 @@ pub enum TimelineCommand {
     AutoZoom,
     Reframe,
     Dub,
+    Voiceover,
     BeatSync,
     Undo,
     Redo,

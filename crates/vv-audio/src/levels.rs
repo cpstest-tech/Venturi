@@ -299,7 +299,11 @@ pub(crate) fn has_state(inserts: &[Insert]) -> bool {
     inserts.iter().any(|insert| {
         matches!(
             insert,
-            Insert::Compressor(_) | Insert::Eq(_) | Insert::Plugin(_)
+            Insert::Compressor(_)
+                | Insert::Eq(_)
+                | Insert::Plugin(_)
+                | Insert::Denoise(_)
+                | Insert::AutoLevel(_)
         )
     })
 }

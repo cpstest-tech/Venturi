@@ -2738,10 +2738,28 @@ pub enum AudioEffectKind {
     Mono,
     Equalizer(Equalizer),
     Vst3(Vst3Effect),
+    /// Lowers steady background noise (fans, hiss, hum) between and under
+    /// the words.
+    NoiseReduction {
+        #[serde(default)]
+        strength: NoiseStrength,
+    },
+    /// Rides the gain so the level stays close to a loudness target.
+    AutoLevel(AutoLevel),
 }
 
 impl AudioEffectKind {
-    pub const ALL: [AudioEffectKind; 4] = [
+    /// Only on a track: their latency is made up by reading the track ahead,
+    /// which the master cannot.
+    pub fn track_only(&self) -> bool {
+        matches!(self, AudioEffectKind::NoiseReduction { .. })
+    }
+
+    pub const ALL: [AudioEffectKind; 6] = [
+        AudioEffectKind::NoiseReduction {
+            strength: NoiseStrength::Medium,
+        },
+        AudioEffectKind::AutoLevel(AutoLevel::DEFAULT),
         AudioEffectKind::Normalize {
             target_db: NORMALIZE_TARGET_DEFAULT,
             mode: NormalizeMode::SamplePeak,
@@ -2865,6 +2883,60 @@ impl CompressorBand {
 }
 
 pub const NORMALIZE_TARGET_DEFAULT: f32 = -1.0;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NoiseStrength {
+    Low,
+    #[default]
+    Medium,
+    High,
+}
+
+impl NoiseStrength {
+    pub const ALL: [NoiseStrength; 3] = [
+        NoiseStrength::Low,
+        NoiseStrength::Medium,
+        NoiseStrength::High,
+    ];
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AutoLevel {
+    /// Short-term loudness the gain aims at, LUFS.
+    pub target_lufs: f32,
+    /// The most it boosts or cuts, dB.
+    pub max_gain_db: f32,
+    pub speed: LevelSpeed,
+}
+
+impl AutoLevel {
+    pub const DEFAULT: Self = Self {
+        target_lufs: -16.0,
+        max_gain_db: 12.0,
+        speed: LevelSpeed::Medium,
+    };
+    pub const TARGET_RANGE: (f32, f32) = (-30.0, -8.0);
+    pub const MAX_GAIN_RANGE: (f32, f32) = (3.0, 24.0);
+}
+
+impl Default for AutoLevel {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LevelSpeed {
+    Slow,
+    #[default]
+    Medium,
+    Fast,
+}
+
+impl LevelSpeed {
+    pub const ALL: [LevelSpeed; 3] = [LevelSpeed::Slow, LevelSpeed::Medium, LevelSpeed::Fast];
+}
 
 /// How a normalization measures the level.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -14,6 +14,7 @@ mod ai_sequence;
 mod ai_sequence_cards;
 mod ai_sequence_ui;
 mod app_menu;
+mod audio_cleanup;
 mod auto_cut;
 mod auto_cut_ui;
 mod auto_zoom;
@@ -378,6 +379,7 @@ struct VenturiApp {
     mixer_panel: mixer_panel::MixerPanelState,
     plugin_editors: plugin_editors::PluginEditors,
     take: Option<voiceover::ActiveTake>,
+    voiceover: voiceover::Panel,
     /// Media or elements not imported, shown in a separate window
     /// until the user closes it.
     import_warnings: Vec<String>,
@@ -661,6 +663,7 @@ impl Default for VenturiApp {
             mixer_panel: mixer_panel::MixerPanelState::default(),
             plugin_editors: Default::default(),
             take: None,
+            voiceover: voiceover::Panel::default(),
             import_warnings: Vec::new(),
             preview_meta: None,
             preview_error: None,
@@ -924,6 +927,7 @@ impl VenturiApp {
         let Some(item) = self.browsed_item(browsed).cloned() else {
             return;
         };
+        self.stop_voiceover();
         let (path, meta) = (item.path.clone(), item.meta.clone());
         if self.is_timeline_playing() {
             self.timeline_audio().pause();
@@ -1340,6 +1344,7 @@ impl VenturiApp {
             // The space bar always pauses at 1x: a later "a"
             // restarts at normal speed.
             self.reset_playback_speed_to_normal();
+            self.finish_take();
             return;
         }
         let timeline = &self.session.project.timelines[timeline_id];
@@ -1348,14 +1353,15 @@ impl VenturiApp {
         if playhead >= end || !self.prepare_take() {
             return;
         }
-        // Before the playback: opening the microphone takes a while, and
-        // the take must not start late.
+        self.cue_timeline_playback(playhead, fps);
         self.start_take(playhead);
+        self.timeline_audio().play();
+    }
+
+    fn cue_timeline_playback(&mut self, playhead: FrameIdx, fps: f64) {
         self.timeline_audio();
         self.sync_timeline_audio();
-        let audio = self.timeline_audio();
-        audio.seek_frame(playhead, fps);
-        audio.play();
+        self.timeline_audio().seek_frame(playhead, fps);
         self.last_synced_playhead = playhead;
         self.active_clip = self.active_video_clip_at(playhead);
     }
@@ -1946,6 +1952,7 @@ impl VenturiApp {
     /// timeline/compound clip and pasting into another must work
     /// (`paste_clipboard_at_playhead` already conforms for different fps).
     fn switch_to_timeline(&mut self, timeline_id: TimelineId) {
+        self.stop_voiceover();
         self.timeline_id = Some(timeline_id);
         let clipboard = std::mem::take(&mut self.timeline_state.clipboard);
         self.timeline_state = timeline_ui::TimelineState::default();
@@ -4531,7 +4538,6 @@ impl VenturiApp {
         self.show_forced_relink_dialog(ui.ctx());
         self.show_unsaved_changes_dialog(ui);
         self.show_new_timeline_dialog(ui.ctx());
-        self.show_record_needs_save(ui.ctx());
         self.show_paste_image_dialog(ui.ctx());
         self.show_paste_image_needs_save(ui.ctx());
         if std::mem::take(&mut self.timeline_state.paste_attributes_requested) {
@@ -4606,6 +4612,9 @@ impl VenturiApp {
         // the playhead moved by `drive_playback`.
         let user_scrubbed_playhead = self.timeline_state.playhead != playhead_before_timeline_ui;
         let selection_changed = self.timeline_state.selected != selected_before_timeline_ui;
+        if user_scrubbed_playhead {
+            self.stop_voiceover();
+        }
         if user_scrubbed_playhead && !selection_changed {
             self.sync_selection_to_playhead();
         }
@@ -4669,6 +4678,7 @@ impl VenturiApp {
             }
         }
         if let Some(frame) = pending_playhead {
+            self.stop_voiceover();
             self.timeline_state.playhead = frame.max(0);
         }
 
@@ -4746,6 +4756,7 @@ impl VenturiApp {
             target.marks.mark_out = (mark_out < target.total).then_some(mark_out);
         }
         if let Some(frame) = transport_action.seek {
+            self.stop_voiceover();
             if self.browsing.is_some() {
                 self.seek_browse(frame);
             } else {
@@ -4756,6 +4767,9 @@ impl VenturiApp {
             }
             ui.ctx().request_repaint();
         }
+
+        self.show_voiceover(ui.ctx(), rects.get(&Block::Timeline).copied());
+        self.show_record_needs_save(ui.ctx());
 
         if self.is_timeline_playing() {
             ui.ctx().request_repaint();
@@ -4903,6 +4917,9 @@ impl VenturiApp {
         }
         let can_undo = self.session.history.position() > 0;
         let can_redo = self.session.history.labels().count() > self.session.history.position();
+        let can_voiceover = self
+            .timeline_id
+            .is_some_and(|id| self.session.project.timelines[id].total_frames() > 0);
         let can_auto_cut = self.take.is_none()
             && self.timeline_id.is_some_and(|id| {
                 let timeline = &self.session.project.timelines[id];
@@ -4923,6 +4940,7 @@ impl VenturiApp {
                     can_undo,
                     can_redo,
                     can_auto_cut,
+                    can_voiceover,
                 );
             });
         self.timeline_state.thumbnails.clear();

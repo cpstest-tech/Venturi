@@ -84,8 +84,13 @@ fn a_take_is_saved_next_to_the_project_and_overwrites_the_track_in_one_step() {
     app.session.set_path(Some(dir.join("project.vvproj")));
     let steps_before = app.session.history.labels().count();
 
-    app.place_take(timeline, 25, &[1], &one_second_take())
-        .unwrap();
+    app.place_take(
+        timeline,
+        25,
+        &TakeTarget::Armed(vec![1]),
+        &one_second_take(),
+    )
+    .unwrap();
 
     let format = AudioFileFormat::resolve(None);
     let file = format!("Voiceover 001.{}", format.extension());
@@ -129,6 +134,38 @@ fn a_take_is_saved_next_to_the_project_and_overwrites_the_track_in_one_step() {
             .media_pool
             .values()
             .all(|m| m.path != take_file)
+    );
+}
+
+#[test]
+fn a_voiceover_adds_a_track_without_overwriting_armed_audio() {
+    let dir = temp_dir("own-track");
+    let (mut app, timeline) = app_with_armed_track();
+    app.settings.recording_dir = Some(dir.to_path_buf());
+    let take = one_second_take();
+
+    app.place_take(timeline, 85, &TakeTarget::NewTrack { end: 100 }, &take)
+        .unwrap();
+
+    let tracks = &app.session.project.timelines[timeline].tracks;
+    assert_eq!(tracks.len(), 3);
+    assert!(tracks[1].armed);
+    assert_eq!(tracks[1].clips[0].timeline_end(), 100);
+    assert_eq!(tracks[2].kind, TrackKind::Audio);
+    assert_eq!(tracks[2].clips[0].timeline_start, 85);
+    assert_eq!(tracks[2].clips[0].timeline_end(), 100);
+    assert_eq!(
+        app.session.history.labels().last(),
+        Some(CommandLabel::RecordVoiceover)
+    );
+
+    app.session.history.undo(&mut app.session.project);
+    assert_eq!(app.session.project.timelines[timeline].tracks.len(), 2);
+    assert!(app.session.project.media_pool.is_empty());
+    app.session.history.redo(&mut app.session.project);
+    assert_eq!(
+        app.session.project.timelines[timeline].tracks[2].clips[0].timeline_start,
+        85
     );
 }
 

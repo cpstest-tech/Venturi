@@ -310,7 +310,7 @@ fn gated_loudness(
 
 /// Direct form I.
 #[derive(Clone, Copy)]
-struct Biquad {
+pub(crate) struct Biquad {
     b: [f64; 3],
     a: [f64; 2],
     x: [f64; 2],
@@ -327,7 +327,12 @@ impl Biquad {
         }
     }
 
-    fn process(&mut self, x: f64) -> f64 {
+    pub(crate) fn clear(&mut self) {
+        self.x = [0.0; 2];
+        self.y = [0.0; 2];
+    }
+
+    pub(crate) fn process(&mut self, x: f64) -> f64 {
         let y = self.b[0] * x + self.b[1] * self.x[0] + self.b[2] * self.x[1]
             - self.a[0] * self.y[0]
             - self.a[1] * self.y[1];
@@ -339,7 +344,7 @@ impl Biquad {
 
 /// The BS.1770 pre-filter (high shelf) and RLB high-pass, from their
 /// analog prototypes so that they hold at any rate, not only at 48 kHz.
-fn k_weighting(rate: f64) -> [Biquad; 2] {
+pub(crate) fn k_weighting(rate: f64) -> [Biquad; 2] {
     let (f0, gain_db, q) = (1681.974450955533, 3.999843853973347, 0.7071752369554196);
     let k = (std::f64::consts::PI * f0 / rate).tan();
     let vh = 10f64.powf(gain_db / 20.0);

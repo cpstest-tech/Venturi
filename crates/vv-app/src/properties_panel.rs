@@ -2872,6 +2872,7 @@ impl VenturiApp {
                                                     .map(|c| c.timeline_frame_at(source_frame));
                                             }
                                             self.show_fade_rows(ui, targets, &mut pending_effects);
+                                            self.show_audio_cleanup(ui, targets, &mut pending_effects);
                                             properties_tabs::audio_placeholders(ui);
                                         }
                                     }

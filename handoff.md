@@ -1257,3 +1257,73 @@ with FFmpeg 9.0.2 headers and checked against the local 9.1 runtime. The
 Linux installer placed it in `~/.local/bin/tandem` and the installed binary
 passed a headless startup check. The GUI checklist, Windows runtime and live
 Gemini request remain manual checks.
+
+## Audio cleanup — noise reduction and auto level
+
+Two new mixer effects (`AudioEffectKind::NoiseReduction`, `AudioEffectKind::AutoLevel`),
+non-destructive, saved in the project, with undo/redo through the existing
+effect commands. Preview and export run the same code (`vv-audio` mixer
+inserts), so they match. No new dependency: the FFT is the one already in
+`vv-audio/src/spectrum.rs`, the K weighting the one of `loudness.rs`.
+
+- **Reused**: the track insert chain, `AddAudioEffect` / `SetAudioEffect` /
+  `MoveAudioEffect`, the mixer effect window. The existing Normalize (peak or
+  integrated LUFS, one static gain) is unchanged; Auto level is the dynamic
+  counterpart. The dub/style-pack ducking (`style_pack::ducking_gain`) is not
+  touched.
+- **Noise reduction** (`vv-audio/src/denoise.rs`): STFT spectral gate, ~21 ms
+  frames (1024 at 48 kHz), quarter hop, sqrt-Hann. Noise floor = minimum of
+  the smoothed power of each bin over the last ~1.5 s (8 × 0.19 s windows) ×
+  3; gain = √(1 − over·noise/power), never below a floor, smoothed across 3
+  bins and with a release. Strength Low / Medium / High = over 1.5 / 2 / 3,
+  floor −9 / −15 / −22 dB. One gain for all channels (stable stereo image).
+- **Latency**: the gate delays by one frame. The mixer reads a track with a
+  latency that much ahead (`chain_latency`, `mix_into`), and after every
+  seek/reset `prime_latency` feeds the chain the first `latency` frames, so
+  nothing shifts against the picture and the first frames are not silent.
+  Inserts after the gate see the time moved back (`apply_inserts`). For this
+  reason noise reduction is **track only**: it is hidden from the master's
+  "+" menu and ignored on the master (`AudioEffectKind::track_only`).
+- **Auto level** (`vv-audio/src/autolevel.rs`): feed-forward AGC, zero
+  latency. K-weighted short-term loudness over 0.4 / 0.6 / 1 s (Fast /
+  Medium / Slow), gain every 10 ms ramped per sample, time constant 0.6 /
+  1.5 / 3 s (cuts 4× faster), gate at max(−50, target − max − 8) LUFS so
+  silence is not raised, peak safety at −0.3 dBFS. Defaults: −16 LUFS,
+  ±12 dB, Medium. Ranges: target −30…−8 LUFS, max 3…24 dB.
+- **UI**: mixer "+" menu → «Riduzione rumore» / «Volume costante», with their
+  window (`audio_cleanup::{noise_reduction_settings, auto_level_settings}`).
+  Properties → Audio of a clip has the two sections (the old noise
+  reduction placeholder is gone): «Attiva», the settings and «Si applica a
+  tutta la traccia: A1». A clip has no effect chain of its own, so they act
+  on the audio track of the clip, or of its linked audio for a video clip
+  (simplest choice). A new noise reduction goes first in the chain, a new
+  auto level right after it. Several selected clips → all their tracks, one
+  undo step.
+- **Known limits**: the noise floor is learned again after a seek, so the
+  first ~0.2–1.5 s after a jump can be reduced slightly differently from a
+  continuous export; same for Auto level (its first window settles in
+  0.15 s). Made for voice: a held note of music counts as noise. Adding or
+  removing a noise reduction while playing skips/repeats 21 ms once.
+- **Build note**: FFmpeg 9.1 on this machine broke the `ffmpeg-sys-next` 9.0
+  bindgen (CUDA types). `Cargo.lock` now has `ffmpeg-sys-next` 9.1.1 and
+  `ffmpeg-next` 9.1.0 (Cargo.toml unchanged, `9.0.0` requirement).
+- **Tests**: `vv-audio/src/tests/{denoise,autolevel}.rs` (unity gate = pure
+  delay, reduction per strength, voice level kept, target reached, gate,
+  ceiling, block-size independence), two mixer tests (no time shift, split
+  independence with a latency), `vv-app/src/tests/audio_cleanup.rs`.
+
+### Manual test checklist
+
+1. Voice recorded with a fan/hiss on an audio track: Properties → Audio →
+   Riduzione rumore → Attiva. Play: the noise drops in the pauses within a
+   second; try Bassa/Media/Alta, listen for metallic artefacts on Alta.
+2. Same clip on a video track with linked audio: the section names the
+   audio track; check lip sync with the gate on and off (no shift).
+3. Seek around while playing: no click/silence at the jump beyond the brief
+   re-learning; export and compare a passage with the preview.
+4. Volume costante on a voice with quiet and loud sentences: levels even
+   out; silences stay silent; change target/max/speed while playing.
+5. Mixer: both effects in the track "+" menu, not in the master's; bypass,
+   reorder, remove; Ctrl+Z / Ctrl+Y; save, reopen the project.
+6. Several clips on two tracks selected: one toggle turns it on for both,
+   one undo step.

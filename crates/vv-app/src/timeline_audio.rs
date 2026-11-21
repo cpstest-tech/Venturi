@@ -387,6 +387,12 @@ impl TimelineAudio {
         self.playing
     }
 
+    pub fn set_preview_muted(&self, muted: bool) {
+        if let Some(mixer) = &self.mixer {
+            mixer.set_output_muted(muted);
+        }
+    }
+
     pub fn play(&mut self) {
         self.stop_scrub_snippet();
         if self.playing {

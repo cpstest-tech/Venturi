@@ -448,6 +448,35 @@ fn general_section(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
     changed
 }
 
+pub(crate) fn input_device_picker(
+    ui: &mut egui::Ui,
+    input_device: &mut Option<String>,
+    input_devices: &[String],
+) -> bool {
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        ui.label(t!("settings.input_device"));
+        let default = t!("settings.input_device_default").into_owned();
+        let missing = input_device
+            .clone()
+            .filter(|name| !input_devices.contains(name));
+        egui::ComboBox::from_id_salt("input_device")
+            .width(180.0)
+            .selected_text(input_device.as_deref().unwrap_or(&default))
+            .show_ui(ui, |ui| {
+                changed |= ui.selectable_value(input_device, None, &default).changed();
+                // A device unplugged since keeps its place: the recording
+                // falls back to the default until it is back.
+                for name in input_devices.iter().chain(missing.as_ref()) {
+                    changed |= ui
+                        .selectable_value(input_device, Some(name.clone()), name)
+                        .changed();
+                }
+            });
+    });
+    changed
+}
+
 /// `(changed, pick the folder)`.
 fn recording_section(
     ui: &mut egui::Ui,
@@ -455,36 +484,7 @@ fn recording_section(
     input_devices: &[String],
     formats: &[AudioFileFormat],
 ) -> (bool, bool) {
-    let mut changed = false;
-    ui.horizontal(|ui| {
-        ui.label(t!("settings.input_device"));
-        let default = t!("settings.input_device_default").into_owned();
-        let missing = settings
-            .input_device
-            .clone()
-            .filter(|name| !input_devices.contains(name));
-        egui::ComboBox::from_id_salt("settings_input_device")
-            .width(260.0)
-            .selected_text(
-                settings
-                    .input_device
-                    .clone()
-                    .unwrap_or_else(|| default.clone()),
-            )
-            .show_ui(ui, |ui| {
-                changed |= ui
-                    .selectable_value(&mut settings.input_device, None, &default)
-                    .changed();
-                // A device unplugged since keeps its place: the recording
-                // falls back to the default until it is back.
-                for name in input_devices.iter().chain(missing.as_ref()) {
-                    changed |= ui
-                        .selectable_value(&mut settings.input_device, Some(name.clone()), name)
-                        .changed();
-                }
-            });
-    });
-
+    let mut changed = input_device_picker(ui, &mut settings.input_device, input_devices);
     ui.add_space(8.0);
     ui.horizontal(|ui| {
         ui.label(t!("settings.recording_format"));

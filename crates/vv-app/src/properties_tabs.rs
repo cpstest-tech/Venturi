@@ -407,7 +407,6 @@ pub(crate) fn retouch_tab(ui: &mut egui::Ui) {
 }
 
 pub(crate) fn audio_placeholders(ui: &mut egui::Ui) {
-    placeholder_checkbox_section(ui, &t!("props.noise_reduction"));
     placeholder_checkbox_section(ui, &t!("props.voice_changer"));
 }
 

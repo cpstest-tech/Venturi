@@ -621,6 +621,7 @@ impl VenturiApp {
     /// Leaves the project for `switch`. One with a file saves itself first;
     /// an untitled one, or one that could not be saved, asks.
     pub(crate) fn request_project_switch(&mut self, switch: ProjectSwitch) {
+        self.stop_voiceover();
         if self.session.path().is_some() {
             self.flush_autosave();
         }
@@ -670,6 +671,7 @@ impl VenturiApp {
         if !ctx.input(|i| i.viewport().close_requested()) {
             return;
         }
+        self.stop_voiceover();
         if self.session.path().is_some() {
             self.flush_autosave();
         }
@@ -941,6 +943,8 @@ impl VenturiApp {
     /// After the session switched project: the UI state tied to the old
     /// one goes, the first timeline opens.
     pub(crate) fn reset_for_replaced_project(&mut self) {
+        self.voiceover = voiceover::Panel::default();
+        self.take = None;
         self.dub = dub::State::default();
         self.reframe = reframe::State::default();
         self.transcript = transcript::State::default();
@@ -969,6 +973,7 @@ impl VenturiApp {
         self.browsing = None;
         if let Some(audio) = &mut self.timeline_audio {
             audio.pause();
+            audio.set_preview_muted(false);
             audio.invalidate();
         }
         self.reset_playback_speed_to_normal();

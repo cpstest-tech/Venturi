@@ -2851,3 +2851,45 @@ fn automatic_cut_crossfade_uses_samples_and_complementary_ramps() {
         assert!((gain - 1.0).abs() < 1e-6);
     }
 }
+
+fn with_noise_reduction(mut track: Track) -> Track {
+    track
+        .mix
+        .effects
+        .push(vv_core::AudioEffect::new(AudioEffectKind::NoiseReduction {
+            strength: vv_core::NoiseStrength::Medium,
+        }));
+    track
+}
+
+#[test]
+fn a_noise_reduction_does_not_move_its_track_in_time() {
+    let (project, a, _) = project();
+    let tl = timeline(vec![with_noise_reduction(audio_track(vec![clip_at(
+        a, 10, 0, 30,
+    )]))]);
+    let out = render(&project, &tl, 0, 600);
+    let mean = |r: std::ops::Range<usize>| {
+        out[r.clone()].iter().map(|s| s.abs()).sum::<f32>() / r.len() as f32
+    };
+    // Delayed by its latency (256 frames here), the clip would start at 356.
+    assert!(mean(110..350) > 0.03, "{}", mean(110..350));
+    assert!(mean(0..90) < mean(110..350) / 2.0);
+}
+
+#[test]
+fn a_mix_with_a_latency_is_independent_of_how_the_range_is_split() {
+    let (project, a, b) = project();
+    let tl = timeline(vec![
+        with_noise_reduction(audio_track(vec![clip_at(a, 1, 0, 30)])),
+        audio_track(vec![clip_at(b, 7, 2, 20)]),
+    ]);
+    let whole = render(&project, &tl, 0, 400);
+    let snap = MixSnapshot::from_timeline(&project, &tl, RATE, 1, &mut buffers);
+    let mut chunked = vec![0.0; 400];
+    let mut state = MixState::new(&snap);
+    for (i, chunk) in chunked.chunks_mut(37).enumerate() {
+        mix_range_from(&snap, &mut state, (i * 37) as u64, chunk);
+    }
+    assert_eq!(whole, chunked);
+}

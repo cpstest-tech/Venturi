@@ -314,3 +314,59 @@ mixer.vst3_latency:
 mixer.vst3_none:
   en: "No VST3 plugins found"
   it: "Nessun plugin VST3 trovato"
+
+mixer.effect_noise:
+  en: "Noise reduction"
+  it: "Riduzione rumore"
+
+mixer.effect_auto_level:
+  en: "Auto level"
+  it: "Volume costante"
+
+mixer.noise_strength:
+  en: "Strength"
+  it: "Intensità"
+
+mixer.strength_low:
+  en: "Low"
+  it: "Bassa"
+
+mixer.strength_medium:
+  en: "Medium"
+  it: "Media"
+
+mixer.strength_high:
+  en: "High"
+  it: "Alta"
+
+mixer.noise_hint:
+  en: "Lowers steady background noise (fans, hiss, hum) by learning it in the pauses between the words. Made for voice: a steady note of music counts as noise. It needs about a second to learn the noise after a jump of the playhead."
+  it: "Abbassa il rumore di fondo costante (ventole, fruscio, ronzio) imparandolo nelle pause tra le parole. Pensato per la voce: una nota musicale tenuta conta come rumore. Dopo un salto della testina gli serve circa un secondo per imparare il rumore."
+
+mixer.auto_level_target:
+  en: "Target (LUFS)"
+  it: "Obiettivo (LUFS)"
+
+mixer.auto_level_max_gain:
+  en: "Max correction (dB)"
+  it: "Correzione max (dB)"
+
+mixer.auto_level_speed:
+  en: "Speed"
+  it: "Velocità"
+
+mixer.speed_slow:
+  en: "Slow"
+  it: "Lenta"
+
+mixer.speed_medium:
+  en: "Medium"
+  it: "Media"
+
+mixer.speed_fast:
+  en: "Fast"
+  it: "Rapida"
+
+mixer.auto_level_hint:
+  en: "Keeps the volume steady: quiet sentences go up, loud ones come down, towards the target. Silence and faint room noise are not raised. -16 LUFS suits voice for social videos."
+  it: "Tiene il volume costante: le frasi deboli salgono e quelle forti scendono verso l'obiettivo. Silenzi e rumore d'ambiente debole non vengono alzati. -16 LUFS va bene per la voce nei video social."

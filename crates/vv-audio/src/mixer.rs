@@ -10,12 +10,14 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use vv_core::{
-    AudioEffectKind, ChannelStrip, ClipId, ClipSource, EffectId, Equalizer, FrameIdx, Keyframed,
-    MediaId, MixerChannel, MultibandCompressor, NormalizeMode, Project, SetLevel, Timeline,
-    TimelineId, Vst3Effect,
+    AudioEffectKind, AutoLevel, ChannelStrip, ClipId, ClipSource, EffectId, Equalizer, FrameIdx,
+    Keyframed, MediaId, MixerChannel, MultibandCompressor, NoiseStrength, NormalizeMode, Project,
+    SetLevel, Timeline, TimelineId, Vst3Effect,
 };
 
+use crate::autolevel::AutoLevelProcessor;
 use crate::blocks::{Run, SampleBlocks};
+use crate::denoise::DenoiseProcessor;
 use crate::dynamics::{BandActivity, MultibandProcessor};
 use crate::effect::{Effect, PluginEffect, PluginHandle, PluginRequest};
 use crate::eq::EqProcessor;
@@ -271,6 +273,8 @@ pub enum Insert {
     Mono,
     Eq(Equalizer),
     Plugin(PluginInsert),
+    Denoise(NoiseStrength),
+    AutoLevel(AutoLevel),
 }
 
 /// A hosted plugin in a chain. Equality is by what it plays, not by the
@@ -607,6 +611,16 @@ impl Insert {
                 channels,
             ))),
             Insert::Eq(params) => Some(Box::new(EqProcessor::new(params, sample_rate, channels))),
+            &Insert::Denoise(strength) => Some(Box::new(DenoiseProcessor::new(
+                strength,
+                sample_rate,
+                channels,
+            ))),
+            Insert::AutoLevel(params) => Some(Box::new(AutoLevelProcessor::new(
+                params,
+                sample_rate,
+                channels,
+            ))),
             Insert::Plugin(plugin) => plugin.handle.clone().filter(|_| plugins).map(|handle| {
                 Box::new(PluginEffect {
                     handle,
@@ -615,6 +629,18 @@ impl Insert {
             }),
         }
     }
+}
+
+/// How late the output of a chain is on its input, in frames: the mixer
+/// feeds a track that much ahead.
+pub(crate) fn chain_latency(inserts: &[Insert], sample_rate: u32) -> u64 {
+    inserts
+        .iter()
+        .map(|insert| match insert {
+            Insert::Denoise(_) => crate::denoise::latency(sample_rate),
+            _ => 0,
+        })
+        .sum()
 }
 
 /// Below this a chain's output counts as silence.
@@ -922,6 +948,12 @@ pub(crate) fn hash_insert(insert: &Insert, h: &mut impl Hasher) {
             }
         }
         Insert::Plugin(plugin) => (6u8, plugin.content, plugin.handle.is_some()).hash(h),
+        Insert::Denoise(strength) => (7u8, *strength as u8).hash(h),
+        Insert::AutoLevel(params) => {
+            8u8.hash(h);
+            (params.target_lufs.to_bits(), params.max_gain_db.to_bits()).hash(h);
+            (params.speed as u8).hash(h);
+        }
         Insert::Eq(params) => {
             4u8.hash(h);
             for band in &params.bands {
@@ -1273,6 +1305,7 @@ fn collect_clips(
         let inserts = resolve_chain(
             &track.mix,
             stop,
+            false,
             !track_inputs.is_empty(),
             &track_clips,
             plugins,
@@ -1356,6 +1389,7 @@ fn collect_clips(
         let inserts = resolve_chain(
             &timeline.master,
             stop,
+            true,
             !all.is_empty(),
             &[],
             plugins,
@@ -1390,6 +1424,7 @@ fn chain_key(mode: NormalizeMode, (sample_rate, channels): (u32, u16), inserts: 
 fn resolve_chain(
     strip: &ChannelStrip,
     stop: Option<usize>,
+    master: bool,
     has_audio: bool,
     clips: &[(ClipId, u64)],
     mut plugins: Vec<Option<PluginInsert>>,
@@ -1407,6 +1442,7 @@ fn resolve_chain(
             continue;
         }
         let insert = match &effect.kind {
+            kind if master && kind.track_only() => Insert::Off,
             AudioEffectKind::Normalize { .. } if !has_audio => Insert::Off,
             &AudioEffectKind::Normalize {
                 target_db,
@@ -1446,6 +1482,8 @@ fn resolve_chain(
             AudioEffectKind::MultibandCompressor(params) => Insert::Compressor(params.clone()),
             AudioEffectKind::Mono => Insert::Mono,
             AudioEffectKind::Equalizer(params) => Insert::Eq(params.clone()),
+            &AudioEffectKind::NoiseReduction { strength } => Insert::Denoise(strength),
+            AudioEffectKind::AutoLevel(params) => Insert::AutoLevel(*params),
             AudioEffectKind::Vst3(_) => plugins
                 .get_mut(i)
                 .and_then(Option::take)
@@ -1882,6 +1920,7 @@ fn mix_into(
     let frames = out.len() / ch;
     if state.next != Some(start) {
         state.reset();
+        prime_latency(snapshot, state, start);
     }
     state.next = Some(start + frames as u64);
     state.peaks.fill([0.0; 2]);
@@ -1891,8 +1930,10 @@ fn mix_into(
         let block = &mut out[block_start * ch..(block_start + len) * ch];
         let block_time = start + block_start as u64;
         for (track, range) in &snapshot.groups {
+            let channel = snapshot.track(*track);
+            let input_time = block_time + chain_latency(&channel.inserts, snapshot.sample_rate);
             if !state.rings.get(*track).copied().unwrap_or(true) {
-                let end = block_time + len as u64;
+                let end = input_time + len as u64;
                 let mut plays = false;
                 let mut first_start = u64::MAX;
                 let idle = &mut state.idle[*track];
@@ -1900,7 +1941,7 @@ fn mix_into(
                 for clip in &snapshot.clips[range.clone()] {
                     if clip.start < end {
                         idle.last_end = idle.last_end.max(clip.start + clip.len);
-                        if clip.start + clip.len > block_time {
+                        if clip.start + clip.len > input_time {
                             plays = true;
                             first_start = first_start.min(clip.start);
                         }
@@ -1910,7 +1951,7 @@ fn mix_into(
                 let restart = if plays {
                     !idle.settled && !idle.ringing && after_settle(first_start)
                 } else {
-                    !idle.settled && !idle.ringing && after_settle(block_time)
+                    !idle.settled && !idle.ringing && after_settle(input_time)
                 };
                 if let (true, Some(chain)) = (restart, state.tracks.get_mut(*track)) {
                     chain.iter_mut().flatten().for_each(|p| p.reset());
@@ -1925,12 +1966,11 @@ fn mix_into(
                     continue;
                 }
             }
-            let channel = snapshot.track(*track);
             let scratch = &mut state.scratch[..len * ch];
             scratch.fill(0.0);
             for (index, clip) in range.clone().zip(&snapshot.clips[range.clone()]) {
                 let nested = state.nested.get_mut(index).and_then(Option::as_mut);
-                add_clip(snapshot, clip, nested, block_time, scratch);
+                add_clip(snapshot, clip, nested, input_time, scratch);
             }
             let processors = state.tracks.get_mut(*track).map(Vec::as_mut_slice);
             let meters = metered.then(|| snapshot.meters.track_inserts(*track));
@@ -1939,7 +1979,8 @@ fn mix_into(
                 processors.unwrap_or_default(),
                 scratch,
                 ch,
-                block_time,
+                snapshot.sample_rate,
+                input_time,
                 meters,
                 state.track_skip.get(*track).copied().unwrap_or(usize::MAX),
             );
@@ -1968,6 +2009,7 @@ fn mix_into(
             &mut state.master,
             block,
             ch,
+            snapshot.sample_rate,
             block_time,
             meters,
             state.master_skip,
@@ -1994,18 +2036,68 @@ fn mix_into(
     }
 }
 
-/// `samples` start at timeline audio frame `time`. `meters`: where the
-/// compressors report, if metered.
+/// Fills the chains that delay their track with what they hold when
+/// reached from earlier: the frames `start..start + latency` of the track,
+/// whose output is thrown away. Without it a seek (and the start of an
+/// export) would play their first frames silent.
+fn prime_latency(snapshot: &MixSnapshot, state: &mut MixState, start: u64) {
+    let ch = snapshot.channels as usize;
+    for (track, range) in &snapshot.groups {
+        let channel = snapshot.track(*track);
+        let latency = chain_latency(&channel.inserts, snapshot.sample_rate);
+        if latency == 0 {
+            continue;
+        }
+        let mut time = start;
+        while time < start + latency {
+            let len = MIX_BLOCK_FRAMES.min((start + latency - time) as usize);
+            let scratch = &mut state.scratch[..len * ch];
+            scratch.fill(0.0);
+            for (index, clip) in range.clone().zip(&snapshot.clips[range.clone()]) {
+                let nested = state.nested.get_mut(index).and_then(Option::as_mut);
+                add_clip(snapshot, clip, nested, time, scratch);
+            }
+            let processors = state.tracks.get_mut(*track).map(Vec::as_mut_slice);
+            apply_inserts(
+                &channel.inserts,
+                processors.unwrap_or_default(),
+                scratch,
+                ch,
+                snapshot.sample_rate,
+                time,
+                None,
+                state.track_skip.get(*track).copied().unwrap_or(usize::MAX),
+            );
+            time += len as u64;
+        }
+        if let Some(idle) = state.idle.get_mut(*track) {
+            *idle = Idle {
+                last_end: 0,
+                settled: false,
+                ringing: true,
+            };
+        }
+    }
+}
+
+/// `samples` start at timeline audio frame `time`, which a latency moves
+/// back for the inserts after it. `meters`: where the compressors report,
+/// if metered.
+#[allow(clippy::too_many_arguments)]
 fn apply_inserts(
     inserts: &[Insert],
     processors: &mut [Option<Box<dyn Effect>>],
     samples: &mut [f32],
     channels: usize,
-    time: u64,
+    sample_rate: u32,
+    mut time: u64,
     meters: Option<&[InsertMeter]>,
     skip_from: usize,
 ) {
     for (index, insert) in inserts.iter().enumerate() {
+        if index > 0 {
+            time = time.saturating_sub(chain_latency(&inserts[index - 1..index], sample_rate));
+        }
         match insert {
             Insert::Off => {}
             Insert::Gain(_) | Insert::ClipGains(_) if index >= skip_from => {}
@@ -2017,7 +2109,11 @@ fn apply_inserts(
                     frame.fill(average);
                 }
             }
-            Insert::Compressor(_) | Insert::Eq(_) | Insert::Plugin(_) => {
+            Insert::Compressor(_)
+            | Insert::Eq(_)
+            | Insert::Plugin(_)
+            | Insert::Denoise(_)
+            | Insert::AutoLevel(_) => {
                 let Some(Some(processor)) = processors.get_mut(index) else {
                     continue;
                 };
@@ -2353,6 +2449,7 @@ pub fn render_stretched(window: &StretchedWindow, channels: u16, position: u64, 
 pub struct Mixer {
     _stream: cpal::Stream,
     playing: Arc<AtomicBool>,
+    output_muted: Arc<AtomicBool>,
     position: Arc<AtomicU64>,
     pending: Arc<Mutex<Option<Arc<MixerState>>>>,
     /// Published states still referenced by the callback: keeping them here
@@ -2386,6 +2483,7 @@ impl Mixer {
         };
 
         let playing = Arc::new(AtomicBool::new(false));
+        let output_muted = Arc::new(AtomicBool::new(false));
         let position = Arc::new(AtomicU64::new(0));
         let initial = Arc::new(MixerState::new(
             Arc::new(MixSnapshot::empty(sample_rate, channels)),
@@ -2396,6 +2494,7 @@ impl Mixer {
         let peak_right_bits = Arc::new(AtomicU32::new(0.0f32.to_bits()));
 
         let cb_playing = playing.clone();
+        let cb_output_muted = output_muted.clone();
         let cb_position = position.clone();
         let cb_pending = pending.clone();
         let cb_peak_left = peak_left_bits.clone();
@@ -2445,6 +2544,9 @@ impl Mixer {
                     } else {
                         data.fill(0.0);
                     }
+                    if cb_output_muted.load(Ordering::Relaxed) {
+                        data.fill(0.0);
+                    }
                     let (l, r) = stereo_peak(data, ch);
                     cb_peak_left.store(l.to_bits(), Ordering::Relaxed);
                     cb_peak_right.store(r.to_bits(), Ordering::Relaxed);
@@ -2458,6 +2560,7 @@ impl Mixer {
         Ok(Self {
             _stream: stream,
             playing,
+            output_muted,
             position,
             pending,
             retained: vec![initial],
@@ -2488,6 +2591,10 @@ impl Mixer {
 
     pub fn pause(&self) {
         self.playing.store(false, Ordering::Relaxed);
+    }
+
+    pub fn set_output_muted(&self, muted: bool) {
+        self.output_muted.store(muted, Ordering::Relaxed);
     }
 
     pub fn is_playing(&self) -> bool {

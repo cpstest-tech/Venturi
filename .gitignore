@@ -4,3 +4,5 @@
 *.tandem.bak
 /container/shots/
 /CLAUDE.local.md
+
+graphify-out/

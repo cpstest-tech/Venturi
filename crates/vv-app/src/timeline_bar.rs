@@ -40,6 +40,7 @@ pub(crate) fn show_bar(
     can_undo: bool,
     can_redo: bool,
     can_auto_cut: bool,
+    can_voiceover: bool,
 ) {
     let has_selection = !state.selected.is_empty();
     ui.horizontal(|ui| {
@@ -93,6 +94,12 @@ pub(crate) fn show_bar(
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             tool_menu(ui, state, keymap);
+                            if icon_button(ui, can_voiceover, false, &paint_microphone)
+                                .on_hover_text(t!("voiceover.title"))
+                                .clicked()
+                            {
+                                state.commands.push(TimelineCommand::Voiceover);
+                            }
                             divider(ui);
 
                             let mut command =
@@ -417,6 +424,19 @@ fn icon_button(
 
 fn stroke(color: egui::Color32) -> egui::Stroke {
     egui::Stroke::new(1.5, color)
+}
+
+fn paint_microphone(p: &egui::Painter, c: egui::Pos2, color: egui::Color32) {
+    let capsule = egui::Rect::from_center_size(c + egui::vec2(0.0, -2.5), egui::vec2(6.0, 10.0));
+    p.rect_stroke(capsule, 3.0, stroke(color), egui::StrokeKind::Inside);
+    p.add(egui::Shape::line(
+        arc(c, 5.5, 0.0, std::f32::consts::PI),
+        stroke(color),
+    ));
+    p.line_segment(
+        [c + egui::vec2(0.0, 5.5), c + egui::vec2(0.0, 8.5)],
+        stroke(color),
+    );
 }
 
 fn arc(center: egui::Pos2, radius: f32, from: f32, to: f32) -> Vec<egui::Pos2> {

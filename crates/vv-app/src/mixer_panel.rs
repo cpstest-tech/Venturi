@@ -402,6 +402,8 @@ pub(crate) fn effect_name(kind: &AudioEffectKind) -> String {
         AudioEffectKind::Mono => t!("mixer.effect_mono").into_owned(),
         AudioEffectKind::Equalizer(_) => t!("mixer.effect_eq").into_owned(),
         AudioEffectKind::Vst3(v) => v.name.clone(),
+        AudioEffectKind::NoiseReduction { .. } => t!("mixer.effect_noise").into_owned(),
+        AudioEffectKind::AutoLevel(_) => t!("mixer.effect_auto_level").into_owned(),
     }
 }
 
@@ -499,6 +501,12 @@ fn effect_window(
                     crate::eq_panel::show(ui, params, &mut state.effect_panel, presets.eq)
                 }
                 AudioEffectKind::Vst3(_) => None,
+                &AudioEffectKind::NoiseReduction { strength } => {
+                    crate::audio_cleanup::noise_reduction_settings(ui, strength)
+                }
+                AudioEffectKind::AutoLevel(params) => {
+                    crate::audio_cleanup::auto_level_settings(ui, *params)
+                }
             };
             if let Some(kind) = edited {
                 let edited = AudioEffect {
@@ -783,6 +791,9 @@ fn effects(
         .on_hover_text(t!("mixer.add_effect"));
     egui::Popup::menu(&plus).show(|ui| {
         for kind in AudioEffectKind::ALL {
+            if channel == MixerChannel::Master && kind.track_only() {
+                continue;
+            }
             if ui.button(effect_name(&kind)).clicked() {
                 edit.add_effect = Some(kind);
             }

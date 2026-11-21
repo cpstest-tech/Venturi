@@ -46,6 +46,7 @@ impl VenturiApp {
                 properties_tabs::select_video_sub_tab(ctx, properties_tabs::VideoSubTab::Reframe);
             }
             TimelineCommand::Dub => self.open_dub(),
+            TimelineCommand::Voiceover => self.open_voiceover(),
             TimelineCommand::BeatSync => self.beat.open = !self.beat.open,
             TimelineCommand::Undo => self.undo(),
             TimelineCommand::Redo => self.redo(),

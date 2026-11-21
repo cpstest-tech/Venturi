@@ -1120,3 +1120,19 @@ props.cutout_failed:
 props.cutout_retry:
   en: "Retry"
   it: "Riprova"
+
+props.auto_level:
+  en: "Auto level"
+  it: "Volume costante"
+
+props.audio_cleanup_on:
+  en: "On"
+  it: "Attiva"
+
+props.audio_cleanup_tracks:
+  en: "Applies to the whole track: %{tracks}"
+  it: "Si applica a tutta la traccia: %{tracks}"
+
+props.audio_cleanup_no_track:
+  en: "This clip has no audio track."
+  it: "Questa clip non ha una traccia audio."
