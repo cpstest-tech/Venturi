@@ -4980,7 +4980,7 @@ dependencies = [
 
 [[package]]
 name = "vv-app"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -5021,7 +5021,7 @@ dependencies = [
 
 [[package]]
 name = "vv-audio"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "cpal",
  "ffmpeg-next",
@@ -5030,7 +5030,7 @@ dependencies = [
 
 [[package]]
 name = "vv-core"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "base64 0.22.1",
  "ron",
@@ -5041,7 +5041,7 @@ dependencies = [
 
 [[package]]
 name = "vv-matting"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "tract-onnx",
  "ureq",
@@ -5051,7 +5051,7 @@ dependencies = [
 
 [[package]]
 name = "vv-mcp"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "base64 0.22.1",
  "libc",
@@ -5070,7 +5070,7 @@ dependencies = [
 
 [[package]]
 name = "vv-media"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "ffmpeg-next",
  "png 0.18.1",
@@ -5080,7 +5080,7 @@ dependencies = [
 
 [[package]]
 name = "vv-plugin"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "libc",
  "libloading",
@@ -5098,14 +5098,14 @@ dependencies = [
 
 [[package]]
 name = "vv-plugin-fixture"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "vst3",
 ]
 
 [[package]]
 name = "vv-reframe"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "serde_json",
  "tract-onnx",
@@ -5115,7 +5115,7 @@ dependencies = [
 
 [[package]]
 name = "vv-render"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -5130,7 +5130,7 @@ dependencies = [
 
 [[package]]
 name = "vv-session"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "serde_json",
  "vv-audio",
@@ -5143,7 +5143,7 @@ dependencies = [
 
 [[package]]
 name = "vv-transcribe"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "ureq",
  "whisper-rs",
@@ -5151,7 +5151,7 @@ dependencies = [
 
 [[package]]
 name = "vv-vad"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "tract-onnx",
 ]
